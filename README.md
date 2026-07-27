@@ -1,30 +1,45 @@
 # LS Panel
 
+<!--
+  Add a real dashboard screenshot once available, then uncomment:
+  <p align="center">
+    <img src="docs/images/dashboard.png" alt="LS Panel dashboard" width="800">
+  </p>
+-->
+
 **LS Panel** is a desktop local development environment manager for PHP/web projects — a self-hosted alternative to tools like Local by Flywheel or Laravel Herd. It runs as a native app (Tauri + React) and drives Docker/Podman containers, local databases, TLS certificates, mail capture, backups, and more through a single UI.
 
 > 🇺🇦 Українська версія цього документа: [README.uk.md](README.uk.md)
 
 [![CI](https://github.com/bewdes/LSPanel/actions/workflows/ci.yml/badge.svg)](https://github.com/bewdes/LSPanel/actions/workflows/ci.yml)
 ![Version](https://img.shields.io/badge/version-0.1.0--beta-orange)
+![Rust](https://img.shields.io/badge/backend-Rust-b7410e)
+![React](https://img.shields.io/badge/frontend-React_19-61dafb)
+![Tauri](https://img.shields.io/badge/shell-Tauri_2-24c8db)
+![Docker](https://img.shields.io/badge/runtime-Docker-2496ed)
+![Podman](https://img.shields.io/badge/runtime-Podman-892ca0)
+![Linux](https://img.shields.io/badge/platform-Linux-fcc624)
 
 > ⚠️ **Status: v0.1.0 Beta.** LS Panel is in active early development — expect breaking changes and rough edges.
 
+## Why LS Panel?
+
+- Native Linux desktop application — no Electron, no browser tab to keep open.
+- Docker and Podman support, auto-detected, with Compose for multi-service stacks.
+- HTTPS out of the box via a local certificate authority — no self-signed warnings.
+- Local-first: your data (SQLite metadata, backups, snapshots) stays on your machine.
+- No cloud account, license server, or telemetry required to use it.
+- Built for PHP and modern web development, with first-class Laravel and WordPress project provisioning.
+
 ## Features
 
-- **Sites** — create, manage, and browse local development sites/projects, including a project creation wizard with templates.
-- **Containers** — start/stop/inspect Docker or Podman containers and compose stacks (auto-detects `docker` or `podman`, with `docker-compose` / `podman-compose` support).
-- **Databases** — manage per-project databases: connection credentials, cloning, renaming, clearing, import/export.
-- **Database backups** — create and restore local SQL dumps, stored in the app's local data directory.
-- **Project snapshots** — point-in-time snapshots of a project's database, `.env`, and environment configuration (source code managed by Git is not duplicated), with retention/pruning and export/import.
-- **File manager** — browse site files, container configs, and local backups from within the panel.
-- **Live logs** — stream live logs for projects and individual containers.
-- **Mail capture** — view local development emails intercepted by [Mailpit](https://github.com/axllent/mailpit).
-- **Certificates** — manage a local certificate authority and issue trusted HTTPS certificates for local domains.
-- **Environment files** — edit and manage `.env` / environment configuration per project.
-- **LiveLink** — expose a local site through a temporary public/shareable link.
-- **System health & diagnostics** — inspect disk usage, runtime status, and diagnose common environment problems.
-- **Settings** — panel, system, and appearance preferences, including project defaults and Git initialization for new projects.
-- **Integrated terminal** — a PTY-backed terminal (via `portable-pty`) for running commands directly against a project or container.
+**Development** — Sites · Containers · Databases · Environment files · Live logs · Integrated terminal
+
+**Productivity** — Mail capture (Mailpit) · Project snapshots · Database backups · LiveLink · Certificates
+
+**System** — Diagnostics & system health · Settings · File manager
+
+See [docs/FEATURES.md](docs/FEATURES.md) for what each one does and the backend modules behind it.
 
 The UI is fully bilingual (English / Ukrainian) via a lightweight built-in i18n layer (`src/i18n`).
 
