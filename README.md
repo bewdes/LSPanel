@@ -60,6 +60,12 @@ lspanel/
 └── .github/workflows/        # CI: frontend checks, Rust checks/tests, Linux bundle build
 ```
 
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the frontend and Rust backend fit together, persistence, environments/runtimes, the operation center.
+- [docs/FEATURES.md](docs/FEATURES.md) — a feature-by-feature tour of the app and the backend modules behind each one.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development setup and the checks a pull request needs to pass.
+
 ## Getting started
 
 ### Prerequisites
