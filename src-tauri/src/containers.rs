@@ -794,7 +794,7 @@ pub fn execute_service_command(
         || command.len() > 32
         || command
             .iter()
-            .any(|argument| argument.is_empty() || argument.len() > 512 || argument.contains('\0'))
+            .any(|argument| argument.len() > 512 || argument.contains('\0'))
     {
         return Err("Enter a valid command with at most 32 arguments".into());
     }
