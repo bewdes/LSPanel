@@ -39,11 +39,7 @@ type LiveLinkStatus = {
     gatewayActive: boolean
     projectReachable: boolean
     status:
-      | "active"
-      | "orphaned"
-      | "gateway_unavailable"
-      | "project_unavailable"
-      | "tailscale_inactive"
+      "active" | "orphaned" | "gateway_unavailable" | "project_unavailable" | "tailscale_inactive"
   }>
   message: string
 }

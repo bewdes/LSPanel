@@ -27,15 +27,15 @@
 
 ## Технологічний стек
 
-| Шар | Технологія |
-|---|---|
-| Десктопна оболонка | [Tauri 2](https://tauri.app/) |
-| Бекенд | Rust (`src-tauri/`), SQLite через `rusqlite` |
-| Фронтенд | React 19, TypeScript, Vite 6 |
-| Стилі / UI | Tailwind CSS 4, компоненти у стилі shadcn (`src/components/ui`), примітиви Radix/Base UI |
-| Дані та таблиці | `@tanstack/react-table`, `recharts` для графіків |
-| Термінал | `xterm.js` + `portable-pty` (Rust) |
-| Контейнерні runtime | Docker / Podman (+ Compose) |
+| Шар                 | Технологія                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| Десктопна оболонка  | [Tauri 2](https://tauri.app/)                                                            |
+| Бекенд              | Rust (`src-tauri/`), SQLite через `rusqlite`                                             |
+| Фронтенд            | React 19, TypeScript, Vite 6                                                             |
+| Стилі / UI          | Tailwind CSS 4, компоненти у стилі shadcn (`src/components/ui`), примітиви Radix/Base UI |
+| Дані та таблиці     | `@tanstack/react-table`, `recharts` для графіків                                         |
+| Термінал            | `xterm.js` + `portable-pty` (Rust)                                                       |
+| Контейнерні runtime | Docker / Podman (+ Compose)                                                              |
 
 ## Структура проєкту
 

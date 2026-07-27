@@ -27,15 +27,15 @@ The UI is fully bilingual (English / Ukrainian) via a lightweight built-in i18n 
 
 ## Tech stack
 
-| Layer | Technology |
-|---|---|
-| Desktop shell | [Tauri 2](https://tauri.app/) |
-| Backend | Rust (`src-tauri/`), SQLite via `rusqlite` |
-| Frontend | React 19, TypeScript, Vite 6 |
-| Styling / UI | Tailwind CSS 4, shadcn-style components (`src/components/ui`), Radix/Base UI primitives |
-| Data & tables | `@tanstack/react-table`, `recharts` for charts |
-| Terminal | `xterm.js` + `portable-pty` (Rust) |
-| Container runtimes | Docker / Podman (+ Compose) |
+| Layer              | Technology                                                                              |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| Desktop shell      | [Tauri 2](https://tauri.app/)                                                           |
+| Backend            | Rust (`src-tauri/`), SQLite via `rusqlite`                                              |
+| Frontend           | React 19, TypeScript, Vite 6                                                            |
+| Styling / UI       | Tailwind CSS 4, shadcn-style components (`src/components/ui`), Radix/Base UI primitives |
+| Data & tables      | `@tanstack/react-table`, `recharts` for charts                                          |
+| Terminal           | `xterm.js` + `portable-pty` (Rust)                                                      |
+| Container runtimes | Docker / Podman (+ Compose)                                                             |
 
 ## Project structure
 
