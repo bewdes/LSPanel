@@ -55,6 +55,7 @@ pub fn run() {
             administration_commands::clear_operations,
             administration_commands::system_health,
             administration_commands::disk_usage,
+            administration_commands::workspace_free_space,
             administration_commands::prune_build_cache,
             administration_commands::prune_dangling_images,
             administration_commands::project_health,

@@ -35,10 +35,13 @@ pub fn open_url(url: String) -> Result<(), String> {
         || host == "127.0.0.1"
         || host.ends_with(".localhost")
         || host.ends_with(".ts.net")
-        || host == "login.tailscale.com")
+        || host == "login.tailscale.com"
+        || host == "tailscale.com"
+        || host == "docs.docker.com"
+        || host == "github.com")
     {
         return Err(
-            "Only localhost, *.localhost, *.ts.net and Tailscale activation URLs are allowed"
+            "Only localhost, *.localhost, *.ts.net, Tailscale, Docker docs, and GitHub URLs are allowed"
                 .into(),
         );
     }
@@ -117,5 +120,13 @@ mod tests {
     fn rejects_spoofed_tailscale_urls() {
         assert!(open_url("javascript:alert(1)".into()).is_err());
         assert!(open_url("https://example.ts.net.evil.test".into()).is_err());
+    }
+
+    #[test]
+    fn rejects_domains_that_merely_resemble_the_allowed_documentation_links() {
+        assert!(open_url("https://github.com.evil.test".into()).is_err());
+        assert!(open_url("https://notgithub.com".into()).is_err());
+        assert!(open_url("https://docs.docker.com.evil.test".into()).is_err());
+        assert!(open_url("https://tailscale.com.evil.test".into()).is_err());
     }
 }

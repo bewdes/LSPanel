@@ -124,6 +124,13 @@ pub async fn disk_usage(
 }
 
 #[tauri::command]
+pub async fn workspace_free_space(path: String) -> Result<u64, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::disk_usage::free_space(&path))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn prune_build_cache(app: tauri::AppHandle) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || crate::disk_usage::prune_build_cache(&app))
         .await

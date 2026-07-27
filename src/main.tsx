@@ -38,6 +38,7 @@ import type { AppSettings } from "@/welcome-screen"
 import { ResizeHandles } from "@/components/window-controls"
 import { applyTheme } from "@/theme"
 import { Dashboard } from "@/features/dashboard/dashboard-page"
+import { FirstRunHome } from "@/features/dashboard/first-run-home"
 import { SitesPage } from "@/features/sites/sites-page"
 import { SiteDetailsPage } from "@/features/sites/site-details-page"
 import { ContainersPage } from "@/features/containers/containers-page"
@@ -71,6 +72,7 @@ function App() {
   const [states, setStates] = React.useState<Record<string, string>>({})
   const [runtime, setRuntime] = React.useState<Runtime | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
+  const [createProjectType, setCreateProjectType] = React.useState<string | undefined>(undefined)
   const [selectedSite, setSelectedSite] = React.useState<string | null>(null)
   const [environmentPage, setEnvironmentPage] = React.useState<string | null>(null)
   const [error, setError] = React.useState("")
@@ -223,10 +225,15 @@ function App() {
                   environments={environments}
                   sites={sites}
                   uk={uk}
-                  onCancel={() => setCreateOpen(false)}
+                  initialProjectType={createProjectType}
+                  onCancel={() => {
+                    setCreateOpen(false)
+                    setCreateProjectType(undefined)
+                  }}
                   onCreated={async (id) => {
                     await refresh()
                     setCreateOpen(false)
+                    setCreateProjectType(undefined)
                     setView("sites")
                     setSelectedSite(id)
                   }}
@@ -234,7 +241,17 @@ function App() {
               </React.Suspense>
             ) : (
               <>
-                {view === "dashboard" && (
+                {view === "dashboard" && sites.length === 0 && (
+                  <FirstRunHome
+                    uk={uk}
+                    onCreate={() => setCreateOpen(true)}
+                    onImport={() => {
+                      setCreateProjectType("import")
+                      setCreateOpen(true)
+                    }}
+                  />
+                )}
+                {view === "dashboard" && sites.length > 0 && (
                   <Dashboard
                     uk={uk}
                     sites={sites}

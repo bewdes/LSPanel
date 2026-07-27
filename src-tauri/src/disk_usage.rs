@@ -65,6 +65,32 @@ fn parse_categories(output: &str) -> Vec<DiskUsageCategory> {
         .collect()
 }
 
+fn parse_available_kilobytes(output: &str) -> Option<u64> {
+    let data_line = output.lines().nth(1)?;
+    let available = data_line.split_whitespace().nth(3)?;
+    available.parse().ok()
+}
+
+/// Available disk space, in bytes, for the filesystem containing `path`.
+/// Used by onboarding to show free space for the chosen projects directory
+/// before it necessarily exists, so callers should pass an existing ancestor
+/// (e.g. the parent directory) when the target itself may not be created yet.
+pub fn free_space(path: &str) -> Result<u64, String> {
+    let output = crate::process::output(
+        std::process::Command::new("df")
+            .args(["-Pk", path])
+            .stdin(Stdio::null()),
+        crate::process::SHORT_TIMEOUT,
+        "disk free space",
+    )?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
+    }
+    parse_available_kilobytes(&String::from_utf8_lossy(&output.stdout))
+        .map(|kilobytes| kilobytes * 1024)
+        .ok_or_else(|| "Could not determine free disk space".to_owned())
+}
+
 pub fn usage(app: &tauri::AppHandle) -> Result<Vec<DiskUsageCategory>, String> {
     let executable = executable(app)?;
     let output = crate::process::output(
@@ -112,7 +138,20 @@ pub fn prune_dangling_images(app: &tauri::AppHandle) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_categories;
+    use super::{parse_available_kilobytes, parse_categories};
+
+    #[test]
+    fn parses_available_space_from_df_output() {
+        let output = "Filesystem     1024-blocks      Used Available Capacity Mounted on\n\
+                       /dev/sda1        123456789 987654321 154000000      87% /\n";
+        assert_eq!(parse_available_kilobytes(output), Some(154_000_000));
+    }
+
+    #[test]
+    fn tolerates_malformed_df_output() {
+        assert_eq!(parse_available_kilobytes(""), None);
+        assert_eq!(parse_available_kilobytes("Filesystem\n"), None);
+    }
 
     #[test]
     fn parses_a_docker_style_json_array() {

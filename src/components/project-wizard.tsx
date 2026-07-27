@@ -73,19 +73,21 @@ export function ProjectWizard({
   environments,
   sites,
   uk,
+  initialProjectType,
   onCancel,
   onCreated,
 }: {
   environments: Environment[]
   sites: Site[]
   uk: boolean
+  initialProjectType?: string
   onCancel: () => void
   onCreated: (id: string) => void
 }) {
   const text = pickLanguage(projectWizardText, uk)
   const steps = text.steps
   const [step, setStep] = React.useState(0)
-  const [projectType, setProjectType] = React.useState("php")
+  const [projectType, setProjectType] = React.useState(initialProjectType ?? "php")
   const [name, setName] = React.useState("")
   const [domain, setDomain] = React.useState("")
   const [environmentId, setEnvironmentId] = React.useState(environments[0]?.id ?? "")

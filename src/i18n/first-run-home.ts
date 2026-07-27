@@ -1,0 +1,28 @@
+export const firstRunHomeText = {
+  uk: {
+    title: "Ласкаво просимо до LS Panel",
+    subtitle: "У вас поки немає жодного проєкту. Створіть новий або імпортуйте наявний.",
+    createTitle: "Створити перший проєкт",
+    createDescription: "Майстер налаштує сайт, контейнери та базу даних за кілька кроків.",
+    createAction: "Новий проєкт",
+    importTitle: "Імпортувати наявний проєкт",
+    importDescription: "Підключіть локальну директорію з готовим кодом до LS Panel.",
+    importAction: "Відкрити папку",
+    documentation: "Документація",
+    releaseNotes: "Нотатки випуску",
+    github: "GitHub",
+  },
+  en: {
+    title: "Welcome to LS Panel",
+    subtitle: "You don't have any projects yet. Create a new one or import an existing project.",
+    createTitle: "Create your first project",
+    createDescription: "The wizard sets up the site, containers, and database in a few steps.",
+    createAction: "New Project",
+    importTitle: "Import existing project",
+    importDescription: "Connect a local directory with existing code to LS Panel.",
+    importAction: "Open Folder",
+    documentation: "Documentation",
+    releaseNotes: "Release Notes",
+    github: "GitHub",
+  },
+}

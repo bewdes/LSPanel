@@ -71,6 +71,7 @@ export type Site = {
 
 export type Runtime = {
   runtime?: string
+  installed: boolean
   running: boolean
   composeAvailable: boolean
   message: string
