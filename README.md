@@ -5,6 +5,9 @@
 > 🇺🇦 Українська версія цього документа: [README.uk.md](README.uk.md)
 
 [![CI](https://github.com/bewdes/LSPanel/actions/workflows/ci.yml/badge.svg)](https://github.com/bewdes/LSPanel/actions/workflows/ci.yml)
+![Version](https://img.shields.io/badge/version-0.1.0--beta-orange)
+
+> ⚠️ **Status: v0.1.0 Beta.** LS Panel is in active early development — expect breaking changes and rough edges.
 
 ## Features
 
