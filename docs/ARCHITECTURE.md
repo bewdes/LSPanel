@@ -1,5 +1,7 @@
 # Architecture
 
+> 🇺🇦 Українська версія: [ARCHITECTURE.uk.md](ARCHITECTURE.uk.md)
+
 LS Panel is a [Tauri 2](https://tauri.app/) desktop application: a React/TypeScript frontend rendered in a native webview, backed by a Rust process that does all filesystem, process, database, and container work. The two sides communicate exclusively through Tauri's `invoke()` command bridge and event emitters — the frontend never talks to Docker, SQLite, or the filesystem directly.
 
 ```

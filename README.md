@@ -77,9 +77,9 @@ lspanel/
 
 ## Documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the frontend and Rust backend fit together, persistence, environments/runtimes, the operation center.
-- [docs/FEATURES.md](docs/FEATURES.md) — a feature-by-feature tour of the app and the backend modules behind each one.
-- [CONTRIBUTING.md](CONTRIBUTING.md) — development setup and the checks a pull request needs to pass.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ([uk](docs/ARCHITECTURE.uk.md)) — how the frontend and Rust backend fit together, persistence, environments/runtimes, the operation center.
+- [docs/FEATURES.md](docs/FEATURES.md) ([uk](docs/FEATURES.uk.md)) — a feature-by-feature tour of the app and the backend modules behind each one.
+- [CONTRIBUTING.md](CONTRIBUTING.md) ([uk](CONTRIBUTING.uk.md)) — development setup and the checks a pull request needs to pass.
 
 ## Getting started
 

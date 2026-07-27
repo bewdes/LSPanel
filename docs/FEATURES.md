@@ -1,5 +1,7 @@
 # Features
 
+> 🇺🇦 Українська версія: [FEATURES.uk.md](FEATURES.uk.md)
+
 A closer look at each area of LS Panel and the backend modules/commands behind it. For the overall system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Sites

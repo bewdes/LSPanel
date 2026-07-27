@@ -77,9 +77,9 @@ lspanel/
 
 ## Документація
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — як фронтенд і Rust-бекенд взаємодіють між собою, зберігання даних, середовища/runtime, операційний центр (англ.).
-- [docs/FEATURES.md](docs/FEATURES.md) — огляд кожної фічі та бекенд-модулів, що її реалізують (англ.).
-- [CONTRIBUTING.md](CONTRIBUTING.md) — налаштування розробки та перевірки, які має пройти pull request (англ.).
+- [docs/ARCHITECTURE.uk.md](docs/ARCHITECTURE.uk.md) — як фронтенд і Rust-бекенд взаємодіють між собою, зберігання даних, середовища/runtime, операційний центр.
+- [docs/FEATURES.uk.md](docs/FEATURES.uk.md) — огляд кожної фічі та бекенд-модулів, що її реалізують.
+- [CONTRIBUTING.uk.md](CONTRIBUTING.uk.md) — налаштування розробки та перевірки, які має пройти pull request.
 
 ## Початок роботи
 

@@ -1,5 +1,7 @@
 # Contributing to LS Panel
 
+> 🇺🇦 Українська версія: [CONTRIBUTING.uk.md](CONTRIBUTING.uk.md)
+
 Thanks for your interest in contributing! This project is a Tauri (Rust + React/TypeScript) desktop application.
 
 ## Development setup
