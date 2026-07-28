@@ -19,6 +19,7 @@
 ![Docker](https://img.shields.io/badge/runtime-Docker-2496ed)
 ![Podman](https://img.shields.io/badge/runtime-Podman-892ca0)
 ![Linux](https://img.shields.io/badge/platform-Linux-fcc624)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 > ⚠️ **Статус: v0.1.0 Beta.** LS Panel перебуває на ранній стадії активної розробки — можливі суттєві зміни та шорсткі кути.
 
@@ -80,6 +81,7 @@ lspanel/
 - [docs/ARCHITECTURE.uk.md](docs/ARCHITECTURE.uk.md) — як фронтенд і Rust-бекенд взаємодіють між собою, зберігання даних, середовища/runtime, операційний центр.
 - [docs/FEATURES.uk.md](docs/FEATURES.uk.md) — огляд кожної фічі та бекенд-модулів, що її реалізують.
 - [CONTRIBUTING.uk.md](CONTRIBUTING.uk.md) — налаштування розробки та перевірки, які має пройти pull request.
+- [CHANGELOG.md](CHANGELOG.md) — перелік значущих змін по релізах (англ.).
 
 ## Початок роботи
 
@@ -133,4 +135,4 @@ Issues та pull request'и вітаються. Перед відкриттям 
 
 ## Ліцензія
 
-Для цього репозиторію ще не оголошено ліцензію. Усі права належать автору, доки не буде додано файл ліцензії.
+Ліцензовано за умовами [Apache License, Version 2.0](LICENSE).

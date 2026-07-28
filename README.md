@@ -19,6 +19,7 @@
 ![Docker](https://img.shields.io/badge/runtime-Docker-2496ed)
 ![Podman](https://img.shields.io/badge/runtime-Podman-892ca0)
 ![Linux](https://img.shields.io/badge/platform-Linux-fcc624)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 > ⚠️ **Status: v0.1.0 Beta.** LS Panel is in active early development — expect breaking changes and rough edges.
 
@@ -80,6 +81,7 @@ lspanel/
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ([uk](docs/ARCHITECTURE.uk.md)) — how the frontend and Rust backend fit together, persistence, environments/runtimes, the operation center.
 - [docs/FEATURES.md](docs/FEATURES.md) ([uk](docs/FEATURES.uk.md)) — a feature-by-feature tour of the app and the backend modules behind each one.
 - [CONTRIBUTING.md](CONTRIBUTING.md) ([uk](CONTRIBUTING.uk.md)) — development setup and the checks a pull request needs to pass.
+- [CHANGELOG.md](CHANGELOG.md) — notable changes per release.
 
 ## Getting started
 
@@ -133,4 +135,4 @@ Issues and pull requests are welcome. Before opening a PR, please run `npm run c
 
 ## License
 
-No license has been declared for this repository yet. All rights reserved by the author unless a license file is added.
+Licensed under the [Apache License, Version 2.0](LICENSE).

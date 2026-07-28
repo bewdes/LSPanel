@@ -2,6 +2,7 @@
 name = "lspanel"
 version = "0.1.0"
 description = "Local server control panel"
+license = "Apache-2.0"
 edition = "2021"
 
 [lib]

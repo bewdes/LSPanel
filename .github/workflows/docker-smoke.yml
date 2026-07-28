@@ -1,0 +1,25 @@
+name: Docker smoke test
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # every Monday
+
+jobs:
+  smoke:
+    name: Container integration smoke test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Run container integration tests (including the live Docker smoke test)
+        env:
+          LSPANEL_DOCKER_SMOKE: "1"
+        run: sh scripts/test-container-integration.sh
