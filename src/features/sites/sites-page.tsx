@@ -291,11 +291,7 @@ export function SitesPage({
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1">
-                        <Badge
-                          variant={
-                            siteRunning ? "default" : "secondary"
-                          }
-                        >
+                        <Badge variant={siteRunning ? "default" : "secondary"}>
                           {siteRunning ? "running" : "stopped"}
                         </Badge>
                         {!isNative && (
@@ -324,10 +320,7 @@ export function SitesPage({
 
                         onClick={(event) => {
                           event.stopPropagation()
-                          onOperate(
-                            site.id,
-                            siteRunning ? "stop" : "start",
-                          )
+                          onOperate(site.id, siteRunning ? "stop" : "start")
                         }}
                       >
                         {siteRunning ? <Square /> : <Play />}
