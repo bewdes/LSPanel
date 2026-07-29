@@ -1,0 +1,665 @@
+use serde::Serialize;
+use std::{
+    fs,
+    io::{Read, Write},
+    net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
+    path::Path,
+    process::{Command, Stdio},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthReport {
+    pub status: String,
+    pub checked_at: i64,
+    pub checks: Vec<HealthCheck>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthCheck {
+    pub code: String,
+    pub title: String,
+    pub status: String,
+    pub summary: String,
+    pub impact: String,
+    pub suggestions: Vec<String>,
+}
+
+pub fn inspect(app: &tauri::AppHandle) -> Result<HealthReport, String> {
+    let settings = crate::settings::load(app)?;
+    let preferred = settings.as_ref().map(|settings| settings.runtime.as_str());
+    let runtime = crate::containers::detect_runtime(preferred);
+    let mut checks = Vec::new();
+
+    checks.push(check(
+        "CONTAINER_RUNTIME",
+        "Container runtime",
+        if runtime.running { "healthy" } else { "error" },
+        &runtime.message,
+        if runtime.running {
+            "Docker operations are available."
+        } else {
+            "Projects cannot be started or rebuilt."
+        },
+        if runtime.installed {
+            vec![
+                "Start the Docker or Podman daemon.".into(),
+                "Verify access to the runtime socket.".into(),
+            ]
+        } else {
+            vec!["Install Docker Engine or Podman.".into()]
+        },
+    ));
+    checks.push(check(
+        "COMPOSE_PROVIDER",
+        "Compose provider",
+        if runtime.compose_available {
+            "healthy"
+        } else {
+            "error"
+        },
+        if runtime.compose_available {
+            "Compose is available."
+        } else {
+            "No compatible Compose provider was detected."
+        },
+        if runtime.compose_available {
+            "Multi-service stacks can be managed."
+        } else {
+            "LS Panel cannot create project stacks."
+        },
+        vec!["Install Docker Compose v2 or podman-compose for the selected runtime.".into()],
+    ));
+
+    let gateway = gateway_responds();
+    let port_available = TcpListener::bind("127.0.0.1:80").is_ok();
+    checks.push(check(
+        "LOCAL_GATEWAY",
+        "Local gateway",
+        if gateway {
+            "healthy"
+        } else if port_available {
+            "warning"
+        } else {
+            "error"
+        },
+        if gateway {
+            "LS Panel gateway responds on 127.0.0.1:80."
+        } else if port_available {
+            "Gateway is not running; port 80 is available."
+        } else {
+            "Port 80 is occupied by another process."
+        },
+        if gateway {
+            "Local .localhost routes are available."
+        } else {
+            "Local project domains may return an error or open another service."
+        },
+        if port_available {
+            vec!["Start any environment to initialize the gateway.".into()]
+        } else {
+            vec![
+                "Stop the service currently listening on port 80.".into(),
+                "Check: sudo ss -ltnp 'sport = :80'".into(),
+            ]
+        },
+    ));
+
+    let https_port_available = TcpListener::bind("127.0.0.1:443").is_ok();
+    checks.push(check(
+        "HTTPS_GATEWAY",
+        "Local HTTPS",
+        if gateway && !https_port_available {
+            "healthy"
+        } else if https_port_available {
+            "warning"
+        } else {
+            "error"
+        },
+        if gateway && !https_port_available {
+            "The HTTPS gateway is bound to 127.0.0.1:443."
+        } else if https_port_available {
+            "HTTPS gateway is not running; port 443 is available."
+        } else {
+            "Port 443 is occupied by another process."
+        },
+        "Project HTTPS routes remain local to this computer.",
+        if https_port_available {
+            vec!["Start any environment to initialize local HTTPS.".into()]
+        } else {
+            vec!["Check: sudo ss -ltnp 'sport = :443'".into()]
+        },
+    ));
+
+    let ca_exists = crate::tls::ca_path(app).is_ok_and(|path| path.is_file());
+    let ca_trusted = crate::tls::trusted(app);
+    let browsers_trusted = crate::tls::browsers_trusted();
+    let (ca_expiry, certificate_expiry) = crate::tls::expiry(app);
+    let trust_summary = if ca_trusted && browsers_trusted {
+        "LS Panel Local CA is trusted by the system and detected browser stores."
+    } else if ca_trusted {
+        "The local CA is trusted by the system but is missing from a browser certificate store."
+    } else if ca_exists {
+        "The local CA exists but is not trusted by the system yet."
+    } else {
+        "The local CA will be generated when the first project starts."
+    };
+    let expiry_summary = [
+        ca_expiry.map(|value| format!("CA expires: {value}.")),
+        certificate_expiry.map(|value| format!("HTTPS certificate expires: {value}.")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ");
+    let ca_summary = if expiry_summary.is_empty() {
+        trust_summary.into()
+    } else {
+        format!("{trust_summary} {expiry_summary}")
+    };
+    checks.push(check(
+        "LOCAL_CA",
+        "Local certificate authority",
+        if ca_trusted && browsers_trusted {
+            "healthy"
+        } else {
+            "warning"
+        },
+        &ca_summary,
+        if ca_trusted && browsers_trusted {
+            "Local project HTTPS can be verified without certificate warnings."
+        } else {
+            "Browsers may show a certificate warning until the CA is installed."
+        },
+        if ca_exists && (!ca_trusted || !browsers_trusted) {
+            vec!["Install the local CA using the action below.".into()]
+        } else {
+            Vec::new()
+        },
+    ));
+
+    if let Some(settings) = settings {
+        checks.push(directory_check(Path::new(&settings.sites_directory)));
+        checks.push(disk_check(Path::new(&settings.sites_directory)));
+    } else {
+        checks.push(check(
+            "SITES_DIRECTORY",
+            "Sites directory",
+            "warning",
+            "Initial setup is not complete.",
+            "Projects do not have a storage directory.",
+            vec!["Complete the welcome setup.".into()],
+        ));
+    }
+
+    let status = if checks.iter().any(|item| item.status == "error") {
+        "error"
+    } else if checks.iter().any(|item| item.status == "warning") {
+        "warning"
+    } else {
+        "healthy"
+    };
+    let checked_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    Ok(HealthReport {
+        status: status.into(),
+        checked_at,
+        checks,
+    })
+}
+
+fn directory_check(path: &Path) -> HealthCheck {
+    if !path.is_dir() {
+        return check(
+            "SITES_DIRECTORY",
+            "Sites directory",
+            "error",
+            "The configured directory does not exist.",
+            "Projects cannot be created or restored.",
+            vec!["Choose an existing writable directory in Settings → System.".into()],
+        );
+    }
+    let probe = path.join(format!(".lspanel-write-test-{}", std::process::id()));
+    match fs::write(&probe, b"test") {
+        Ok(()) => {
+            let _ = fs::remove_file(probe);
+            check(
+                "SITES_DIRECTORY",
+                "Sites directory",
+                "healthy",
+                &format!("{} is writable.", path.display()),
+                "Project files can be created.",
+                Vec::new(),
+            )
+        }
+        Err(error) => check(
+            "SITES_DIRECTORY",
+            "Sites directory",
+            "error",
+            &format!("Directory is not writable: {error}"),
+            "Project creation and generated configuration will fail.",
+            vec!["Fix ownership or choose another directory.".into()],
+        ),
+    }
+}
+
+fn disk_check(path: &Path) -> HealthCheck {
+    let output = Command::new("df")
+        .args(["-Pk", &path.display().to_string()])
+        .stdin(Stdio::null())
+        .output();
+    let available_kb = output
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .and_then(|text| {
+            text.lines()
+                .nth(1)
+                .and_then(|line| line.split_whitespace().nth(3))
+                .and_then(|value| value.parse::<u64>().ok())
+        });
+    let Some(available_kb) = available_kb else {
+        return check(
+            "DISK_SPACE",
+            "Disk space",
+            "warning",
+            "Available disk space could not be determined.",
+            "Image pulls and builds may fail if the disk is full.",
+            vec!["Run df -h for the sites directory.".into()],
+        );
+    };
+    let gib = available_kb as f64 / 1024.0 / 1024.0;
+    let status = if gib < 0.5 {
+        "error"
+    } else if gib < 2.0 {
+        "warning"
+    } else {
+        "healthy"
+    };
+    check(
+        "DISK_SPACE",
+        "Disk space",
+        status,
+        &format!("{gib:.1} GiB available."),
+        if status == "healthy" {
+            "There is enough space for ordinary local builds."
+        } else {
+            "Container image pulls, builds, and database volumes may fail."
+        },
+        vec!["Remove unused Docker images and build cache after reviewing them.".into()],
+    )
+}
+
+fn gateway_responds() -> bool {
+    let address = SocketAddr::from(([127, 0, 0, 1], 80));
+    let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_millis(500)) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(700)));
+    if stream
+        .write_all(b"GET / HTTP/1.1\r\nHost: healthcheck.invalid\r\nConnection: close\r\n\r\n")
+        .is_err()
+    {
+        return false;
+    }
+    let mut response = String::new();
+    stream.read_to_string(&mut response).is_ok()
+        && response.contains("LS Panel")
+        && response.starts_with("HTTP/1.1 404")
+}
+
+fn check(
+    code: &str,
+    title: &str,
+    status: &str,
+    summary: &str,
+    impact: &str,
+    suggestions: Vec<String>,
+) -> HealthCheck {
+    HealthCheck {
+        code: code.into(),
+        title: title.into(),
+        status: status.into(),
+        summary: summary.into(),
+        impact: impact.into(),
+        suggestions,
+    }
+}
+
+pub fn inspect_project(app: &tauri::AppHandle, site_id: &str) -> Result<HealthReport, String> {
+    let site = crate::sites::list(app)?
+        .into_iter()
+        .find(|site| site.id == site_id)
+        .ok_or("Site not found")?;
+    let environment = crate::containers::list(app)?
+        .into_iter()
+        .find(|environment| environment.id == site.environment_id)
+        .ok_or("Environment not found")?;
+    if environment.runtime_mode == "native" {
+        return Ok(inspect_native_project(&environment));
+    }
+    let mut checks = Vec::new();
+    let started = Instant::now();
+    checks.push(match local_site_response(&site.domain) {
+        Ok(response) => {
+            let headers = [
+                response.server.map(|value| format!("Server: {value}")),
+                response
+                    .content_type
+                    .map(|value| format!("Content-Type: {value}")),
+                response.location.map(|value| format!("Location: {value}")),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ");
+            check(
+                "PROJECT_HTTP",
+                "Local URL and response headers",
+                if (200..400).contains(&response.status) {
+                    "healthy"
+                } else {
+                    "error"
+                },
+                &format!(
+                    "HTTP {} in {} ms. {}",
+                    response.status,
+                    started.elapsed().as_millis(),
+                    headers
+                ),
+                "Checks the project through its real local domain and gateway headers.",
+                vec![],
+            )
+        }
+        Err(error) => check(
+            "PROJECT_HTTP",
+            "Local URL",
+            "error",
+            &error,
+            "The local project route is unavailable.",
+            vec!["Start the environment and inspect web logs.".into()],
+        ),
+    });
+    let resolved = (site.domain.as_str(), 443)
+        .to_socket_addrs()
+        .map(|addresses| addresses.collect::<Vec<_>>());
+    checks.push(match resolved {
+        Ok(addresses) if addresses.iter().any(|address| address.ip().is_loopback()) => check(
+            "PROJECT_DNS",
+            "Local domain resolution",
+            "healthy",
+            &format!("{} resolves to a loopback address.", site.domain),
+            "Requests remain on this computer.",
+            vec![],
+        ),
+        Ok(_) => check(
+            "PROJECT_DNS",
+            "Local domain resolution",
+            "error",
+            &format!("{} does not resolve to loopback.", site.domain),
+            "The browser may connect to another host.",
+            vec!["Use a .localhost domain or repair the local resolver.".into()],
+        ),
+        Err(error) => check(
+            "PROJECT_DNS",
+            "Local domain resolution",
+            "warning",
+            &format!("System resolver check failed: {error}"),
+            ".localhost remains browser-reserved, but command-line tools may fail to resolve it.",
+            vec!["Check getent hosts for the project domain.".into()],
+        ),
+    });
+    checks.push(match crate::tls::status(app) {
+        Ok(status)
+            if status.certificate_exists
+                && status.domains.iter().any(|domain| domain == &site.domain) =>
+        {
+            check(
+                "PROJECT_SSL",
+                "HTTPS certificate",
+                if status.system_trusted && status.browsers_trusted {
+                    "healthy"
+                } else {
+                    "warning"
+                },
+                &format!(
+                    "Certificate covers {} and expires {}.",
+                    site.domain,
+                    status
+                        .certificate_expires
+                        .as_deref()
+                        .unwrap_or("at an unknown time")
+                ),
+                "The project domain is included in the local certificate SAN list.",
+                if status.system_trusted && status.browsers_trusted {
+                    vec![]
+                } else {
+                    vec!["Install the LS Panel Local CA in missing trust stores.".into()]
+                },
+            )
+        }
+        Ok(_) => check(
+            "PROJECT_SSL",
+            "HTTPS certificate",
+            "error",
+            "The active local certificate does not cover this project domain.",
+            "HTTPS clients will reject the hostname.",
+            vec!["Reissue the local HTTPS certificate from Certificates.".into()],
+        ),
+        Err(error) => check(
+            "PROJECT_SSL",
+            "HTTPS certificate",
+            "error",
+            &error,
+            "HTTPS certificate state could not be inspected.",
+            vec!["Open Certificates and run diagnostics.".into()],
+        ),
+    });
+    checks.push(match crate::backups::info(app, &environment.id) {
+        Ok(info) => check(
+            "PROJECT_DATABASE",
+            "Database connection",
+            "healthy",
+            &format!(
+                "Connected to {} {}. Size: {}.",
+                info.engine, info.version, info.size
+            ),
+            "Generated database credentials work.",
+            vec![],
+        ),
+        Err(error) => check(
+            "PROJECT_DATABASE",
+            "Database connection",
+            "error",
+            &error,
+            "Database-backed features may fail.",
+            vec!["Check database health and credentials.".into()],
+        ),
+    });
+    if environment
+        .extra_services
+        .iter()
+        .any(|service| service == "redis")
+    {
+        let mut command = vec!["redis-cli".into()];
+        if !environment.redis_password.is_empty() {
+            command.extend(["-a".into(), environment.redis_password.clone()])
+        }
+        command.push("ping".into());
+        checks.push(
+            match crate::containers::execute_service_command(app, &environment.id, "redis", command)
+            {
+                Ok(output) if output.to_uppercase().contains("PONG") => check(
+                    "PROJECT_REDIS",
+                    "Redis connection",
+                    "healthy",
+                    "Redis responded with PONG.",
+                    "Cache and queues are available.",
+                    vec![],
+                ),
+                Ok(output) => check(
+                    "PROJECT_REDIS",
+                    "Redis connection",
+                    "warning",
+                    output.trim(),
+                    "Redis returned an unexpected response.",
+                    vec![],
+                ),
+                Err(error) => check(
+                    "PROJECT_REDIS",
+                    "Redis connection",
+                    "error",
+                    &error,
+                    "Cache and queue operations may fail.",
+                    vec!["Verify Redis health and password.".into()],
+                ),
+            },
+        );
+    }
+    if environment
+        .extra_services
+        .iter()
+        .any(|service| service == "mailpit")
+    {
+        let service = if environment.web_server == "Nginx" {
+            "php"
+        } else {
+            "web"
+        };
+        let command=vec!["php".into(),"-r".into(),"$s=@fsockopen('mailpit',1025,$e,$m,3);if(!$s){fwrite(STDERR,$m);exit(1);}echo 'SMTP ready';fclose($s);".into()];
+        checks.push(
+            match crate::containers::execute_service_command(app, &environment.id, service, command)
+            {
+                Ok(_) => check(
+                    "PROJECT_SMTP",
+                    "Mailpit SMTP",
+                    "healthy",
+                    "Connected to mailpit:1025.",
+                    "Local mail capture is available.",
+                    vec![],
+                ),
+                Err(error) => check(
+                    "PROJECT_SMTP",
+                    "Mailpit SMTP",
+                    "error",
+                    &error,
+                    "Local mail delivery will fail.",
+                    vec!["Start Mailpit and inspect its logs.".into()],
+                ),
+            },
+        );
+    }
+    let status = if checks.iter().any(|item| item.status == "error") {
+        "error"
+    } else if checks.iter().any(|item| item.status == "warning") {
+        "warning"
+    } else {
+        "healthy"
+    };
+    Ok(HealthReport {
+        status: status.into(),
+        checked_at: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64,
+        checks,
+    })
+}
+
+fn inspect_native_project(environment: &crate::containers::Environment) -> HealthReport {
+    let started = Instant::now();
+    let port: u16 = environment.port.parse().unwrap_or(0);
+    let check_item = match local_response(port, "127.0.0.1") {
+        Ok(response) => check(
+            "PROJECT_HTTP",
+            "Local process response",
+            if (200..400).contains(&response.status) {
+                "healthy"
+            } else {
+                "error"
+            },
+            &format!(
+                "HTTP {} in {} ms.",
+                response.status,
+                started.elapsed().as_millis()
+            ),
+            "Checks the native process directly on 127.0.0.1, without a container gateway.",
+            vec![],
+        ),
+        Err(error) => check(
+            "PROJECT_HTTP",
+            "Local process response",
+            "error",
+            &error,
+            "The native process is not reachable on its configured port.",
+            vec!["Start the environment and check its logs.".into()],
+        ),
+    };
+    let status = if check_item.status == "error" {
+        "error"
+    } else {
+        "healthy"
+    };
+    HealthReport {
+        status: status.into(),
+        checked_at: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64,
+        checks: vec![check_item],
+    }
+}
+
+struct LocalResponse {
+    status: u16,
+    server: Option<String>,
+    content_type: Option<String>,
+    location: Option<String>,
+}
+
+fn local_site_response(host: &str) -> Result<LocalResponse, String> {
+    local_response(80, host)
+}
+
+fn local_response(port: u16, host: &str) -> Result<LocalResponse, String> {
+    let mut stream = TcpStream::connect_timeout(
+        &SocketAddr::from(([127, 0, 0, 1], port)),
+        Duration::from_secs(2),
+    )
+    .map_err(|error| format!("Connection failed: {error}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .map_err(|error| error.to_string())?;
+    stream
+        .write_all(
+            format!("GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n").as_bytes(),
+        )
+        .map_err(|error| error.to_string())?;
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .map_err(|error| error.to_string())?;
+    let status = response
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|value| value.parse().ok())
+        .ok_or("Invalid HTTP response")?;
+    let header = |name: &str| {
+        response.lines().skip(1).find_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            key.eq_ignore_ascii_case(name)
+                .then(|| value.trim().to_owned())
+        })
+    };
+    Ok(LocalResponse {
+        status,
+        server: header("server"),
+        content_type: header("content-type"),
+        location: header("location"),
+    })
+}
