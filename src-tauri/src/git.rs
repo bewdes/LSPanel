@@ -326,18 +326,18 @@ pub fn initialize(directory: &str, project_type: &str) -> Result<GitStatus, Stri
 fn gitignore_template(project_type: &str) -> &'static str {
     match project_type {
         "node" | "react" => {
-            "node_modules/\ndist/\nbuild/\n.env\n.env.*\n!.env.example\n*.log\n.DS_Store\n"
+            "node_modules/\ndist/\nbuild/\n.env\n.env.*\n!.env.example\n*.log\n.DS_Store\n.lspanel/\n"
         }
         "wordpress" => {
-            ".env\n.env.*\n!.env.example\nwp-content/uploads/\nwp-content/cache/\n*.log\n.DS_Store\n"
+            ".env\n.env.*\n!.env.example\nwp-content/uploads/\nwp-content/cache/\n*.log\n.DS_Store\n.lspanel/\n"
         }
         "laravel" => {
-            "/vendor/\n/node_modules/\n/public/build/\n/storage/*.key\n.env\n.env.*\n!.env.example\n*.log\n.DS_Store\n"
+            "/vendor/\n/node_modules/\n/public/build/\n/storage/*.key\n.env\n.env.*\n!.env.example\n*.log\n.DS_Store\n.lspanel/\n"
         }
         "symfony" => {
-            "/vendor/\n/var/\n/node_modules/\n/public/build/\n.env.local\n.env.*.local\n*.log\n.DS_Store\n"
+            "/vendor/\n/var/\n/node_modules/\n/public/build/\n.env.local\n.env.*.local\n*.log\n.DS_Store\n.lspanel/\n"
         }
-        _ => ".env\n.env.*\n!.env.example\n/vendor/\n/node_modules/\n*.log\n.DS_Store\n",
+        _ => ".env\n.env.*\n!.env.example\n/vendor/\n/node_modules/\n*.log\n.DS_Store\n.lspanel/\n",
     }
 }
 
@@ -370,6 +370,12 @@ mod tests {
         assert!(gitignore_template("wordpress").contains("wp-content/uploads/"));
         assert!(gitignore_template("php").contains(".env"));
         assert!(gitignore_template("php").contains("!.env.example"));
+        for project_type in ["node", "react", "wordpress", "laravel", "symfony", "php"] {
+            assert!(
+                gitignore_template(project_type).contains(".lspanel/"),
+                "{project_type} must ignore .lspanel/, which holds container secrets and database dumps"
+            );
+        }
     }
 
     #[test]

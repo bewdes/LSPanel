@@ -464,6 +464,22 @@ pub fn create(app: &tauri::AppHandle, environment_id: &str) -> Result<DatabaseBa
         .ok_or("Backup file was not created".into())
 }
 
+pub fn prune(app: &tauri::AppHandle, environment_id: &str, keep: usize) -> Result<usize, String> {
+    let backups = list(app, environment_id)?;
+    let obsolete = obsolete_backups(backups, keep);
+    let mut removed = 0;
+    for backup in &obsolete {
+        if fs::remove_file(&backup.path).is_ok() {
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
+fn obsolete_backups(backups: Vec<DatabaseBackup>, keep: usize) -> Vec<DatabaseBackup> {
+    backups.into_iter().skip(keep).collect()
+}
+
 pub fn restore(
     app: &tauri::AppHandle,
     environment_id: &str,
@@ -609,6 +625,9 @@ fn environment(app: &tauri::AppHandle, id: &str) -> Result<crate::containers::En
         .ok_or("Environment not found".into())
 }
 fn backup_directory(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
+    if let Some(directory) = crate::containers::environment_project_directory(app, id)? {
+        return Ok(directory.join(".lspanel").join("backups").join("database"));
+    }
     Ok(app
         .path()
         .app_data_dir()
@@ -770,8 +789,8 @@ pub fn query_is_read_only(sql: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        copy_backup_file, query_is_read_only, safe_resource_id, valid_backup_id,
-        valid_database_name,
+        copy_backup_file, obsolete_backups, query_is_read_only, safe_resource_id, valid_backup_id,
+        valid_database_name, DatabaseBackup,
     };
     use std::fs;
     #[test]
@@ -800,6 +819,29 @@ mod tests {
         assert!(!target.with_extension("sql.copying").exists());
         fs::remove_dir_all(directory).unwrap();
     }
+    #[test]
+    fn retention_keeps_the_newest_backups() {
+        let backups = (1..=4)
+            .rev()
+            .map(|created_at| DatabaseBackup {
+                id: format!("backup-{created_at}"),
+                environment_id: "env".into(),
+                database: "app".into(),
+                size: 0,
+                created_at,
+                path: format!("/tmp/backup-{created_at}.sql"),
+            })
+            .collect();
+        let obsolete = obsolete_backups(backups, 2);
+        assert_eq!(
+            obsolete
+                .into_iter()
+                .map(|backup| backup.id)
+                .collect::<Vec<_>>(),
+            ["backup-2", "backup-1"]
+        );
+    }
+
     #[test]
     fn classifies_database_queries() {
         assert!(query_is_read_only(" SELECT * FROM users"));

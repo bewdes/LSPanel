@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { NativeSelect } from "@/components/ui/native-select"
 import {
   Table,
@@ -17,7 +18,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { errorMessage } from "@/lib/errors"
+import { installTool } from "@/lib/install"
 import type { Site } from "@/types"
+
+type TunnelProvider = "tailscale" | "ngrok" | "cloudflare"
 
 type LiveLinkStatus = {
   installed: boolean
@@ -28,29 +32,82 @@ type LiveLinkStatus = {
   enableUrl?: string
   active: boolean
   siteId?: string
-  mode?: "serve" | "funnel"
+  mode?: string
   url?: string
+  providers: Array<{ id: TunnelProvider; installed: boolean }>
   links: Array<{
     siteId: string
-    mode: "serve" | "funnel"
+    provider: TunnelProvider
+    mode: string
     port: number
     localPort: number
-    tailscaleActive: boolean
+    providerActive: boolean
     gatewayActive: boolean
     projectReachable: boolean
+    url?: string
     status:
-      "active" | "orphaned" | "gateway_unavailable" | "project_unavailable" | "tailscale_inactive"
+      "active" | "orphaned" | "gateway_unavailable" | "project_unavailable" | "provider_inactive"
   }>
   message: string
+}
+
+const PROVIDER_OPTIONS: Array<{ id: TunnelProvider; name: string; installUrl: string }> = [
+  { id: "tailscale", name: "Tailscale", installUrl: "https://tailscale.com/download" },
+  { id: "ngrok", name: "ngrok", installUrl: "https://ngrok.com/download" },
+  {
+    id: "cloudflare",
+    name: "Cloudflare Tunnel",
+    installUrl:
+      "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-local-tunnel/",
+  },
+]
+
+function providerName(id: string) {
+  return PROVIDER_OPTIONS.find((option) => option.id === id)?.name ?? id
 }
 
 export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
   const [status, setStatus] = React.useState<LiveLinkStatus | null>(null)
   const [siteId, setSiteId] = React.useState(sites[0]?.id ?? "")
+  const [provider, setProvider] = React.useState<TunnelProvider>("tailscale")
   const [mode, setMode] = React.useState<"serve" | "funnel">("serve")
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
+  const [installHint, setInstallHint] = React.useState("")
+  const [ngrokToken, setNgrokToken] = React.useState("")
+  const [ngrokTokenBusy, setNgrokTokenBusy] = React.useState(false)
+  const [ngrokTokenStatus, setNgrokTokenStatus] = React.useState("")
   const initialized = React.useRef(false)
+
+  async function handleInstall(tool: string, fallbackUrl: string) {
+    setInstallHint("")
+    try {
+      const outcome = await installTool(tool, fallbackUrl)
+      setInstallHint(
+        outcome === "command"
+          ? uk
+            ? "Команду скопійовано в буфер обміну — відкрито термінал, вставте й виконайте її."
+            : "Command copied to clipboard — a terminal opened, paste and run it there."
+          : "",
+      )
+    } catch (value) {
+      setError(errorMessage(value))
+    }
+  }
+
+  async function saveNgrokToken() {
+    setNgrokTokenBusy(true)
+    setNgrokTokenStatus("")
+    try {
+      await invoke("set_ngrok_authtoken", { token: ngrokToken })
+      setNgrokToken("")
+      setNgrokTokenStatus(uk ? "Authtoken збережено." : "Authtoken saved.")
+    } catch (value) {
+      setNgrokTokenStatus(errorMessage(value))
+    } finally {
+      setNgrokTokenBusy(false)
+    }
+  }
 
   // Picks the first site that isn't already published, so the form is ready
   // to add the *next* project instead of re-selecting one that's running.
@@ -76,7 +133,9 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
       if (!initialized.current) {
         initialized.current = true
         setSiteId(nextUnlinkedSite(next.links))
-        if (next.mode) setMode(next.mode)
+        if (next.mode === "serve" || next.mode === "funnel") setMode(next.mode)
+        const activeProvider = next.links.find((link) => link.status === "active")?.provider
+        if (activeProvider) setProvider(activeProvider)
       }
     } catch (value) {
       setError(errorMessage(value))
@@ -108,7 +167,11 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
     setBusy(true)
     setError("")
     try {
-      const next = await invoke<LiveLinkStatus>("start_livelink", { siteId, mode })
+      const next = await invoke<LiveLinkStatus>("start_livelink", {
+        siteId,
+        mode: provider === "tailscale" ? mode : "tunnel",
+        provider,
+      })
       setStatus(next)
       setSiteId(nextUnlinkedSite(next.links))
     } catch (value) {
@@ -117,6 +180,13 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
       setBusy(false)
     }
   }
+
+  const providerInstalled = (id: TunnelProvider) =>
+    status?.providers.find((item) => item.id === id)?.installed ?? false
+  const providerReady =
+    provider === "tailscale"
+      ? Boolean(status?.connected && status.serveEnabled)
+      : providerInstalled(provider)
 
   const stop = async () => {
     setBusy(true)
@@ -138,8 +208,8 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
         title="Live Link"
         description={
           uk
-            ? "Безпечно відкривайте локальний сайт через Tailscale."
-            : "Securely expose a local site through Tailscale."
+            ? "Безпечно відкривайте локальний сайт через Tailscale, ngrok або Cloudflare Tunnel."
+            : "Securely expose a local site through Tailscale, ngrok, or Cloudflare Tunnel."
         }
         action={
           <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
@@ -164,33 +234,145 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            {!status?.installed && (
-              <Alert>
-                <AlertDescription>
-                  {uk
-                    ? "Tailscale CLI не знайдено. Встановіть Tailscale та увійдіть у свій tailnet."
-                    : "Tailscale CLI was not found. Install Tailscale and sign in to your tailnet."}
-                </AlertDescription>
-              </Alert>
-            )}
-            {status?.connected && !status.serveEnabled && status.enableUrl && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{uk ? "Провайдер" : "Provider"}</label>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {PROVIDER_OPTIONS.map((option) => {
+                  const info = status?.providers.find((item) => item.id === option.id)
+                  const active = provider === option.id
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`rounded-xl border p-3 text-left transition-colors ${active ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+                      onClick={() => setProvider(option.id)}
+                    >
+                      <div className="font-medium">{option.name}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {!info
+                          ? uk
+                            ? "Перевірка…"
+                            : "Checking…"
+                          : info.installed
+                            ? uk
+                              ? "Встановлено"
+                              : "Installed"
+                            : uk
+                              ? "Не знайдено"
+                              : "Not found"}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            {provider === "tailscale" && !status?.installed && (
               <Alert>
                 <AlertDescription className="space-y-3">
                   <p>
                     {uk
-                      ? "Tailscale Serve ще не активовано для цього пристрою."
-                      : "Tailscale Serve is not enabled for this device yet."}
+                      ? "Tailscale CLI не знайдено. Встановіть Tailscale та увійдіть у свій tailnet."
+                      : "Tailscale CLI was not found. Install Tailscale and sign in to your tailnet."}
                   </p>
                   <Button
                     variant="outline"
-                    onClick={() => void invoke("open_url", { url: status.enableUrl })}
+                    size="sm"
+                    onClick={() => void handleInstall("tailscale", PROVIDER_OPTIONS[0].installUrl)}
                   >
-                    <ExternalLink />
-                    {uk ? "Активувати Tailscale Serve" : "Enable Tailscale Serve"}
+                    {uk ? "Встановити Tailscale" : "Install Tailscale"}
                   </Button>
                 </AlertDescription>
               </Alert>
             )}
+            {provider === "tailscale" &&
+              status?.connected &&
+              !status.serveEnabled &&
+              status.enableUrl && (
+                <Alert>
+                  <AlertDescription className="space-y-3">
+                    <p>
+                      {uk
+                        ? "Tailscale Serve ще не активовано для цього пристрою."
+                        : "Tailscale Serve is not enabled for this device yet."}
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => void invoke("open_url", { url: status.enableUrl })}
+                    >
+                      <ExternalLink />
+                      {uk ? "Активувати Tailscale Serve" : "Enable Tailscale Serve"}
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+            {provider !== "tailscale" && status && !providerInstalled(provider) && (
+              <Alert>
+                <AlertDescription className="space-y-3">
+                  <p>
+                    {uk
+                      ? `CLI ${providerName(provider)} не знайдено. Встановіть його й переконайтесь, що він доступний у PATH.`
+                      : `${providerName(provider)} CLI was not found. Install it and make sure it's on PATH.`}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const option = PROVIDER_OPTIONS.find((item) => item.id === provider)
+                      if (option) void handleInstall(option.id, option.installUrl)
+                    }}
+                  >
+                    {uk
+                      ? `Встановити ${providerName(provider)}`
+                      : `Install ${providerName(provider)}`}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+            {provider === "ngrok" && status && providerInstalled("ngrok") && (
+              <Alert>
+                <AlertDescription className="space-y-3">
+                  <p>
+                    {uk
+                      ? "ngrok потребує authtoken вашого облікового запису, щоб запускати тунелі."
+                      : "ngrok needs your account's authtoken to start tunnels."}
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      value={ngrokToken}
+                      onChange={(event) => setNgrokToken(event.target.value)}
+                      placeholder="authtoken"
+                      type="password"
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={ngrokTokenBusy || !ngrokToken.trim()}
+                      onClick={() => void saveNgrokToken()}
+                    >
+                      {uk ? "Зберегти" : "Save"}
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0"
+                      onClick={() =>
+                        void invoke("open_url", {
+                          url: "https://dashboard.ngrok.com/get-started/your-authtoken",
+                        })
+                      }
+                    >
+                      <ExternalLink />
+                      {uk ? "Отримати authtoken" : "Get your authtoken"}
+                    </Button>
+                    {ngrokTokenStatus && (
+                      <span className="text-xs text-muted-foreground">{ngrokTokenStatus}</span>
+                    )}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+            {installHint && <p className="px-1 text-xs text-muted-foreground">{installHint}</p>}
             <div className="space-y-2">
               <label className="text-sm font-medium">{uk ? "Сайт" : "Site"}</label>
               <NativeSelect
@@ -205,31 +387,33 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                 ))}
               </NativeSelect>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                className={`rounded-xl border p-4 text-left transition-colors ${mode === "serve" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
-                onClick={() => setMode("serve")}
-              >
-                <LockKeyhole className="mb-3 size-5" />
-                <div className="font-medium">{uk ? "Приватний Serve" : "Private Serve"}</div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {uk ? "Лише користувачі вашого tailnet." : "Only users in your tailnet."}
-                </div>
-              </button>
-              <button
-                type="button"
-                className={`rounded-xl border p-4 text-left transition-colors ${mode === "funnel" ? "border-amber-500 bg-amber-500/5" : "hover:bg-muted/50"}`}
-                onClick={() => setMode("funnel")}
-              >
-                <Globe2 className="mb-3 size-5" />
-                <div className="font-medium">{uk ? "Публічний Funnel" : "Public Funnel"}</div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {uk ? "Доступний усім в інтернеті." : "Accessible to anyone on the internet."}
-                </div>
-              </button>
-            </div>
-            {mode === "funnel" && (
+            {provider === "tailscale" && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  className={`rounded-xl border p-4 text-left transition-colors ${mode === "serve" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+                  onClick={() => setMode("serve")}
+                >
+                  <LockKeyhole className="mb-3 size-5" />
+                  <div className="font-medium">{uk ? "Приватний Serve" : "Private Serve"}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    {uk ? "Лише користувачі вашого tailnet." : "Only users in your tailnet."}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-xl border p-4 text-left transition-colors ${mode === "funnel" ? "border-amber-500 bg-amber-500/5" : "hover:bg-muted/50"}`}
+                  onClick={() => setMode("funnel")}
+                >
+                  <Globe2 className="mb-3 size-5" />
+                  <div className="font-medium">{uk ? "Публічний Funnel" : "Public Funnel"}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    {uk ? "Доступний усім в інтернеті." : "Accessible to anyone on the internet."}
+                  </div>
+                </button>
+              </div>
+            )}
+            {provider === "tailscale" && mode === "funnel" && (
               <Alert>
                 <AlertDescription>
                   {uk
@@ -239,10 +423,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
               </Alert>
             )}
             <div className="flex flex-wrap gap-2">
-              <Button
-                disabled={busy || !siteId || !status?.connected || !status.serveEnabled}
-                onClick={() => void start()}
-              >
+              <Button disabled={busy || !siteId || !providerReady} onClick={() => void start()}>
                 <Globe2 className={busy ? "animate-pulse" : ""} />
                 {busy
                   ? uk
@@ -292,8 +473,8 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
             <CardTitle>{uk ? "Запущені проєкти" : "Running projects"}</CardTitle>
             <CardDescription>
               {uk
-                ? "Сайти, доступні через поточний Tailscale-пристрій."
-                : "Sites available through the current Tailscale device."}
+                ? "Сайти, доступні через активні тунелі."
+                : "Sites available through active tunnels."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -304,15 +485,14 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                   : "No projects are currently running through LiveLink."}
               </div>
             )}
-            {status?.dnsName && activeLinks.length > 0 && (
+            {activeLinks.length > 0 && (
               <div className="overflow-hidden rounded-lg border">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>{uk ? "Сайт" : "Site"}</TableHead>
+                      <TableHead>{uk ? "Провайдер" : "Provider"}</TableHead>
                       <TableHead>{uk ? "Режим" : "Mode"}</TableHead>
-                      <TableHead>{uk ? "Порт" : "Port"}</TableHead>
-                      <TableHead>Gateway</TableHead>
                       <TableHead>{uk ? "Стан" : "Status"}</TableHead>
                       <TableHead>URL</TableHead>
                       <TableHead className="text-right">{uk ? "Дії" : "Actions"}</TableHead>
@@ -321,7 +501,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                   <TableBody>
                     {activeLinks.map((link) => {
                       const site = sites.find((item) => item.id === link.siteId)
-                      const url = `https://${status.dnsName}${link.port === 443 ? "" : `:${link.port}`}`
+                      const url = link.url
                       return (
                         <TableRow key={link.siteId}>
                           <TableCell>
@@ -331,12 +511,19 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                             )}
                           </TableCell>
                           <TableCell>
+                            <Badge variant="outline">{providerName(link.provider)}</Badge>
+                          </TableCell>
+                          <TableCell>
                             <Badge variant={link.mode === "funnel" ? "destructive" : "outline"}>
-                              {link.mode === "funnel" ? "Public Funnel" : "Private Serve"}
+                              {link.mode === "funnel"
+                                ? "Public Funnel"
+                                : link.mode === "serve"
+                                  ? "Private Serve"
+                                  : uk
+                                    ? "Тунель"
+                                    : "Tunnel"}
                             </Badge>
                           </TableCell>
-                          <TableCell>{link.port}</TableCell>
-                          <TableCell>{link.localPort}</TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
                               <Badge variant={link.projectReachable ? "outline" : "destructive"}>
@@ -345,19 +532,20 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                               <Badge variant={link.gatewayActive ? "outline" : "destructive"}>
                                 Gateway
                               </Badge>
-                              <Badge variant={link.tailscaleActive ? "outline" : "destructive"}>
-                                Tailscale
+                              <Badge variant={link.providerActive ? "outline" : "destructive"}>
+                                {providerName(link.provider)}
                               </Badge>
                             </div>
                           </TableCell>
                           <TableCell className="max-w-64 truncate text-xs text-muted-foreground">
-                            {url}
+                            {url ?? (uk ? "Встановлюється…" : "Establishing…")}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => void invoke("open_url", { url })}
+                              disabled={!url}
+                              onClick={() => url && void invoke("open_url", { url })}
                             >
                               <ExternalLink />
                               {uk ? "Відкрити" : "Open"}

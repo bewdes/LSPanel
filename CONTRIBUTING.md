@@ -29,6 +29,12 @@ For changes touching container/compose behavior, also run:
 npm run test:containers
 ```
 
+To see which frontend files are exercised by the test suite:
+
+```bash
+npm run test:frontend:coverage
+```
+
 ## Guidelines
 
 - Keep pull requests focused on a single change; avoid unrelated refactors.

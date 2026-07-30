@@ -94,8 +94,8 @@ export function AppSidebar({
               onClick={() => onNavigate("dashboard")}
               tooltip="LS Panel"
             >
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground font-semibold">
-                LS
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Server className="size-4" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="flex items-center gap-1.5 truncate font-semibold">

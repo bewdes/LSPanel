@@ -133,6 +133,66 @@ pub fn inspect(app: &tauri::AppHandle) -> Result<HealthReport, String> {
         },
     ));
 
+    let git_version = tool_version("git", &["--version"]);
+    checks.push(check(
+        "GIT",
+        "Git",
+        if git_version.is_some() {
+            "healthy"
+        } else {
+            "warning"
+        },
+        git_version
+            .as_deref()
+            .unwrap_or("Git was not found on PATH."),
+        "Cloning, committing, and branch operations on projects require Git.",
+        if git_version.is_none() {
+            vec!["Install Git (e.g. apt install git).".into()]
+        } else {
+            Vec::new()
+        },
+    ));
+
+    let openssl_version = tool_version("openssl", &["version"]);
+    checks.push(check(
+        "OPENSSL",
+        "OpenSSL",
+        if openssl_version.is_some() {
+            "healthy"
+        } else {
+            "warning"
+        },
+        openssl_version
+            .as_deref()
+            .unwrap_or("OpenSSL was not found on PATH."),
+        "Generating the local certificate authority and per-site HTTPS certificates requires OpenSSL.",
+        if openssl_version.is_none() {
+            vec!["Install OpenSSL (e.g. apt install openssl).".into()]
+        } else {
+            Vec::new()
+        },
+    ));
+
+    let certutil_version = tool_version("certutil", &["--version"]);
+    checks.push(check(
+        "NSS_TOOLS",
+        "NSS tools (certutil)",
+        if certutil_version.is_some() {
+            "healthy"
+        } else {
+            "warning"
+        },
+        certutil_version
+            .as_deref()
+            .unwrap_or("certutil was not found on PATH."),
+        "Needed to trust the local CA in Firefox and other NSS-based browsers; Chromium-based browsers use the system trust store instead.",
+        if certutil_version.is_none() {
+            vec!["Install NSS tools (e.g. apt install libnss3-tools).".into()]
+        } else {
+            Vec::new()
+        },
+    ));
+
     let ca_exists = crate::tls::ca_path(app).is_ok_and(|path| path.is_file());
     let ca_trusted = crate::tls::trusted(app);
     let browsers_trusted = crate::tls::browsers_trusted();
@@ -310,6 +370,30 @@ fn gateway_responds() -> bool {
     stream.read_to_string(&mut response).is_ok()
         && response.contains("LS Panel")
         && response.starts_with("HTTP/1.1 404")
+}
+
+/// Reports whether a CLI tool is installed by attempting to spawn it.
+/// Presence is proven by the OS successfully exec'ing the binary — the exit
+/// code is not a reliable "installed" signal on its own: NSS's `certutil`,
+/// for example, exits 1 and prints a usage banner for `--version` since it
+/// doesn't recognize that flag, even though the tool is fully installed.
+fn tool_version(command: &str, version_args: &[&str]) -> Option<String> {
+    let output = Command::new(command)
+        .args(version_args)
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    let version_line = [&output.stdout, &output.stderr]
+        .into_iter()
+        .find_map(|stream| {
+            String::from_utf8_lossy(stream)
+                .lines()
+                .next()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(str::to_owned)
+        });
+    Some(version_line.unwrap_or_else(|| "Installed".into()))
 }
 
 fn check(

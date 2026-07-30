@@ -10,6 +10,7 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -97,16 +98,6 @@ export function OperationCenter({ uk }: { uk: boolean }) {
               <SheetTitle>Operations</SheetTitle>
               <SheetDescription>Container activity and recent results.</SheetDescription>
             </div>
-            <Button
-              className="ml-auto"
-              variant="ghost"
-              size="sm"
-              disabled={!clearable}
-              onClick={clearAll}
-            >
-              <Trash2 />
-              Clear all
-            </Button>
           </SheetHeader>
           <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-4">
             <div className="grid min-w-0 gap-3">
@@ -121,6 +112,18 @@ export function OperationCenter({ uk }: { uk: boolean }) {
               )}
             </div>
           </div>
+          <SheetFooter className="flex items-center gap-2 border-t px-4 py-3">
+            <Button
+              className="ml-auto"
+              variant="destructive"
+              size="sm"
+              disabled={!clearable}
+              onClick={clearAll}
+            >
+              <Trash2 />
+              Clear all
+            </Button>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
     </SidebarMenuItem>

@@ -1,8 +1,9 @@
 use crate::{
-    administration_commands, app_shutdown, certificate_commands, database_commands,
-    desktop_commands, environment_commands, file_manager_commands, git_commands, livelink_commands,
-    logs, mailpit_commands, native_runtime, operations, runtime_commands, settings_commands,
-    site_commands, snapshot_commands, storage, terminal, terminal_commands,
+    administration_commands, app_shutdown, backup_scheduler, certificate_commands,
+    database_commands, desktop_commands, disk_space_monitor, environment_commands,
+    file_manager_commands, git_commands, livelink_commands, logs, mailpit_commands, native_runtime,
+    operations, runtime_commands, settings_commands, site_commands, snapshot_commands, storage,
+    terminal, terminal_commands, tunnel_provider,
 };
 
 pub fn run() {
@@ -13,10 +14,14 @@ pub fn run() {
         .manage(logs::LogStreams::default())
         .manage(terminal::TerminalSessions::default())
         .manage(native_runtime::NativeProcesses::default())
+        .manage(tunnel_provider::TunnelProcesses::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             storage::initialize(app.handle()).map_err(std::io::Error::other)?;
             operations::recover_interrupted(app.handle()).map_err(std::io::Error::other)?;
+            backup_scheduler::start(app.handle());
+            disk_space_monitor::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -25,6 +30,7 @@ pub fn run() {
             livelink_commands::livelink_status,
             livelink_commands::start_livelink,
             livelink_commands::stop_livelink,
+            livelink_commands::set_ngrok_authtoken,
             certificate_commands::install_local_ca,
             certificate_commands::reissue_local_https,
             certificate_commands::local_certificate_status,
@@ -35,6 +41,8 @@ pub fn run() {
             administration_commands::export_environment_logs,
             desktop_commands::open_containers_window,
             administration_commands::container_runtime_status,
+            administration_commands::container_runtimes_status,
+            administration_commands::dependency_install_command,
             administration_commands::list_environments,
             administration_commands::save_environment,
             administration_commands::delete_environment,
@@ -88,6 +96,7 @@ pub fn run() {
             file_manager_commands::read_managed_file,
             database_commands::list_database_backups,
             database_commands::create_database_backup,
+            database_commands::prune_database_backups,
             database_commands::restore_database_backup,
             database_commands::delete_database_backup,
             database_commands::database_info,

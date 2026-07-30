@@ -140,8 +140,8 @@ function App() {
       <div className="grid size-full grid-rows-[56px_minmax(0,1fr)] bg-background">
         <StandaloneHeader title="LS Panel" />
         <div className="grid place-items-center">
-          <div className="grid size-12 place-items-center rounded-xl border bg-card font-semibold shadow-sm">
-            LS
+          <div className="grid size-12 place-items-center rounded-xl border bg-black dark:bg-white text-white dark:text-black shadow-sm">
+            <Server className="size-5" />
           </div>
         </div>
       </div>
@@ -346,7 +346,14 @@ function App() {
                 {view === "certificates" && <CertificatesPage uk={uk} />}
                 {view === "settings" && <SettingsPage settings={settings} onChange={setSettings} />}
                 {(view === "cloud" || view === "apps" || view === "help") && (
-                  <UtilityPage view={view} uk={uk} runtime={runtime} sites={sites} />
+                  <UtilityPage
+                    view={view}
+                    uk={uk}
+                    runtime={runtime}
+                    sites={sites}
+                    settings={settings}
+                    onSettingsChange={setSettings}
+                  />
                 )}
               </>
             )}

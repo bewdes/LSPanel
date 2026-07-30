@@ -33,6 +33,7 @@ import { pickLanguage } from "@/i18n"
 import { welcomeScreenText } from "@/i18n/welcome-screen"
 import { formatMetricBytes } from "@/lib/format"
 import { errorMessage } from "@/lib/errors"
+import { installTool } from "@/lib/install"
 import type { Runtime } from "@/types"
 
 export type AppSettings = {
@@ -51,13 +52,41 @@ export type AppSettings = {
   defaultDatabaseVersion: string
   autoInitGit: boolean
   autoStartProjects: boolean
+  preferredEditor: string
+  customEditorCommand: string
+  notifyOnOperations: boolean
+  diskSpaceAlertEnabled: boolean
+  diskSpaceAlertThresholdGb: number
 }
 
 type LiveLinkStatus = {
   installed: boolean
   connected: boolean
   serveEnabled: boolean
+  providers: Array<{ id: string; installed: boolean }>
 }
+
+type HealthCheck = {
+  code: string
+  title: string
+  status: string
+  summary: string
+  suggestions: string[]
+}
+type HealthReport = { checks: HealthCheck[] }
+
+const TOOL_CHECK_CODES = ["GIT", "OPENSSL", "NSS_TOOLS"]
+
+const REMOTE_ACCESS_PROVIDERS = [
+  { id: "tailscale", name: "Tailscale", installUrl: "https://tailscale.com/download" },
+  { id: "ngrok", name: "ngrok", installUrl: "https://ngrok.com/download" },
+  {
+    id: "cloudflare",
+    name: "Cloudflare Tunnel",
+    installUrl:
+      "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-local-tunnel/",
+  },
+] as const
 
 const TOTAL_STEPS = 5
 const READY_STEP = TOTAL_STEPS
@@ -80,12 +109,20 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
     defaultDatabaseVersion: "11.8",
     autoInitGit: true,
     autoStartProjects: true,
+    preferredEditor: "code",
+    customEditorCommand: "",
+    notifyOnOperations: true,
+    diskSpaceAlertEnabled: true,
+    diskSpaceAlertThresholdGb: 5,
   })
   const [freeSpace, setFreeSpace] = React.useState<number | null | undefined>(undefined)
   const [runtimeStatus, setRuntimeStatus] = React.useState<Runtime | null>(null)
+  const [runtimes, setRuntimes] = React.useState<Runtime[] | null>(null)
+  const [tools, setTools] = React.useState<HealthCheck[] | null>(null)
   const [runtimeChecking, setRuntimeChecking] = React.useState(false)
   const [liveLinkStatus, setLiveLinkStatus] = React.useState<LiveLinkStatus | null>(null)
   const [error, setError] = React.useState("")
+  const [installHint, setInstallHint] = React.useState("")
   const uk = settings.language in welcomeScreenText ? settings.language === "uk" : false
   const text = pickLanguage(welcomeScreenText, uk)
 
@@ -112,9 +149,21 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
 
   const checkRuntime = React.useCallback(() => {
     setRuntimeChecking(true)
-    invoke<Runtime>("container_runtime_status")
-      .then(setRuntimeStatus)
-      .catch(() => setRuntimeStatus(null))
+    Promise.all([
+      invoke<Runtime>("container_runtime_status"),
+      invoke<Runtime[]>("container_runtimes_status"),
+      invoke<HealthReport>("system_health").catch(() => null),
+    ])
+      .then(([status, list, health]) => {
+        setRuntimeStatus(status)
+        setRuntimes(list)
+        setTools(health?.checks.filter((check) => TOOL_CHECK_CODES.includes(check.code)) ?? null)
+      })
+      .catch(() => {
+        setRuntimeStatus(null)
+        setRuntimes(null)
+        setTools(null)
+      })
       .finally(() => setRuntimeChecking(false))
   }, [])
   React.useEffect(() => {
@@ -139,6 +188,15 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
   function openExternal(url: string) {
     void invoke("open_url", { url }).catch((value) => setError(errorMessage(value)))
   }
+  async function handleInstall(tool: string, fallbackUrl: string) {
+    setInstallHint("")
+    try {
+      const outcome = await installTool(tool, fallbackUrl)
+      setInstallHint(outcome === "command" ? text.commandCopiedHint : "")
+    } catch (value) {
+      setError(errorMessage(value))
+    }
+  }
   async function finish() {
     try {
       setError("")
@@ -153,73 +211,82 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
   return (
     <main className="flex h-full min-h-0 w-full overflow-y-auto bg-background p-4 text-foreground sm:p-6">
       <div className="m-auto flex w-full max-w-2xl flex-col gap-5 py-4">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <div className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm">
-            <Server className="size-5" />
-          </div>
-          {step < READY_STEP && (
+        {step > 0 && step < READY_STEP && (
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="flex size-11 items-center justify-center rounded-xl border bg-black dark:bg-white text-white dark:text-black shadow-sm">
+              <Server className="size-5" />
+            </div>
+            <p className="text-md font-bold tracking-[.18em] text-muted-foreground dark:text-white uppercase">
+              LS Panel
+            </p>
             <div className="flex w-full max-w-xs flex-col items-center gap-1.5">
               <Progress value={((step + 1) / TOTAL_STEPS) * 100} className="w-full" />
               <p className="text-[10px] font-medium tracking-[.18em] text-muted-foreground uppercase">
                 {text.stepOf(step + 1, TOTAL_STEPS)}
               </p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <Card className="gap-0 py-0 shadow-sm">
-          {step === 0 && <WelcomeStep text={text} />}
-          {step === 1 && <AppearanceStep text={text} settings={settings} onChange={setSettings} />}
-          {step === 2 && (
-            <WorkspaceStep
-              text={text}
-              directory={settings.sitesDirectory}
-              freeSpace={freeSpace}
-              onChoose={chooseDirectory}
-            />
-          )}
-          {step === 3 && (
-            <EnvironmentStep
-              text={text}
-              status={runtimeStatus}
-              checking={runtimeChecking}
-              onRetry={checkRuntime}
-              onInstallGuide={() => openExternal("https://docs.docker.com/engine/install/")}
-            />
-          )}
-          {step === 4 && (
-            <RemoteAccessStep
-              text={text}
-              status={liveLinkStatus}
-              onInstall={() => openExternal("https://tailscale.com/download")}
-            />
-          )}
-          {step === READY_STEP && (
-            <ReadyStep
-              text={text}
-              settings={settings}
-              runtimeStatus={runtimeStatus}
-              liveLinkStatus={liveLinkStatus}
-              onStart={finish}
-            />
-          )}
-          {step < READY_STEP && (
-            <CardFooter className="justify-between gap-3 py-4">
-              {step > 0 ? (
+        {step === 0 ? (
+          <WelcomeStep text={text} onStart={() => setStep(1)} />
+        ) : (
+          <Card className="gap-0 py-0">
+            {step === 1 && (
+              <AppearanceStep text={text} settings={settings} onChange={setSettings} />
+            )}
+            {step === 2 && (
+              <WorkspaceStep
+                text={text}
+                directory={settings.sitesDirectory}
+                freeSpace={freeSpace}
+                onChoose={chooseDirectory}
+              />
+            )}
+            {step === 3 && (
+              <EnvironmentStep
+                text={text}
+                status={runtimeStatus}
+                runtimes={runtimes}
+                tools={tools}
+                checking={runtimeChecking}
+                onRetry={checkRuntime}
+                onInstallGuide={() => openExternal("https://docs.docker.com/engine/install/")}
+                onInstall={handleInstall}
+                installHint={installHint}
+              />
+            )}
+            {step === 4 && (
+              <RemoteAccessStep
+                text={text}
+                status={liveLinkStatus}
+                onInstall={handleInstall}
+                installHint={installHint}
+              />
+            )}
+            {step === READY_STEP && (
+              <ReadyStep
+                text={text}
+                settings={settings}
+                runtimeStatus={runtimeStatus}
+                liveLinkStatus={liveLinkStatus}
+                onStart={finish}
+              />
+            )}
+            {step < READY_STEP && (
+              <CardFooter className="justify-between gap-3 py-4">
                 <Button variant="ghost" onClick={() => setStep((value) => value - 1)}>
                   <ChevronLeft />
                   {text.back}
                 </Button>
-              ) : (
-                <span />
-              )}
-              <Button onClick={() => setStep((value) => value + 1)} disabled={!canAdvance}>
-                {step === 0 ? text.welcome.getStarted : text.next}
-                <ChevronRight />
-              </Button>
-            </CardFooter>
-          )}
-        </Card>
+                <Button onClick={() => setStep((value) => value + 1)} disabled={!canAdvance}>
+                  {text.next}
+                  <ChevronRight />
+                </Button>
+              </CardFooter>
+            )}
+          </Card>
+        )}
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -232,15 +299,22 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
 
 type WelcomeText = (typeof welcomeScreenText)["en"]
 
-function WelcomeStep({ text }: { text: WelcomeText }) {
+function WelcomeStep({ text, onStart }: { text: WelcomeText; onStart: () => void }) {
   return (
-    <CardContent className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-      <p className="text-[10px] font-medium tracking-[.22em] text-muted-foreground uppercase">
+    <div className="flex flex-col items-center gap-3 py-16 text-center">
+      <div className="flex size-11 items-center justify-center rounded-xl border bg-black dark:bg-white text-white dark:text-black shadow-sm">
+        <Server className="size-5" />
+      </div>
+      <p className="text-xs font-medium tracking-[.18em] text-muted-foreground uppercase">
         {text.welcome.eyebrow}
       </p>
       <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{text.welcome.title}</h1>
       <p className="max-w-sm text-sm text-muted-foreground">{text.welcome.subtitle}</p>
-    </CardContent>
+      <Button size="lg" className="mt-3" onClick={onStart}>
+        {text.welcome.getStarted}
+        <ChevronRight />
+      </Button>
+    </div>
   )
 }
 
@@ -328,37 +402,37 @@ function WorkspaceStep({
   )
 }
 
+const TOOL_INSTALL_IDS: Record<string, { id: string; fallbackUrl: string }> = {
+  GIT: { id: "git", fallbackUrl: "https://git-scm.com/downloads" },
+  OPENSSL: { id: "openssl", fallbackUrl: "https://openssl.org/source/" },
+  NSS_TOOLS: {
+    id: "nss-tools",
+    fallbackUrl: "https://firefox-source-docs.mozilla.org/security/nss/index.html",
+  },
+}
+
 function EnvironmentStep({
   text,
   status,
+  runtimes,
+  tools,
   checking,
   onRetry,
   onInstallGuide,
+  onInstall,
+  installHint,
 }: {
   text: WelcomeText
   status: Runtime | null
+  runtimes: Runtime[] | null
+  tools: HealthCheck[] | null
   checking: boolean
   onRetry: () => void
   onInstallGuide: () => void
+  onInstall: (tool: string, fallbackUrl: string) => void
+  installHint: string
 }) {
   const ready = Boolean(status?.installed && status?.running && status?.composeAvailable)
-  const rows = [
-    {
-      ok: Boolean(status?.installed),
-      label: text.environment.installed,
-      fallback: text.environment.notFound,
-    },
-    {
-      ok: Boolean(status?.running),
-      label: text.environment.running,
-      fallback: text.environment.notRunning,
-    },
-    {
-      ok: Boolean(status?.composeAvailable),
-      label: text.environment.compose,
-      fallback: text.environment.notAvailable,
-    },
-  ]
   return (
     <>
       <CardHeader className="border-b py-4">
@@ -366,25 +440,98 @@ function EnvironmentStep({
         <p className="text-sm text-muted-foreground">{text.environment.subtitle}</p>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 px-4 py-4">
-        {checking && !status && (
+        {checking && !runtimes && (
           <p className="py-6 text-center text-sm text-muted-foreground">
             {text.environment.checking}
           </p>
         )}
-        {status &&
-          rows.map((row) => (
+        {runtimes?.map((runtime) => {
+          const name = runtime.runtime === "podman" ? "Podman" : "Docker"
+          const runtimeReady = runtime.installed && runtime.running && runtime.composeAvailable
+          const detail = !runtime.installed
+            ? text.environment.notFound
+            : !runtime.running
+              ? text.environment.notRunning
+              : !runtime.composeAvailable
+                ? text.environment.notAvailable
+                : text.environment.ready
+          return (
             <div
-              key={row.label}
+              key={runtime.runtime ?? name}
               className="flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm"
             >
-              {row.ok ? (
+              {runtimeReady ? (
                 <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
+              ) : runtime.installed ? (
+                <XCircle className="size-4 shrink-0 text-amber-500" />
               ) : (
-                <XCircle className="size-4 shrink-0 text-destructive" />
+                <XCircle className="size-4 shrink-0 text-muted-foreground" />
               )}
-              <span>{row.ok ? row.label : row.fallback}</span>
+              <span className="flex-1 font-medium">
+                {name}
+                {runtime.version && (
+                  <span className="ml-1.5 font-normal text-muted-foreground">
+                    {runtime.version}
+                  </span>
+                )}
+              </span>
+              <span className="text-xs text-muted-foreground">{detail}</span>
+              {!runtime.installed && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    onInstall(
+                      runtime.runtime ?? "docker",
+                      runtime.runtime === "podman"
+                        ? "https://podman.io/docs/installation"
+                        : "https://docs.docker.com/engine/install/",
+                    )
+                  }
+                >
+                  <Download />
+                  {text.install}
+                </Button>
+              )}
             </div>
-          ))}
+          )
+        })}
+        {tools && tools.length > 0 && (
+          <>
+            <p className="mt-2 px-1 text-xs font-medium tracking-[.1em] text-muted-foreground uppercase">
+              {text.environment.additionalTools}
+            </p>
+            {tools.map((tool) => {
+              const installInfo = TOOL_INSTALL_IDS[tool.code]
+              return (
+                <div key={tool.code} className="rounded-lg border px-3 py-2.5 text-sm">
+                  <div className="flex items-center gap-3">
+                    {tool.status === "healthy" ? (
+                      <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
+                    ) : (
+                      <XCircle className="size-4 shrink-0 text-amber-500" />
+                    )}
+                    <span className="flex-1 font-medium">{tool.title}</span>
+                    <span className="max-w-[40%] truncate text-xs text-muted-foreground">
+                      {tool.summary}
+                    </span>
+                    {tool.status !== "healthy" && installInfo && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onInstall(installInfo.id, installInfo.fallbackUrl)}
+                      >
+                        <Download />
+                        {text.install}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </>
+        )}
+        {installHint && <p className="px-1 text-xs text-muted-foreground">{installHint}</p>}
         {status && !ready && (
           <Alert className="mt-1">
             <AlertDescription className="flex flex-col gap-2">
@@ -411,10 +558,12 @@ function RemoteAccessStep({
   text,
   status,
   onInstall,
+  installHint,
 }: {
   text: WelcomeText
   status: LiveLinkStatus | null
-  onInstall: () => void
+  onInstall: (tool: string, fallbackUrl: string) => void
+  installHint: string
 }) {
   return (
     <>
@@ -423,34 +572,50 @@ function RemoteAccessStep({
         <p className="text-sm text-muted-foreground">{text.remoteAccess.subtitle}</p>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 px-4 py-4">
-        <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm">
-          {status?.installed ? (
-            <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
-          ) : (
-            <Wifi className="size-4 shrink-0 text-muted-foreground" />
-          )}
-          <span>
-            {status?.installed ? text.remoteAccess.installed : text.remoteAccess.notInstalled}
-          </span>
-        </div>
-        {status?.installed && (
-          <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm">
-            {status.connected ? (
-              <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
-            ) : (
-              <XCircle className="size-4 shrink-0 text-muted-foreground" />
-            )}
-            <span>
-              {status.connected ? text.remoteAccess.connected : text.remoteAccess.notConnected}
-            </span>
-          </div>
-        )}
-        {!status?.installed && (
-          <Button variant="outline" size="sm" className="self-start" onClick={onInstall}>
-            <Download />
-            {text.remoteAccess.install}
-          </Button>
-        )}
+        {REMOTE_ACCESS_PROVIDERS.map((provider) => {
+          const installed = status?.providers.find((item) => item.id === provider.id)?.installed
+          return (
+            <div key={provider.id} className="rounded-lg border px-3 py-2.5">
+              <div className="flex items-center gap-3 text-sm">
+                {installed ? (
+                  <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
+                ) : (
+                  <Wifi className="size-4 shrink-0 text-muted-foreground" />
+                )}
+                <span className="flex-1">
+                  {installed
+                    ? text.remoteAccess.installed(provider.name)
+                    : text.remoteAccess.notInstalled(provider.name)}
+                </span>
+                {!installed && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onInstall(provider.id, provider.installUrl)}
+                  >
+                    <Download />
+                    {text.remoteAccess.install(provider.name)}
+                  </Button>
+                )}
+              </div>
+              {provider.id === "tailscale" && installed && (
+                <div className="mt-2 flex items-center gap-3 pl-7 text-xs text-muted-foreground">
+                  {status?.connected ? (
+                    <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
+                  ) : (
+                    <XCircle className="size-3.5 shrink-0" />
+                  )}
+                  <span>
+                    {status?.connected
+                      ? text.remoteAccess.connected
+                      : text.remoteAccess.notConnected}
+                  </span>
+                </div>
+              )}
+            </div>
+          )
+        })}
+        {installHint && <p className="px-1 text-xs text-muted-foreground">{installHint}</p>}
         <p className="px-1 text-xs text-muted-foreground">{text.remoteAccess.enableLaterHint}</p>
       </CardContent>
     </>

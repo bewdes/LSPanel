@@ -44,6 +44,32 @@ pub fn detect(preferred: Option<&str>) -> RuntimeStatus {
     })
 }
 
+/// Reports the status of every known container runtime (Docker, Podman)
+/// individually, rather than collapsing them into a single "best" result —
+/// used by onboarding so the user can see exactly which one is missing.
+pub fn detect_each() -> Vec<RuntimeStatus> {
+    ["docker", "podman"]
+        .into_iter()
+        .map(|runtime| {
+            inspect(runtime).unwrap_or_else(|| RuntimeStatus {
+                runtime: Some(runtime.into()),
+                installed: false,
+                running: false,
+                version: None,
+                compose_available: false,
+                message: format!(
+                    "{} not found",
+                    if runtime == "podman" {
+                        "Podman"
+                    } else {
+                        "Docker"
+                    }
+                ),
+            })
+        })
+        .collect()
+}
+
 fn score(status: &RuntimeStatus) -> u8 {
     u8::from(status.installed)
         + u8::from(status.running) * 2

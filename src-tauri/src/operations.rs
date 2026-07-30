@@ -2,6 +2,7 @@ use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
+use tauri_plugin_notification::NotificationExt;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,6 +91,7 @@ pub fn progress_for_environment(
 pub fn complete(app: &tauri::AppHandle, id: &str) -> Result<(), String> {
     crate::storage::connection(app)?.execute("UPDATE operations SET status='completed', progress=100, stage='Completed', finished_at=?2 WHERE id=?1", params![id, now()]).map_err(|error| error.to_string())?;
     if let Some(operation) = get(app, id)? {
+        notify_operation(app, &operation);
         let _ = app.emit("operation-completed", operation);
     }
     Ok(())
@@ -103,9 +105,34 @@ pub fn fail(app: &tauri::AppHandle, id: &str, error: &str) -> Result<(), String>
         .unwrap_or_else(|| error.to_owned());
     crate::storage::connection(app)?.execute("UPDATE operations SET status='failed', stage='Failed', error=?2, finished_at=?3 WHERE id=?1", params![id, error, now()]).map_err(|value| value.to_string())?;
     if let Some(operation) = get(app, id)? {
+        notify_operation(app, &operation);
         let _ = app.emit("operation-failed", operation);
     }
     Ok(())
+}
+
+fn notify_operation(app: &tauri::AppHandle, operation: &Operation) {
+    let settings = crate::settings::load(app)
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    if !settings.notify_on_operations {
+        return;
+    }
+    let uk = settings.language == "uk";
+    let body = match operation.status.as_str() {
+        "completed" if uk => format!("Операція «{}» завершена успішно", operation.kind),
+        "completed" => format!("Operation \"{}\" completed successfully", operation.kind),
+        "failed" if uk => format!("Операція «{}» завершилася помилкою", operation.kind),
+        "failed" => format!("Operation \"{}\" failed", operation.kind),
+        _ => return,
+    };
+    let _ = app
+        .notification()
+        .builder()
+        .title("LS Panel")
+        .body(body)
+        .show();
 }
 
 pub fn delete(app: &tauri::AppHandle, id: &str) -> Result<Vec<Operation>, String> {

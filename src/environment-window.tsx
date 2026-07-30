@@ -134,6 +134,9 @@ export type Environment = {
   cpuLimit: string
   containerMemoryLimit: string
   runtimeMode: string
+  backupScheduleEnabled: boolean
+  backupScheduleIntervalHours: number
+  backupRetentionCount: number
 }
 type Inspection = {
   status: string
@@ -213,6 +216,9 @@ const defaults = (): Environment => ({
   cpuLimit: "2.0",
   containerMemoryLimit: "2g",
   runtimeMode: "container",
+  backupScheduleEnabled: false,
+  backupScheduleIntervalHours: 24,
+  backupRetentionCount: 7,
 })
 const services = ["redis", "node", "mailpit", "adminer", "phpmyadmin"]
 
@@ -1004,6 +1010,26 @@ export function EnvironmentWindow({
                           onChange={(event) => update("phpCronCommand", event.target.value)}
                         />
                       </Field>
+                    </div>
+                    <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
+                      <CheckRow
+                        label={text.enableBackupSchedule}
+                        checked={draft.backupScheduleEnabled}
+                        onChange={(checked) => update("backupScheduleEnabled", checked)}
+                      />
+                      <div />
+                      <Field label={text.backupIntervalLabel}>
+                        <Choice
+                          value={String(draft.backupScheduleIntervalHours)}
+                          values={["1", "6", "12", "24", "168"]}
+                          onChange={(value) => update("backupScheduleIntervalHours", Number(value))}
+                        />
+                      </Field>
+                      <NumberField
+                        label={text.backupRetentionLabel}
+                        value={draft.backupRetentionCount}
+                        onChange={(value) => update("backupRetentionCount", value)}
+                      />
                     </div>
                     {draft.webServer === "Nginx" && (
                       <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-3">

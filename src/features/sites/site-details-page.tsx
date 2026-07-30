@@ -120,6 +120,9 @@ export function SiteDetailsPage({
   const [editGroup, setEditGroup] = React.useState(site?.group ?? "")
   const [editTags, setEditTags] = React.useState((site?.tags ?? []).join(", "))
   const [editAliases, setEditAliases] = React.useState((site?.aliases ?? []).join(", "))
+  const [editDocumentRoot, setEditDocumentRoot] = React.useState(
+    site?.documentRoot ?? "public_html",
+  )
   const [duplicateOpen, setDuplicateOpen] = React.useState(false)
   const [duplicateName, setDuplicateName] = React.useState("")
   const [duplicateDomain, setDuplicateDomain] = React.useState("")
@@ -130,7 +133,16 @@ export function SiteDetailsPage({
     setEditGroup(site?.group ?? "")
     setEditTags((site?.tags ?? []).join(", "))
     setEditAliases((site?.aliases ?? []).join(", "))
-  }, [site?.id, site?.name, site?.domain, site?.group, site?.tags, site?.aliases])
+    setEditDocumentRoot(site?.documentRoot ?? "public_html")
+  }, [
+    site?.id,
+    site?.name,
+    site?.domain,
+    site?.group,
+    site?.tags,
+    site?.aliases,
+    site?.documentRoot,
+  ])
   React.useEffect(() => {
     if (site?.directory)
       void Promise.all([
@@ -197,6 +209,7 @@ export function SiteDetailsPage({
     group?: string
     tags?: string[]
     aliases?: string[]
+    documentRoot?: string
   }) {
     setBusy(true)
     setMessage("")
@@ -210,6 +223,7 @@ export function SiteDetailsPage({
         group: values.group ?? currentSite.group ?? "",
         tags: values.tags ?? currentSite.tags ?? [],
         aliases: values.aliases ?? currentSite.aliases ?? [],
+        documentRoot: values.documentRoot ?? currentSite.documentRoot ?? "public_html",
       })
       setEditOpen(false)
       await onChanged()
@@ -1084,6 +1098,27 @@ export function SiteDetailsPage({
               />
               <p className="text-xs text-muted-foreground">{text.tagsHint}</p>
             </div>
+            <div className="grid gap-2">
+              <Label>{text.documentRoot}</Label>
+              <Select
+                value={editDocumentRoot}
+                disabled={["laravel", "symfony"].includes(currentSite.projectType ?? "")}
+                onValueChange={(value) => value && setEditDocumentRoot(String(value))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="project">{text.documentRootProject}</SelectItem>
+                  <SelectItem value="public_html">{text.documentRootPublicHtml}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {["laravel", "symfony"].includes(currentSite.projectType ?? "")
+                  ? text.documentRootFrameworkHint
+                  : text.documentRootHint}
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" disabled={busy} onClick={() => setEditOpen(false)}>
@@ -1094,6 +1129,7 @@ export function SiteDetailsPage({
               onClick={() =>
                 void updateProject({
                   name: editName,
+                  documentRoot: editDocumentRoot,
                   domain: editDomain,
                   group: editGroup,
                   tags: editTags.split(","),

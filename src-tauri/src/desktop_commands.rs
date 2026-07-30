@@ -38,10 +38,22 @@ pub fn open_url(url: String) -> Result<(), String> {
         || host == "login.tailscale.com"
         || host == "tailscale.com"
         || host == "docs.docker.com"
-        || host == "github.com")
+        || host == "github.com"
+        || host == "ngrok.com"
+        || host.ends_with(".ngrok.com")
+        || host.ends_with(".ngrok-free.app")
+        || host.ends_with(".ngrok.app")
+        || host.ends_with(".ngrok.io")
+        || host.ends_with(".trycloudflare.com")
+        || host.ends_with(".cloudflare.com")
+        || host == "git-scm.com"
+        || host == "openssl.org"
+        || host.ends_with(".openssl.org")
+        || host == "firefox-source-docs.mozilla.org"
+        || host == "podman.io")
     {
         return Err(
-            "Only localhost, *.localhost, *.ts.net, Tailscale, Docker docs, and GitHub URLs are allowed"
+            "Only localhost, *.localhost, *.ts.net, Tailscale, ngrok, Cloudflare Tunnel, Docker docs, and GitHub URLs are allowed"
                 .into(),
         );
     }
@@ -73,12 +85,32 @@ pub fn open_terminal(path: String) -> Result<(), String> {
     Err("No supported terminal emulator was found".into())
 }
 
-#[tauri::command]
-pub fn open_editor(path: String) -> Result<(), String> {
-    if !Path::new(&path).is_dir() {
-        return Err(format!("Directory does not exist: {path}"));
+fn editor_program(settings: &crate::settings::AppSettings) -> Result<String, String> {
+    match settings.preferred_editor.as_str() {
+        "code" => Ok("code".into()),
+        "phpstorm" => Ok("pstorm".into()),
+        "cursor" => Ok("cursor".into()),
+        "zed" => Ok("zed".into()),
+        "sublime" => Ok("subl".into()),
+        "custom" => {
+            let command = settings.custom_editor_command.trim();
+            if command.is_empty() {
+                return Err("No custom editor command is configured".into());
+            }
+            Ok(command.to_string())
+        }
+        _ => Ok("code".into()),
     }
-    spawn_program("code", &[&path])
+}
+
+#[tauri::command]
+pub fn open_editor(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    if !Path::new(&path).exists() {
+        return Err(format!("Path does not exist: {path}"));
+    }
+    let settings = crate::settings::load(&app)?.unwrap_or_default();
+    let program = editor_program(&settings)?;
+    spawn_program(&program, &[&path])
 }
 
 #[tauri::command]
@@ -108,7 +140,44 @@ pub fn open_containers_window(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::open_url;
+    use super::{editor_program, open_url};
+
+    #[test]
+    fn resolves_known_editor_binaries() {
+        let mut settings = crate::settings::AppSettings::default();
+        for (id, expected) in [
+            ("code", "code"),
+            ("phpstorm", "pstorm"),
+            ("cursor", "cursor"),
+            ("zed", "zed"),
+            ("sublime", "subl"),
+        ] {
+            settings.preferred_editor = id.into();
+            assert_eq!(editor_program(&settings).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn resolves_custom_editor_command() {
+        let settings = crate::settings::AppSettings {
+            preferred_editor: "custom".into(),
+            custom_editor_command: "/usr/local/bin/my-editor".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            editor_program(&settings).unwrap(),
+            "/usr/local/bin/my-editor"
+        );
+    }
+
+    #[test]
+    fn rejects_empty_custom_editor_command() {
+        let settings = crate::settings::AppSettings {
+            preferred_editor: "custom".into(),
+            ..Default::default()
+        };
+        assert!(editor_program(&settings).is_err());
+    }
 
     #[test]
     fn rejects_non_local_urls_before_launching_a_browser() {

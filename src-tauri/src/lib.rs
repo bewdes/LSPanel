@@ -1,6 +1,7 @@
 mod administration_commands;
 mod app_error;
 mod app_shutdown;
+mod backup_scheduler;
 mod backups;
 mod bootstrap;
 mod certificate_commands;
@@ -12,9 +13,11 @@ mod container_runtime;
 mod container_validation;
 mod containers;
 mod database_commands;
+mod dependency_install;
 mod desktop_commands;
 mod diagnose;
 mod diagnostics;
+mod disk_space_monitor;
 mod disk_usage;
 mod environment_commands;
 mod environment_files;
@@ -44,6 +47,7 @@ mod storage;
 mod terminal;
 mod terminal_commands;
 mod tls;
+mod tunnel_provider;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

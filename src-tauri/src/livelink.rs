@@ -24,9 +24,22 @@ struct LiveLinkConfig {
 #[serde(rename_all = "camelCase")]
 pub struct LiveLinkEntry {
     pub site_id: String,
+    #[serde(default = "default_provider")]
+    pub provider: String,
     pub mode: String,
     pub port: u16,
     pub local_port: u16,
+}
+
+fn default_provider() -> String {
+    "tailscale".into()
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStatus {
+    pub id: String,
+    pub installed: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -42,6 +55,7 @@ pub struct LiveLinkStatus {
     pub site_id: Option<String>,
     pub mode: Option<String>,
     pub url: Option<String>,
+    pub providers: Vec<ProviderStatus>,
     pub links: Vec<LiveLinkStatusEntry>,
     pub message: String,
 }
@@ -50,12 +64,14 @@ pub struct LiveLinkStatus {
 #[serde(rename_all = "camelCase")]
 pub struct LiveLinkStatusEntry {
     pub site_id: String,
+    pub provider: String,
     pub mode: String,
     pub port: u16,
     pub local_port: u16,
-    pub tailscale_active: bool,
+    pub provider_active: bool,
     pub gateway_active: bool,
     pub project_reachable: bool,
+    pub url: Option<String>,
     pub status: String,
 }
 
@@ -73,6 +89,7 @@ fn load_config(app: &tauri::AppHandle) -> Option<LiveLinkConfig> {
         if let (Some(site_id), Some(mode)) = (config.site_id.take(), config.mode.take()) {
             config.links.push(LiveLinkEntry {
                 site_id,
+                provider: default_provider(),
                 mode,
                 port: 443,
                 local_port: 18_080,
@@ -227,7 +244,17 @@ fn restore_links(app: &tauri::AppHandle, links: &[LiveLinkEntry]) {
     let _ = save_config(app, links.to_vec());
     let _ = crate::containers::refresh_gateway(app);
     for link in links {
-        let _ = start_mode(&link.mode, link.port, link.local_port);
+        if link.provider == "tailscale" {
+            let _ = start_mode(&link.mode, link.port, link.local_port);
+        } else {
+            let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
+            let _ = crate::tunnel_provider::start(
+                &tunnel_state,
+                &link.provider,
+                &link.site_id,
+                link.local_port,
+            );
+        }
     }
 }
 
@@ -274,12 +301,30 @@ pub fn status(app: &tauri::AppHandle) -> LiveLinkStatus {
         .and_then(serde_json::Value::as_array)
         .is_some_and(|domains| !domains.is_empty());
     let enable_url = node_id.map(|node| format!("https://login.tailscale.com/f/serve?node={node}"));
+    let providers = vec![
+        ProviderStatus {
+            id: "tailscale".into(),
+            installed,
+        },
+        ProviderStatus {
+            id: "ngrok".into(),
+            installed: crate::tunnel_provider::installed("ngrok"),
+        },
+        ProviderStatus {
+            id: "cloudflare".into(),
+            installed: crate::tunnel_provider::installed("cloudflare"),
+        },
+    ];
     let configured_links = load_config(app)
         .map(|value| value.links)
         .unwrap_or_default();
     let sites = crate::sites::list(app).unwrap_or_default();
     let mut mode_statuses = BTreeMap::new();
-    for mode in configured_links.iter().map(|link| link.mode.as_str()) {
+    for mode in configured_links
+        .iter()
+        .filter(|link| link.provider == "tailscale")
+        .map(|link| link.mode.as_str())
+    {
         mode_statuses.entry(mode.to_owned()).or_insert_with(|| {
             tailscale_output(&[mode, "status", "--json"], "Tailscale LiveLink status")
                 .ok()
@@ -288,13 +333,10 @@ pub fn status(app: &tauri::AppHandle) -> LiveLinkStatus {
                 .unwrap_or(serde_json::Value::Null)
         });
     }
+    let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
     let links = configured_links
         .into_iter()
         .map(|link| {
-            let tailscale_active = connected
-                && mode_statuses
-                    .get(&link.mode)
-                    .is_some_and(|value| status_has_link(value, link.port, link.local_port));
             let site = sites.iter().find(|site| site.id == link.site_id);
             let gateway_status = site.and_then(|site| {
                 crate::container_routes::local_http_status_on(&site.domain, link.local_port).ok()
@@ -302,25 +344,47 @@ pub fn status(app: &tauri::AppHandle) -> LiveLinkStatus {
             let gateway_active = gateway_status.is_some();
             let project_reachable =
                 gateway_status.is_some_and(crate::container_routes::status_is_available);
+            let (provider_active, url) = if link.provider == "tailscale" {
+                let active = connected
+                    && mode_statuses
+                        .get(&link.mode)
+                        .is_some_and(|value| status_has_link(value, link.port, link.local_port));
+                let url = active
+                    .then(|| dns_name.clone())
+                    .flatten()
+                    .map(|name| format!("https://{name}"));
+                (active, url)
+            } else {
+                let active = crate::tunnel_provider::is_active(&tunnel_state, &link.site_id);
+                let url = crate::tunnel_provider::public_url(
+                    &tunnel_state,
+                    &link.provider,
+                    &link.site_id,
+                    link.local_port,
+                );
+                (active, url)
+            };
             let state = if site.is_none() {
                 "orphaned"
             } else if !gateway_active {
                 "gateway_unavailable"
             } else if !project_reachable {
                 "project_unavailable"
-            } else if !tailscale_active {
-                "tailscale_inactive"
+            } else if !provider_active {
+                "provider_inactive"
             } else {
                 "active"
             };
             LiveLinkStatusEntry {
                 site_id: link.site_id,
+                provider: link.provider,
                 mode: link.mode,
                 port: link.port,
                 local_port: link.local_port,
-                tailscale_active,
+                provider_active,
                 gateway_active,
                 project_reachable,
+                url,
                 status: state.into(),
             }
         })
@@ -332,14 +396,13 @@ pub fn status(app: &tauri::AppHandle) -> LiveLinkStatus {
         connected,
         serve_enabled,
         version,
-        dns_name: dns_name.clone(),
+        dns_name,
         enable_url,
         active,
         site_id: first.map(|value| value.site_id.clone()),
         mode: first.map(|value| value.mode.clone()),
-        url: active
-            .then(|| dns_name.map(|name| format!("https://{name}")))
-            .flatten(),
+        url: first.and_then(|value| value.url.clone()),
+        providers,
         message: if !installed {
             "Tailscale CLI is not installed".into()
         } else if !connected {
@@ -378,9 +441,14 @@ fn disable_mode(mode: &str, port: u16) -> Result<(), String> {
     }
 }
 
-pub fn start(app: &tauri::AppHandle, site_id: &str, mode: &str) -> Result<LiveLinkStatus, String> {
-    if !matches!(mode, "serve" | "funnel") {
-        return Err("LiveLink mode must be serve or funnel".into());
+pub fn start(
+    app: &tauri::AppHandle,
+    site_id: &str,
+    mode: &str,
+    provider: &str,
+) -> Result<LiveLinkStatus, String> {
+    if !matches!(provider, "tailscale" | "ngrok" | "cloudflare") {
+        return Err("Unsupported LiveLink provider".into());
     }
     let site = crate::sites::list(app)?
         .into_iter()
@@ -398,25 +466,46 @@ pub fn start(app: &tauri::AppHandle, site_id: &str, mode: &str) -> Result<LiveLi
             "Спочатку запустіть середовище вибраного сайту, а потім увімкніть LiveLink".into(),
         );
     }
-    let current = status(app);
-    if !current.installed || !current.connected {
-        return Err(current.message);
-    }
-    if !current.serve_enabled {
-        return Err(format!(
-            "Спочатку активуйте Tailscale Serve: {}",
-            current.enable_url.unwrap_or_default()
-        ));
-    }
+    let mode = if provider == "tailscale" {
+        if !matches!(mode, "serve" | "funnel") {
+            return Err("LiveLink mode must be serve or funnel".into());
+        }
+        let current = status(app);
+        if !current.installed || !current.connected {
+            return Err(current.message);
+        }
+        if !current.serve_enabled {
+            return Err(format!(
+                "Спочатку активуйте Tailscale Serve: {}",
+                current.enable_url.unwrap_or_default()
+            ));
+        }
+        mode.to_owned()
+    } else {
+        if !crate::tunnel_provider::installed(provider) {
+            let binary = crate::tunnel_provider::binary_name(provider).unwrap_or(provider);
+            return Err(format!(
+                "{binary} is not installed or not on PATH. Install it and try again."
+            ));
+        }
+        "tunnel".to_owned()
+    };
     let previous_links = load_config(app)
         .map(|config| config.links)
         .unwrap_or_default();
     let mut links = previous_links.clone();
     if let Some(existing) = links.iter().find(|link| link.site_id == site.id).cloned() {
-        disable_mode(&existing.mode, existing.port)?;
+        if existing.provider == "tailscale" {
+            disable_mode(&existing.mode, existing.port)?;
+        } else {
+            let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
+            crate::tunnel_provider::stop(&tunnel_state, &existing.site_id);
+        }
         links.retain(|link| link.site_id != site.id);
     }
-    let port = if mode == "funnel" {
+    let port = if provider != "tailscale" {
+        0
+    } else if mode == "funnel" {
         [443, 8443, 10_000]
             .into_iter()
             .find(|port| links.iter().all(|link| link.port != *port))
@@ -433,8 +522,9 @@ pub fn start(app: &tauri::AppHandle, site_id: &str, mode: &str) -> Result<LiveLi
         })
         .ok_or("No available local LiveLink port")?;
     links.push(LiveLinkEntry {
-        site_id: site.id,
-        mode: mode.into(),
+        site_id: site.id.clone(),
+        provider: provider.to_owned(),
+        mode: mode.clone(),
         port,
         local_port,
     });
@@ -443,33 +533,48 @@ pub fn start(app: &tauri::AppHandle, site_id: &str, mode: &str) -> Result<LiveLi
         restore_links(app, &previous_links);
         return Err(error);
     }
-    let mut output = start_mode(mode, port, local_port)?;
-    let initial_detail = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    if !output.status.success() && tailscale_permission_error(&initial_detail).is_some() {
-        grant_operator_access()?;
-        output = start_mode(mode, port, local_port)?;
-    }
-    if !output.status.success() {
-        restore_links(app, &previous_links);
-        let detail = format!(
+    if provider == "tailscale" {
+        let mut output = start_mode(&mode, port, local_port)?;
+        let initial_detail = format!(
             "{}{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
-        let detail = detail.trim();
-        return Err(tailscale_permission_error(detail).unwrap_or_else(|| detail.to_owned()));
+        if !output.status.success() && tailscale_permission_error(&initial_detail).is_some() {
+            grant_operator_access()?;
+            output = start_mode(&mode, port, local_port)?;
+        }
+        if !output.status.success() {
+            restore_links(app, &previous_links);
+            let detail = format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let detail = detail.trim();
+            return Err(tailscale_permission_error(detail).unwrap_or_else(|| detail.to_owned()));
+        }
+    } else {
+        let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
+        if let Err(error) =
+            crate::tunnel_provider::start(&tunnel_state, provider, site_id, local_port)
+        {
+            restore_links(app, &previous_links);
+            return Err(error);
+        }
     }
     Ok(status(app))
 }
 
 pub fn stop(app: &tauri::AppHandle) -> Result<LiveLinkStatus, String> {
     if let Some(config) = load_config(app) {
+        let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
         for link in config.links {
-            disable_mode(&link.mode, link.port)?;
+            if link.provider == "tailscale" {
+                disable_mode(&link.mode, link.port)?;
+            } else {
+                crate::tunnel_provider::stop(&tunnel_state, &link.site_id);
+            }
         }
     }
     let path = config_path(app)?;
@@ -483,9 +588,13 @@ pub fn stop(app: &tauri::AppHandle) -> Result<LiveLinkStatus, String> {
 pub fn shutdown(app: &tauri::AppHandle) {
     if let Some(config) = load_config(app) {
         for link in config.links {
-            let _ = disable_mode(&link.mode, link.port);
+            if link.provider == "tailscale" {
+                let _ = disable_mode(&link.mode, link.port);
+            }
         }
     }
+    let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
+    crate::tunnel_provider::stop_all(&tunnel_state);
     if let Ok(path) = config_path(app) {
         let _ = fs::remove_file(path);
     }
@@ -493,8 +602,19 @@ pub fn shutdown(app: &tauri::AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{missing_serve_handler, status_has_link, tailscale_permission_error};
+    use super::{
+        missing_serve_handler, status_has_link, tailscale_permission_error, LiveLinkEntry,
+    };
     use std::process::{ExitStatus, Output};
+
+    #[test]
+    fn legacy_links_without_a_provider_default_to_tailscale() {
+        let entry: LiveLinkEntry = serde_json::from_str(
+            r#"{"siteId":"demo","mode":"serve","port":443,"localPort":18080}"#,
+        )
+        .unwrap();
+        assert_eq!(entry.provider, "tailscale");
+    }
 
     #[cfg(unix)]
     fn output(stdout: &str, stderr: &str) -> Output {

@@ -29,6 +29,13 @@ export const siteDetailsText = {
     tags: "Теги",
     tagsPlaceholder: "клієнт, api, важливе",
     tagsHint: "Розділяйте теги комами.",
+    documentRoot: "Корінь сайту",
+    documentRootProject: "Корінь проєкту",
+    documentRootPublicHtml: "public_html",
+    documentRootHint:
+      "public_html ізолює файли, які віддаються браузеру, від конфігурацій та інших файлів проєкту.",
+    documentRootFrameworkHint:
+      "Для цього типу проєкту корінь визначає сам фреймворк (папка public).",
     cancel: "Скасувати",
     save: "Зберегти",
     duplicateProject: "Дублювати проєкт",
@@ -132,6 +139,13 @@ export const siteDetailsText = {
     tags: "Tags",
     tagsPlaceholder: "client, api, important",
     tagsHint: "Separate tags with commas.",
+    documentRoot: "Site root",
+    documentRootProject: "Project root",
+    documentRootPublicHtml: "public_html",
+    documentRootHint:
+      "public_html isolates the files served to the browser from configs and other project files.",
+    documentRootFrameworkHint:
+      "For this project type the framework itself defines the root (public folder).",
     cancel: "Cancel",
     save: "Save",
     duplicateProject: "Duplicate project",

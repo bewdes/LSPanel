@@ -60,6 +60,7 @@ export type Site = {
   environmentId: string
   directory: string
   projectType?: string
+  documentRoot?: string
   pinned?: boolean
   archived?: boolean
   enabled?: boolean

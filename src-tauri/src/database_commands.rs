@@ -20,6 +20,17 @@ pub async fn create_database_backup(
 }
 
 #[tauri::command]
+pub async fn prune_database_backups(
+    app: tauri::AppHandle,
+    environment_id: String,
+    keep: usize,
+) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::backups::prune(&app, &environment_id, keep))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn restore_database_backup(
     app: tauri::AppHandle,
     environment_id: String,

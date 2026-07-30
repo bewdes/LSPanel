@@ -29,6 +29,12 @@ npm run check:rust      # cargo fmt --check, clippy -D warnings, cargo test
 npm run test:containers
 ```
 
+Щоб побачити, які файли фронтенду охоплені тестами:
+
+```bash
+npm run test:frontend:coverage
+```
+
 ## Рекомендації
 
 - Тримайте pull request сфокусованим на одній зміні; уникайте несвʼязаного рефакторингу.

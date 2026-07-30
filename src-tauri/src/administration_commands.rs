@@ -26,6 +26,16 @@ pub fn container_runtime_status(app: tauri::AppHandle) -> crate::containers::Run
 }
 
 #[tauri::command]
+pub fn dependency_install_command(tool: String) -> Option<String> {
+    crate::dependency_install::command_for(&tool)
+}
+
+#[tauri::command]
+pub fn container_runtimes_status() -> Vec<crate::containers::RuntimeStatus> {
+    crate::containers::detect_runtimes()
+}
+
+#[tauri::command]
 pub fn list_environments(
     app: tauri::AppHandle,
 ) -> Result<Vec<crate::containers::Environment>, String> {

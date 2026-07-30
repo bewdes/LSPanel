@@ -42,6 +42,14 @@ export function SettingsPage({
     })
     if (typeof path === "string") setDraft((current) => ({ ...current, sitesDirectory: path }))
   }
+  async function chooseEditorExecutable() {
+    const path = await openDialog({
+      directory: false,
+      multiple: false,
+      title: text.customEditorCommandLabel,
+    })
+    if (typeof path === "string") setDraft((current) => ({ ...current, customEditorCommand: path }))
+  }
   async function save() {
     try {
       const saved = await invoke<AppSettings>("save_settings", {
@@ -131,6 +139,73 @@ export function SettingsPage({
                     </SelectContent>
                   </Select>
                 </Field>
+                <Field label={text.editorLabel}>
+                  <Select
+                    value={draft.preferredEditor}
+                    onValueChange={(value) =>
+                      value && setDraft({ ...draft, preferredEditor: String(value) })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="code">{text.codeOption}</SelectItem>
+                      <SelectItem value="phpstorm">{text.phpstormOption}</SelectItem>
+                      <SelectItem value="cursor">{text.cursorOption}</SelectItem>
+                      <SelectItem value="zed">{text.zedOption}</SelectItem>
+                      <SelectItem value="sublime">{text.sublimeOption}</SelectItem>
+                      <SelectItem value="custom">{text.customOption}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {draft.preferredEditor === "custom" && (
+                  <Field label={text.customEditorCommandLabel}>
+                    <div className="flex gap-2">
+                      <Input
+                        value={draft.customEditorCommand}
+                        onChange={(event) =>
+                          setDraft({ ...draft, customEditorCommand: event.target.value })
+                        }
+                      />
+                      <Button variant="outline" onClick={chooseEditorExecutable}>
+                        <Folder />
+                        {text.browseExecutable}
+                      </Button>
+                    </div>
+                  </Field>
+                )}
+                <Separator />
+                <SettingToggle
+                  title={text.notifyOnOperationsTitle}
+                  description={text.notifyOnOperationsDescription}
+                  checked={draft.notifyOnOperations}
+                  onChange={(notifyOnOperations) => setDraft({ ...draft, notifyOnOperations })}
+                />
+                <SettingToggle
+                  title={text.diskSpaceAlertTitle}
+                  description={text.diskSpaceAlertDescription}
+                  checked={draft.diskSpaceAlertEnabled}
+                  onChange={(diskSpaceAlertEnabled) =>
+                    setDraft({ ...draft, diskSpaceAlertEnabled })
+                  }
+                />
+                {draft.diskSpaceAlertEnabled && (
+                  <Field label={text.diskSpaceAlertThresholdLabel}>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={draft.diskSpaceAlertThresholdGb}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          diskSpaceAlertThresholdGb: Number(event.target.value),
+                        })
+                      }
+                    />
+                  </Field>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

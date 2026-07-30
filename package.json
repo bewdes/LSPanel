@@ -12,6 +12,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
     "test:frontend": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:frontend:coverage": "node --experimental-strip-types --experimental-test-coverage --test tests/*.test.ts",
     "check:version": "node scripts/check-version-sync.mjs",
     "check:frontend": "npm run check:version && npm run format:check && npm run lint && npm run test:frontend && tsc && vite build",
     "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml",

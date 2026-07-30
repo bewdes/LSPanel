@@ -428,10 +428,20 @@ pub async fn update_site(
     group: String,
     tags: Vec<String>,
     aliases: Vec<String>,
+    document_root: String,
 ) -> Result<Vec<sites::Site>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         sites::update(
-            &app, &id, &name, &domain, pinned, archived, &group, tags, aliases,
+            &app,
+            &id,
+            &name,
+            &domain,
+            pinned,
+            archived,
+            &group,
+            tags,
+            aliases,
+            &document_root,
         )
     })
     .await

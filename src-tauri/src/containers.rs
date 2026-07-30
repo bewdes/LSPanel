@@ -21,7 +21,9 @@ use crate::container_routes::{
     status_is_available as route_status_is_available,
 };
 pub(crate) use crate::container_runtime::command as runtime_command;
-pub use crate::container_runtime::{detect as detect_runtime, RuntimeStatus};
+pub use crate::container_runtime::{
+    detect as detect_runtime, detect_each as detect_runtimes, RuntimeStatus,
+};
 use crate::container_validation::{
     safe_resource_id, validate_identity_and_platform, validate_services_and_database,
 };
@@ -145,6 +147,12 @@ pub struct Environment {
     pub wordpress_admin_password: String,
     #[serde(default)]
     pub wordpress_admin_email: String,
+    #[serde(default)]
+    pub backup_schedule_enabled: bool,
+    #[serde(default = "default_backup_schedule_interval_hours")]
+    pub backup_schedule_interval_hours: u32,
+    #[serde(default = "default_backup_retention_count")]
+    pub backup_retention_count: u32,
 }
 
 fn default_node_version() -> String {
@@ -188,6 +196,12 @@ fn default_php_cron_schedule() -> String {
 }
 fn default_php_cron_command() -> String {
     "php artisan schedule:run".into()
+}
+fn default_backup_schedule_interval_hours() -> u32 {
+    24
+}
+fn default_backup_retention_count() -> u32 {
+    7
 }
 fn default_php_fpm_process_manager() -> String {
     "dynamic".into()
@@ -365,6 +379,17 @@ fn validate(environment: &Environment) -> Result<(), String> {
             || environment.php_cron_command.contains(['\n', '\r'])
         {
             return Err("PHP cron requires a five-field schedule and a single-line command".into());
+        }
+    }
+    if environment.backup_schedule_enabled {
+        if !matches!(
+            environment.backup_schedule_interval_hours,
+            1 | 6 | 12 | 24 | 168
+        ) {
+            return Err("Backup schedule interval must be 1, 6, 12, 24 or 168 hours".into());
+        }
+        if environment.backup_retention_count == 0 || environment.backup_retention_count > 100 {
+            return Err("Backup retention count must be between 1 and 100".into());
         }
     }
     if !matches!(
@@ -1767,9 +1792,31 @@ pub fn environment_status(app: &tauri::AppHandle, id: &str) -> Result<Environmen
     })
 }
 
+/// Returns the directory of the single site backing an environment, when the
+/// environment isn't shared by multiple sites. Environment-scoped state
+/// (compose/build files, database backups) lives inside that project's own
+/// folder so it travels with the project on copy/export; environments shared
+/// by several sites have no single owning folder and keep using app data.
+pub(crate) fn environment_project_directory(
+    app: &tauri::AppHandle,
+    environment_id: &str,
+) -> Result<Option<PathBuf>, String> {
+    let sites: Vec<_> = crate::sites::list(app)?
+        .into_iter()
+        .filter(|site| site.environment_id == environment_id)
+        .collect();
+    Ok(match sites.as_slice() {
+        [site] => Some(PathBuf::from(&site.directory)),
+        _ => None,
+    })
+}
+
 pub(crate) fn stack_directory(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
     if !safe_resource_id(id) {
         return Err("Invalid environment identifier".into());
+    }
+    if let Some(directory) = environment_project_directory(app, id)? {
+        return Ok(directory.join(".lspanel").join("stack"));
     }
     Ok(app
         .path()
@@ -1900,6 +1947,8 @@ fn site_hostnames(site: &crate::sites::Site) -> String {
 fn site_document_root(site: &crate::sites::Site) -> String {
     let suffix = if matches!(site.project_type.as_str(), "laravel" | "symfony") {
         "/public"
+    } else if site.document_root == "public_html" {
+        "/public_html"
     } else {
         ""
     };
@@ -2170,6 +2219,43 @@ fn apply_runtime_defaults(mut yaml: String, environment: &Environment) -> String
 mod tests {
     use super::*;
 
+    fn test_site(project_type: &str, document_root: &str) -> crate::sites::Site {
+        crate::sites::Site {
+            id: "site-test".into(),
+            name: "demo".into(),
+            domain: "demo.localhost".into(),
+            environment_id: "env-test".into(),
+            directory: "/tmp/demo".into(),
+            project_type: project_type.into(),
+            document_root: document_root.into(),
+            auto_init_git: false,
+            pinned: false,
+            archived: false,
+            enabled: true,
+            group: String::new(),
+            tags: vec![],
+            aliases: vec![],
+            created_at: 0,
+            last_started_at: None,
+        }
+    }
+
+    #[test]
+    fn document_root_prefers_framework_public_folder_over_public_html() {
+        assert_eq!(
+            site_document_root(&test_site("php", "project")),
+            "/var/www/sites/demo"
+        );
+        assert_eq!(
+            site_document_root(&test_site("php", "public_html")),
+            "/var/www/sites/demo/public_html"
+        );
+        assert_eq!(
+            site_document_root(&test_site("laravel", "public_html")),
+            "/var/www/sites/demo/public"
+        );
+    }
+
     #[test]
     fn supports_php_85_and_rejects_unknown_php_images() {
         let mut environment = test_environment();
@@ -2315,6 +2401,9 @@ mod tests {
             wordpress_admin_user: String::new(),
             wordpress_admin_password: String::new(),
             wordpress_admin_email: String::new(),
+            backup_schedule_enabled: false,
+            backup_schedule_interval_hours: 24,
+            backup_retention_count: 7,
         }
     }
 

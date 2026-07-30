@@ -20,6 +20,11 @@ pub struct AppSettings {
     pub default_database_version: String,
     pub auto_init_git: bool,
     pub auto_start_projects: bool,
+    pub preferred_editor: String,
+    pub custom_editor_command: String,
+    pub notify_on_operations: bool,
+    pub disk_space_alert_enabled: bool,
+    pub disk_space_alert_threshold_gb: u32,
 }
 
 impl Default for AppSettings {
@@ -40,6 +45,11 @@ impl Default for AppSettings {
             default_database_version: "11.8".into(),
             auto_init_git: true,
             auto_start_projects: true,
+            preferred_editor: "code".into(),
+            custom_editor_command: String::new(),
+            notify_on_operations: true,
+            disk_space_alert_enabled: true,
+            disk_space_alert_threshold_gb: 5,
         }
     }
 }
@@ -84,6 +94,19 @@ pub fn save(app: &tauri::AppHandle, settings: AppSettings) -> Result<AppSettings
     }
     if settings.sites_directory.trim().is_empty() {
         return Err("Выберите директорию сайтов".into());
+    }
+    if !matches!(
+        settings.preferred_editor.as_str(),
+        "code" | "phpstorm" | "cursor" | "zed" | "sublime" | "custom"
+    ) {
+        return Err("Unsupported editor".into());
+    }
+    if settings.preferred_editor == "custom" && settings.custom_editor_command.trim().is_empty() {
+        return Err("Custom editor command cannot be empty".into());
+    }
+    if settings.disk_space_alert_threshold_gb == 0 || settings.disk_space_alert_threshold_gb > 1000
+    {
+        return Err("Disk space alert threshold must be between 1 and 1000 GB".into());
     }
     fs::create_dir_all(&settings.sites_directory)
         .map_err(|e| format!("Не удалось создать директорию сайтов: {e}"))?;
