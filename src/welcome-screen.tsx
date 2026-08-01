@@ -57,6 +57,14 @@ export type AppSettings = {
   notifyOnOperations: boolean
   diskSpaceAlertEnabled: boolean
   diskSpaceAlertThresholdGb: number
+  autoStopIdleEnabled: boolean
+  autoStopIdleMinutes: number
+  autoHealEnabled: boolean
+  gitStatusNotifyEnabled: boolean
+  gitStatusBehindThreshold: number
+  tlsExpiryNotifyEnabled: boolean
+  tlsExpiryWarningDays: number
+  webhookUrl: string
 }
 
 type LiveLinkStatus = {
@@ -114,6 +122,14 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
     notifyOnOperations: true,
     diskSpaceAlertEnabled: true,
     diskSpaceAlertThresholdGb: 5,
+    autoStopIdleEnabled: false,
+    autoStopIdleMinutes: 60,
+    autoHealEnabled: false,
+    gitStatusNotifyEnabled: false,
+    gitStatusBehindThreshold: 5,
+    tlsExpiryNotifyEnabled: true,
+    tlsExpiryWarningDays: 14,
+    webhookUrl: "",
   })
   const [freeSpace, setFreeSpace] = React.useState<number | null | undefined>(undefined)
   const [runtimeStatus, setRuntimeStatus] = React.useState<Runtime | null>(null)

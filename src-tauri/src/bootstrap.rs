@@ -1,9 +1,10 @@
 use crate::{
-    administration_commands, app_shutdown, backup_scheduler, certificate_commands,
-    database_commands, desktop_commands, disk_space_monitor, environment_commands,
-    file_manager_commands, git_commands, livelink_commands, logs, mailpit_commands, native_runtime,
-    operations, runtime_commands, settings_commands, site_commands, snapshot_commands, storage,
-    terminal, terminal_commands, tunnel_provider,
+    administration_commands, app_shutdown, auto_heal_monitor, auto_stop_monitor, backup_scheduler,
+    certificate_commands, database_commands, desktop_commands, disk_space_monitor,
+    environment_commands, file_manager_commands, git_commands, git_status_monitor,
+    livelink_commands, logs, mailpit_commands, native_runtime, operations, project_export_commands,
+    runtime_commands, settings_commands, site_commands, snapshot_commands, storage, terminal,
+    terminal_commands, tls_expiry_monitor, tunnel_provider,
 };
 
 pub fn run() {
@@ -22,6 +23,10 @@ pub fn run() {
             operations::recover_interrupted(app.handle()).map_err(std::io::Error::other)?;
             backup_scheduler::start(app.handle());
             disk_space_monitor::start(app.handle());
+            auto_stop_monitor::start(app.handle());
+            auto_heal_monitor::start(app.handle());
+            git_status_monitor::start(app.handle());
+            tls_expiry_monitor::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -61,6 +66,10 @@ pub fn run() {
             administration_commands::list_operations,
             administration_commands::delete_operation,
             administration_commands::clear_operations,
+            administration_commands::list_notifications,
+            administration_commands::delete_notification,
+            administration_commands::mark_notifications_read,
+            administration_commands::clear_notifications,
             administration_commands::system_health,
             administration_commands::disk_usage,
             administration_commands::workspace_free_space,
@@ -140,6 +149,8 @@ pub fn run() {
             site_commands::update_site,
             site_commands::duplicate_site,
             site_commands::delete_site,
+            project_export_commands::export_project,
+            project_export_commands::import_project_bundle,
             git_commands::site_git_status,
             git_commands::initialize_site_git,
             git_commands::open_site_git_remote,

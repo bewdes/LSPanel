@@ -15,8 +15,6 @@ pub struct Site {
     pub directory: String,
     #[serde(default = "default_project_type")]
     pub project_type: String,
-    #[serde(default = "default_document_root")]
-    pub document_root: String,
     #[serde(default)]
     pub auto_init_git: bool,
     #[serde(default)]
@@ -39,18 +37,6 @@ pub struct Site {
 
 fn default_project_type() -> String {
     "php".into()
-}
-
-fn default_document_root() -> String {
-    "public_html".into()
-}
-
-fn validate_document_root(value: &str) -> Result<(), String> {
-    if matches!(value, "project" | "public_html") {
-        Ok(())
-    } else {
-        Err("Document root must be \"project\" or \"public_html\"".into())
-    }
 }
 
 fn default_enabled() -> bool {
@@ -353,7 +339,6 @@ pub fn create(app: &tauri::AppHandle, mut site: Site) -> Result<Vec<Site>, Strin
     site.last_started_at = None;
     validate_project_name(&site.name)?;
     validate_local_domain(&site.domain)?;
-    validate_document_root(&site.document_root)?;
     site.aliases = site
         .aliases
         .into_iter()
@@ -401,21 +386,38 @@ pub fn create(app: &tauri::AppHandle, mut site: Site) -> Result<Vec<Site>, Strin
     }) {
         return Err("This domain or alias is already used".into());
     }
+    if sites
+        .iter()
+        .any(|item| item.environment_id == site.environment_id)
+    {
+        return Err(
+            "This container already has a project. Each container can only hold one project — create a new environment.".into(),
+        );
+    }
     let directory_existed = directory.exists();
     fs::create_dir_all(&directory)
         .map_err(|error| format!("Failed to create site directory: {error}"))?;
-    let content_root = if site.document_root == "public_html"
-        && !matches!(site.project_type.as_str(), "laravel" | "symfony")
-    {
-        let public_html = directory.join("public_html");
-        fs::create_dir_all(&public_html).map_err(|error| error.to_string())?;
-        public_html
+    let app_directory = directory.join("app");
+    fs::create_dir_all(&app_directory).map_err(|error| error.to_string())?;
+    let content_root = if matches!(site.project_type.as_str(), "laravel" | "symfony") {
+        app_directory.join("public")
     } else {
-        directory.clone()
+        app_directory.clone()
     };
-    if !content_root.join("index.php").exists()
+    // Only ever fill in a starter file for a genuinely blank project. Checking
+    // just for known marker files (index.php, package.json, ...) isn't
+    // enough: an imported or cloned project can be substantial — its own
+    // source tree, a .git history — while still lacking one of those exact
+    // names at the root, and silently dropping a placeholder into it would
+    // mask the real application instead of serving it.
+    let app_directory_is_empty = app_directory
+        .read_dir()
+        .map(|mut entries| entries.next().is_none())
+        .unwrap_or(true);
+    if app_directory_is_empty
+        && !content_root.join("index.php").exists()
         && !content_root.join("index.html").exists()
-        && !directory.join("public/index.php").exists()
+        && !app_directory.join("public/index.php").exists()
         && !content_root.join("package.json").exists()
     {
         if site.project_type == "node" {
@@ -425,9 +427,9 @@ pub fn create(app: &tauri::AppHandle, mut site: Site) -> Result<Vec<Site>, Strin
         } else if site.project_type == "static" {
             fs::write(content_root.join("index.html"), format!("<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title></head><body><h1>{}</h1><p>LS Panel static site is running.</p></body></html>\n", site.name, site.name)).map_err(|error| error.to_string())?;
         } else if matches!(site.project_type.as_str(), "laravel" | "symfony") {
-            fs::create_dir_all(directory.join("public")).map_err(|error| error.to_string())?;
+            fs::create_dir_all(app_directory.join("public")).map_err(|error| error.to_string())?;
             fs::write(
-                directory.join("public/index.php"),
+                app_directory.join("public/index.php"),
                 "<?php http_response_code(200); echo 'Preparing Laravel…';\n",
             )
             .map_err(|error| error.to_string())?;
@@ -628,7 +630,6 @@ pub fn update(
     group: &str,
     tags: Vec<String>,
     aliases: Vec<String>,
-    document_root: &str,
 ) -> Result<Vec<Site>, String> {
     let mut sites = list(app)?;
     let index = sites
@@ -652,8 +653,6 @@ pub fn update(
     {
         return Err("Site name may contain only letters, digits, - and _".into());
     }
-    validate_document_root(document_root)?;
-    updated.document_root = document_root.into();
     validate_local_domain(&updated.domain)?;
     if sites
         .iter()
@@ -737,16 +736,8 @@ pub fn update(
             .map_err(|error| format!("Failed to rename project directory: {error}"))?;
         updated.directory = new_directory.display().to_string();
     }
-    if updated.document_root == "public_html"
-        && !matches!(updated.project_type.as_str(), "laravel" | "symfony")
-    {
-        fs::create_dir_all(Path::new(&updated.directory).join("public_html"))
-            .map_err(|error| format!("Failed to create public_html directory: {error}"))?;
-    }
-    let routing_changed = renamed
-        || updated.domain != original.domain
-        || updated.aliases != original.aliases
-        || updated.document_root != original.document_root;
+    let routing_changed =
+        renamed || updated.domain != original.domain || updated.aliases != original.aliases;
     let save = crate::storage::save_site(
         app,
         &updated.id,
@@ -845,18 +836,10 @@ pub fn ensure_directories(app: &tauri::AppHandle, environment_id: &str) -> Resul
 #[cfg(test)]
 mod tests {
     use super::{
-        domains_overlap, validate_document_root, validate_local_alias, validate_local_domain,
-        validate_project_name, write_react_starter, Site,
+        domains_overlap, validate_local_alias, validate_local_domain, validate_project_name,
+        write_react_starter, Site,
     };
     use std::fs;
-
-    #[test]
-    fn document_root_only_accepts_known_values() {
-        assert!(validate_document_root("project").is_ok());
-        assert!(validate_document_root("public_html").is_ok());
-        assert!(validate_document_root("public").is_err());
-        assert!(validate_document_root("").is_err());
-    }
 
     #[test]
     fn accepts_safe_localhost_domains_only() {
@@ -909,7 +892,6 @@ mod tests {
             environment_id: "env-test".into(),
             directory: directory.display().to_string(),
             project_type: "react".into(),
-            document_root: "project".into(),
             aliases: vec![],
             tags: vec![],
             group: String::new(),

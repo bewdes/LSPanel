@@ -206,6 +206,92 @@ export function SettingsPage({
                     />
                   </Field>
                 )}
+                <SettingToggle
+                  title={text.autoStopIdleTitle}
+                  description={text.autoStopIdleDescription}
+                  checked={draft.autoStopIdleEnabled}
+                  onChange={(autoStopIdleEnabled) => setDraft({ ...draft, autoStopIdleEnabled })}
+                />
+                {draft.autoStopIdleEnabled && (
+                  <Field label={text.autoStopIdleMinutesLabel}>
+                    <Input
+                      type="number"
+                      min={5}
+                      max={1440}
+                      value={draft.autoStopIdleMinutes}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          autoStopIdleMinutes: Number(event.target.value),
+                        })
+                      }
+                    />
+                  </Field>
+                )}
+                <SettingToggle
+                  title={text.autoHealTitle}
+                  description={text.autoHealDescription}
+                  checked={draft.autoHealEnabled}
+                  onChange={(autoHealEnabled) => setDraft({ ...draft, autoHealEnabled })}
+                />
+                <SettingToggle
+                  title={text.gitStatusNotifyTitle}
+                  description={text.gitStatusNotifyDescription}
+                  checked={draft.gitStatusNotifyEnabled}
+                  onChange={(gitStatusNotifyEnabled) =>
+                    setDraft({ ...draft, gitStatusNotifyEnabled })
+                  }
+                />
+                {draft.gitStatusNotifyEnabled && (
+                  <Field label={text.gitStatusBehindThresholdLabel}>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={draft.gitStatusBehindThreshold}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          gitStatusBehindThreshold: Number(event.target.value),
+                        })
+                      }
+                    />
+                  </Field>
+                )}
+                <SettingToggle
+                  title={text.tlsExpiryNotifyTitle}
+                  description={text.tlsExpiryNotifyDescription}
+                  checked={draft.tlsExpiryNotifyEnabled}
+                  onChange={(tlsExpiryNotifyEnabled) =>
+                    setDraft({ ...draft, tlsExpiryNotifyEnabled })
+                  }
+                />
+                {draft.tlsExpiryNotifyEnabled && (
+                  <Field label={text.tlsExpiryWarningDaysLabel}>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={draft.tlsExpiryWarningDays}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          tlsExpiryWarningDays: Number(event.target.value),
+                        })
+                      }
+                    />
+                  </Field>
+                )}
+                <Separator />
+                <Field label={text.webhookUrlLabel}>
+                  <Input
+                    type="url"
+                    placeholder={text.webhookUrlPlaceholder}
+                    value={draft.webhookUrl}
+                    onChange={(event) => setDraft({ ...draft, webhookUrl: event.target.value })}
+                  />
+                </Field>
+                <p className="text-xs text-muted-foreground">{text.webhookUrlHint}</p>
               </CardContent>
             </Card>
           </TabsContent>

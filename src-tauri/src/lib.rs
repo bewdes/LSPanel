@@ -1,6 +1,8 @@
 mod administration_commands;
 mod app_error;
 mod app_shutdown;
+mod auto_heal_monitor;
+mod auto_stop_monitor;
 mod backup_scheduler;
 mod backups;
 mod bootstrap;
@@ -25,14 +27,18 @@ mod file_manager;
 mod file_manager_commands;
 mod git;
 mod git_commands;
+mod git_status_monitor;
 mod livelink;
 mod livelink_commands;
 mod logs;
 mod mailpit;
 mod mailpit_commands;
 mod native_runtime;
+mod notifications;
 mod operations;
 mod process;
+mod project_export;
+mod project_export_commands;
 mod project_templates;
 mod quick_commands;
 mod runtime_commands;
@@ -47,7 +53,9 @@ mod storage;
 mod terminal;
 mod terminal_commands;
 mod tls;
+mod tls_expiry_monitor;
 mod tunnel_provider;
+mod webhook;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

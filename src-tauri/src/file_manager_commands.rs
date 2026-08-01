@@ -23,7 +23,14 @@ pub fn write_project_file(
     path: String,
     text: String,
 ) -> Result<crate::file_manager::ProjectTextFile, String> {
-    crate::file_manager::write(&app, &site_id, &path, &text)
+    let result = crate::file_manager::write(&app, &site_id, &path, &text)?;
+    crate::notifications::send_localized(
+        &app,
+        "file",
+        &format!("Файл «{path}» збережено"),
+        &format!("File \"{path}\" saved"),
+    );
+    Ok(result)
 }
 
 #[tauri::command]
@@ -32,7 +39,14 @@ pub fn create_project_directory(
     site_id: String,
     path: String,
 ) -> Result<(), String> {
-    crate::file_manager::create_directory(&app, &site_id, &path)
+    crate::file_manager::create_directory(&app, &site_id, &path)?;
+    crate::notifications::send_localized(
+        &app,
+        "file",
+        &format!("Папку «{path}» створено"),
+        &format!("Folder \"{path}\" created"),
+    );
+    Ok(())
 }
 
 #[tauri::command]
@@ -42,7 +56,14 @@ pub fn rename_project_file(
     path: String,
     new_name: String,
 ) -> Result<String, String> {
-    crate::file_manager::rename(&app, &site_id, &path, &new_name)
+    let result = crate::file_manager::rename(&app, &site_id, &path, &new_name)?;
+    crate::notifications::send_localized(
+        &app,
+        "file",
+        &format!("«{path}» перейменовано на «{new_name}»"),
+        &format!("\"{path}\" renamed to \"{new_name}\""),
+    );
+    Ok(result)
 }
 
 #[tauri::command]
@@ -51,7 +72,14 @@ pub fn delete_project_file(
     site_id: String,
     path: String,
 ) -> Result<(), String> {
-    crate::file_manager::delete(&app, &site_id, &path)
+    crate::file_manager::delete(&app, &site_id, &path)?;
+    crate::notifications::send_localized(
+        &app,
+        "file",
+        &format!("«{path}» видалено"),
+        &format!("\"{path}\" deleted"),
+    );
+    Ok(())
 }
 
 #[tauri::command]
@@ -112,7 +140,14 @@ pub fn set_project_file_permissions(
     path: String,
     mode: String,
 ) -> Result<(), String> {
-    crate::file_manager::set_permissions(&app, &site_id, &path, &mode)
+    crate::file_manager::set_permissions(&app, &site_id, &path, &mode)?;
+    crate::notifications::send_localized(
+        &app,
+        "file",
+        &format!("Права доступу «{path}» змінено на {mode}"),
+        &format!("Permissions for \"{path}\" changed to {mode}"),
+    );
+    Ok(())
 }
 
 #[tauri::command]

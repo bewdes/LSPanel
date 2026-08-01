@@ -53,7 +53,7 @@ type Environment = {
   database: string
   databaseVersion: string
 }
-type Site = { id: string; name: string; domain: string }
+type Site = { id: string; name: string; domain: string; environmentId: string }
 type OperationProgress = {
   environmentId?: string
   progress: number
@@ -86,13 +86,17 @@ export function ProjectWizard({
 }) {
   const text = pickLanguage(projectWizardText, uk)
   const steps = text.steps
+  const occupiedEnvironmentIds = new Set(sites.map((site) => site.environmentId))
+  const availableEnvironments = environments.filter((item) => !occupiedEnvironmentIds.has(item.id))
   const [step, setStep] = React.useState(0)
   const [projectType, setProjectType] = React.useState(initialProjectType ?? "php")
   const [name, setName] = React.useState("")
   const [domain, setDomain] = React.useState("")
-  const [environmentId, setEnvironmentId] = React.useState(environments[0]?.id ?? "")
+  const [environmentId, setEnvironmentId] = React.useState(
+    availableEnvironments[0]?.id ?? environments[0]?.id ?? "",
+  )
   const [environmentMode, setEnvironmentMode] = React.useState<"existing" | "new">(
-    environments.length ? "existing" : "new",
+    availableEnvironments.length ? "existing" : "new",
   )
   const [environmentName, setEnvironmentName] = React.useState("")
   const [webServer, setWebServer] = React.useState("Nginx")
@@ -199,8 +203,8 @@ export function ProjectWizard({
     }
   }, [text.buildingProject])
   React.useEffect(() => {
-    if (!environmentId && environments[0]) setEnvironmentId(environments[0].id)
-  }, [environmentId, environments])
+    if (!environmentId && availableEnvironments[0]) setEnvironmentId(availableEnvironments[0].id)
+  }, [environmentId, availableEnvironments])
   React.useEffect(() => {
     if (database === "PostgreSQL")
       setServices((current) => current.filter((item) => item !== "phpmyadmin"))
@@ -724,7 +728,7 @@ export function ProjectWizard({
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     variant={environmentMode === "existing" ? "default" : "outline"}
-                    disabled={!environments.length}
+                    disabled={!availableEnvironments.length}
                     onClick={() => setEnvironmentMode("existing")}
                   >
                     <Server />
@@ -752,14 +756,27 @@ export function ProjectWizard({
                           <SelectValue placeholder={text.selectEnvironment} />
                         </SelectTrigger>
                         <SelectContent>
-                          {environments.map((item) => (
-                            <SelectItem key={item.id} value={item.id}>
-                              {item.name} · PHP {item.phpVersion}
-                            </SelectItem>
-                          ))}
+                          {environments.map((item) => {
+                            const occupied = occupiedEnvironmentIds.has(item.id)
+                            return (
+                              <SelectItem key={item.id} value={item.id} disabled={occupied}>
+                                <span className="flex items-center gap-2">
+                                  {item.name} · PHP {item.phpVersion}
+                                  {occupied && (
+                                    <Badge variant="outline">{text.occupiedBadge}</Badge>
+                                  )}
+                                </span>
+                              </SelectItem>
+                            )
+                          })}
                         </SelectContent>
                       </Select>
                     </Field>
+                    {!availableEnvironments.length && (
+                      <Alert>
+                        <AlertDescription>{text.allEnvironmentsOccupiedHint}</AlertDescription>
+                      </Alert>
+                    )}
                     {environment && (
                       <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-3">
                         <Summary label={text.webServerLabel} value={environment.webServer} />
@@ -1180,11 +1197,15 @@ export function ProjectWizard({
                   />
                 </Field>
                 <Field label={text.versionLabel}>
-                  <Choice
-                    value={webVersion}
-                    values={WEB_SERVER_VERSIONS[webServer] ?? [webVersion]}
-                    onChange={setWebVersion}
-                  />
+                  {WEB_SERVER_VERSIONS[webServer] ? (
+                    <Choice
+                      value={webVersion}
+                      values={WEB_SERVER_VERSIONS[webServer]}
+                      onChange={setWebVersion}
+                    />
+                  ) : (
+                    <p className="pt-2 text-sm text-muted-foreground">{text.bundledWithPhpImage}</p>
+                  )}
                 </Field>
                 <Summary label={text.httpsRouteLabel} value={`https://${domain}`} />
                 <Summary label={text.applicationPortLabel} value={nodePort} />

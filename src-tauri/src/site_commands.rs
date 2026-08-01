@@ -1,6 +1,6 @@
 use crate::{
-    app_error, backups, containers, environment_files, operations, project_templates, security,
-    settings, sites, storage,
+    app_error, backups, containers, environment_files, notifications, operations,
+    project_templates, security, settings, sites, storage,
 };
 
 #[tauri::command]
@@ -10,7 +10,13 @@ pub fn list_sites(app: tauri::AppHandle) -> Result<Vec<sites::Site>, String> {
 
 #[tauri::command]
 pub fn create_site(app: tauri::AppHandle, site: sites::Site) -> Result<Vec<sites::Site>, String> {
-    sites::create(&app, site)
+    let operation = operations::create(&app, Some(&site.environment_id), "create-site")?;
+    let result = sites::create(&app, site);
+    match &result {
+        Ok(_) => operations::complete(&app, &operation.id)?,
+        Err(error) => operations::fail(&app, &operation.id, error)?,
+    }
+    result
 }
 
 #[tauri::command]
@@ -129,7 +135,7 @@ pub async fn create_project_environment(
         let mut site = site;
         let settings = settings::load(&worker)?.ok_or("Settings not found")?;
         let project_directory = std::path::PathBuf::from(settings.sites_directory).join(&site.name);
-        let directory_existed = project_directory.exists();
+        let app_directory = project_directory.join("app");
         let directory_baseline = project_templates::DirectoryBaseline::capture(&project_directory)?;
         let external = matches!(site.project_type.as_str(), "import" | "git");
         if site.project_type == "import" {
@@ -140,7 +146,7 @@ pub async fn create_project_environment(
                 "Copying and inspecting project files",
             )?;
             let source = std::path::PathBuf::from(&site.directory);
-            site.project_type = project_templates::import_project(&source, &project_directory)?;
+            site.project_type = project_templates::import_project(&source, &app_directory)?;
         } else if site.project_type == "git" {
             operations::progress_for_environment(
                 &worker,
@@ -149,12 +155,12 @@ pub async fn create_project_environment(
                 "Cloning and inspecting Git repository",
             )?;
             let repository = site.directory.clone();
-            site.project_type = project_templates::clone_project(&repository, &project_directory)?;
+            site.project_type = project_templates::clone_project(&repository, &app_directory)?;
         } else if matches!(
             site.project_type.as_str(),
             "wordpress" | "laravel" | "symfony" | "node" | "react"
-        ) && directory_existed
-            && project_directory
+        ) && app_directory.exists()
+            && app_directory
                 .read_dir()
                 .map_err(|error| error.to_string())?
                 .next()
@@ -263,7 +269,7 @@ pub async fn create_project_environment(
                 98,
                 "Initializing Git repository",
             )?;
-            if let Err(error) = project_templates::initialize_git(&project_directory) {
+            if let Err(error) = project_templates::initialize_git(&app_directory) {
                 return Err(rollback_created_project(
                     &worker,
                     &project,
@@ -307,7 +313,7 @@ pub async fn provision_site_in_environment(
             .ok_or("Selected environment does not exist")?;
         let settings = settings::load(&worker)?.ok_or("Settings not found")?;
         let project_directory = std::path::PathBuf::from(settings.sites_directory).join(&site.name);
-        let directory_existed = project_directory.exists();
+        let app_directory = project_directory.join("app");
         let directory_baseline = project_templates::DirectoryBaseline::capture(&project_directory)?;
         let external = matches!(site.project_type.as_str(), "import" | "git");
 
@@ -319,7 +325,7 @@ pub async fn provision_site_in_environment(
                 "Copying and inspecting project files",
             )?;
             let source = std::path::PathBuf::from(&site.directory);
-            site.project_type = project_templates::import_project(&source, &project_directory)?;
+            site.project_type = project_templates::import_project(&source, &app_directory)?;
         } else if site.project_type == "git" {
             operations::progress_for_environment(
                 &worker,
@@ -328,12 +334,12 @@ pub async fn provision_site_in_environment(
                 "Cloning and inspecting Git repository",
             )?;
             let repository = site.directory.clone();
-            site.project_type = project_templates::clone_project(&repository, &project_directory)?;
+            site.project_type = project_templates::clone_project(&repository, &app_directory)?;
         } else if matches!(
             site.project_type.as_str(),
             "wordpress" | "laravel" | "symfony" | "react"
-        ) && directory_existed
-            && project_directory
+        ) && app_directory.exists()
+            && app_directory
                 .read_dir()
                 .map_err(|error| error.to_string())?
                 .next()
@@ -383,7 +389,7 @@ pub async fn provision_site_in_environment(
                 98,
                 "Initializing Git repository",
             )?;
-            if let Err(error) = project_templates::initialize_git(&project_directory) {
+            if let Err(error) = project_templates::initialize_git(&app_directory) {
                 let _ = sites::delete(&worker, &project.id, false);
                 return Err(rollback_directory_error(
                     &directory_baseline,
@@ -409,11 +415,22 @@ pub async fn delete_site(
     id: String,
     delete_files: bool,
 ) -> Result<Vec<sites::Site>, app_error::AppError> {
+    let environment_id = sites::list(&app)?
+        .into_iter()
+        .find(|site| site.id == id)
+        .map(|site| site.environment_id);
+    let operation = operations::create(&app, environment_id.as_deref(), "delete-site")?;
+    let operation_id = operation.id.clone();
+    let worker = app.clone();
     let result =
-        tauri::async_runtime::spawn_blocking(move || sites::delete(&app, &id, delete_files))
+        tauri::async_runtime::spawn_blocking(move || sites::delete(&worker, &id, delete_files))
             .await
-            .map_err(|error| app_error::AppError::from(error.to_string()))?;
-    result.map_err(Into::into)
+            .map_err(|error| error.to_string())?;
+    match &result {
+        Ok(_) => operations::complete(&app, &operation_id)?,
+        Err(error) => operations::fail(&app, &operation_id, error)?,
+    }
+    app_error::AppError::operation_result(result, operation_id)
 }
 
 #[tauri::command]
@@ -428,24 +445,25 @@ pub async fn update_site(
     group: String,
     tags: Vec<String>,
     aliases: Vec<String>,
-    document_root: String,
 ) -> Result<Vec<sites::Site>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let worker = app.clone();
+    let notify_name = name.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
         sites::update(
-            &app,
-            &id,
-            &name,
-            &domain,
-            pinned,
-            archived,
-            &group,
-            tags,
-            aliases,
-            &document_root,
+            &worker, &id, &name, &domain, pinned, archived, &group, tags, aliases,
         )
     })
     .await
-    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
+    if result.is_ok() {
+        notifications::send_localized(
+            &app,
+            "site-update",
+            &format!("Проєкт «{notify_name}» оновлено"),
+            &format!("Project \"{notify_name}\" updated"),
+        );
+    }
+    result
 }
 
 #[tauri::command]

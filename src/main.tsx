@@ -283,6 +283,10 @@ function App() {
                     onCreate={() => setCreateOpen(true)}
                     onSelect={setSelectedSite}
                     onOperate={operateSite}
+                    onImported={async (id) => {
+                      await refresh()
+                      setSelectedSite(id)
+                    }}
                   />
                 )}
                 {view === "sites" && selectedSite !== null && (

@@ -54,11 +54,22 @@ pub async fn operate_environment_service(
     service: String,
     action: String,
 ) -> Result<crate::containers::EnvironmentOperation, crate::app_error::AppError> {
+    let worker = app.clone();
+    let notify_service = service.clone();
+    let notify_action = action.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        crate::containers::operate_service(&app, &id, &service, &action)
+        crate::containers::operate_service(&worker, &id, &service, &action)
     })
     .await
     .map_err(|error| crate::app_error::AppError::from(error.to_string()))?;
+    if result.is_ok() {
+        crate::notifications::send_localized(
+            &app,
+            "container-service",
+            &format!("Сервіс «{notify_service}»: {notify_action}"),
+            &format!("Service \"{notify_service}\": {notify_action}"),
+        );
+    }
     result.map_err(Into::into)
 }
 

@@ -1,6 +1,5 @@
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri_plugin_notification::NotificationExt;
 
 const CHECK_INTERVAL: Duration = Duration::from_secs(15 * 60);
 const RENOTIFY_INTERVAL_MS: i64 = 6 * 60 * 60 * 1000;
@@ -49,12 +48,7 @@ fn notify(app: &tauri::AppHandle, settings: &crate::settings::AppSettings, free_
     } else {
         format!("Only {free_gb} GB of free space left in the sites directory")
     };
-    let _ = app
-        .notification()
-        .builder()
-        .title("LS Panel")
-        .body(body)
-        .show();
+    crate::notifications::send(app, "disk-space", "LS Panel", &body);
 }
 
 fn now_ms() -> i64 {

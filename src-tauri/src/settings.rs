@@ -25,6 +25,14 @@ pub struct AppSettings {
     pub notify_on_operations: bool,
     pub disk_space_alert_enabled: bool,
     pub disk_space_alert_threshold_gb: u32,
+    pub auto_stop_idle_enabled: bool,
+    pub auto_stop_idle_minutes: u32,
+    pub auto_heal_enabled: bool,
+    pub git_status_notify_enabled: bool,
+    pub git_status_behind_threshold: u32,
+    pub tls_expiry_notify_enabled: bool,
+    pub tls_expiry_warning_days: u32,
+    pub webhook_url: String,
 }
 
 impl Default for AppSettings {
@@ -50,6 +58,14 @@ impl Default for AppSettings {
             notify_on_operations: true,
             disk_space_alert_enabled: true,
             disk_space_alert_threshold_gb: 5,
+            auto_stop_idle_enabled: false,
+            auto_stop_idle_minutes: 60,
+            auto_heal_enabled: false,
+            git_status_notify_enabled: false,
+            git_status_behind_threshold: 5,
+            tls_expiry_notify_enabled: true,
+            tls_expiry_warning_days: 14,
+            webhook_url: String::new(),
         }
     }
 }
@@ -107,6 +123,20 @@ pub fn save(app: &tauri::AppHandle, settings: AppSettings) -> Result<AppSettings
     if settings.disk_space_alert_threshold_gb == 0 || settings.disk_space_alert_threshold_gb > 1000
     {
         return Err("Disk space alert threshold must be between 1 and 1000 GB".into());
+    }
+    if settings.auto_stop_idle_minutes < 5 || settings.auto_stop_idle_minutes > 1440 {
+        return Err("Auto-stop idle timeout must be between 5 and 1440 minutes".into());
+    }
+    if settings.git_status_behind_threshold == 0 || settings.git_status_behind_threshold > 1000 {
+        return Err("Git behind-commit threshold must be between 1 and 1000".into());
+    }
+    if settings.tls_expiry_warning_days == 0 || settings.tls_expiry_warning_days > 365 {
+        return Err("TLS expiry warning must be between 1 and 365 days".into());
+    }
+    if !settings.webhook_url.trim().is_empty()
+        && !settings.webhook_url.trim().starts_with("https://")
+    {
+        return Err("Webhook URL must start with https://".into());
     }
     fs::create_dir_all(&settings.sites_directory)
         .map_err(|e| format!("Не удалось создать директорию сайтов: {e}"))?;

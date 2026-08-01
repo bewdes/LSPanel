@@ -29,7 +29,7 @@ LS Panel — це десктопний застосунок на [Tauri 2](https
 - **модуль даних/логіки** (наприклад, `sites.rs`, `containers.rs`, `snapshots.rs`) зі звичайними функціями та (де)серіалізованими структурами, і
 - модуль **`*_commands.rs`**, що обгортає цю логіку у функції з атрибутом `#[tauri::command]`, які фронтенд може викликати через `invoke()`.
 
-`bootstrap.rs` — це композиційний корінь: він будує `tauri::Builder`, реєструє спільний стан у пам'яті, виконує налаштування при старті й перелічує кожну команду в єдиному виклику `tauri::generate_handler![...]` (~120 команд на момент написання).
+`bootstrap.rs` — це композиційний корінь: він будує `tauri::Builder`, реєструє спільний стан у пам'яті, виконує налаштування при старті й перелічує кожну команду в єдиному виклику `tauri::generate_handler![...]` (~130 команд на момент написання).
 
 ### Спільний стан застосунку
 
@@ -38,10 +38,11 @@ LS Panel — це десктопний застосунок на [Tauri 2](https
 - `logs::LogStreams` — активні підписки на live-логи проєктів/контейнерів.
 - `terminal::TerminalSessions` — відкриті PTY-сесії (на основі `portable-pty`) для вбудованого термінала.
 - `native_runtime::NativeProcesses` — дочірні процеси / статичні файлові сервери, запущені для проєктів, що працюють **без** контейнера (див. нижче).
+- `tunnel_provider::TunnelProcesses` — дочірні процеси, що обслуговують активний тунель LiveLink (ngrok/cloudflared).
 
 ### Збереження даних
 
-Усі стійкі дані живуть в одній базі SQLite в каталозі даних застосунку ОС (`<app_data_dir>/lspanel.sqlite3`), відкритій через `rusqlite` з журналюванням WAL. `storage.rs` володіє з'єднанням і системою міграцій на основі `PRAGMA user_version` (`migrate_schema_v1`, ...); таблиці включають `settings`, `environments`, `sites` та `operations`, зазвичай зберігаючи структуровані дані як JSON-колонки для гнучкості. Зовнішнього сервера бази даних немає — цей файл SQLite є власним сховищем метаданих LS Panel, окремим від будь-яких баз даних проєктів (Postgres/MySQL тощо), якими користується _керований проєкт_ — ними займаються `database.rs`/`database_commands.rs`.
+Усі стійкі дані живуть в одній базі SQLite в каталозі даних застосунку ОС (`<app_data_dir>/lspanel.sqlite3`), відкритій через `rusqlite` з журналюванням WAL. `storage.rs` володіє з'єднанням і системою міграцій на основі `PRAGMA user_version` (`migrate_schema_v1`, `migrate_schema_v2`, ...), яка при кожному запуску повторно виконує всі ідемпотентні `CREATE TABLE IF NOT EXISTS`, а не покладається лише на рівність версії — тож частково застосована збірка не може лишити таблицю відсутньою назавжди; таблиці включають `settings`, `environments`, `sites`, `operations` та `notifications`, зазвичай зберігаючи структуровані дані як JSON-колонки для гнучкості. Зовнішнього сервера бази даних немає — цей файл SQLite є власним сховищем метаданих LS Panel, окремим від будь-яких баз даних проєктів (Postgres/MySQL тощо), якими користується _керований проєкт_ — ними займаються `database.rs`/`database_commands.rs`.
 
 ### Середовища та runtime
 
@@ -68,11 +69,14 @@ LS Panel — це десктопний застосунок на [Tauri 2](https
 - `diagnostics.rs` / `diagnose.rs` / `disk_usage.rs` — перевірки стану системи/середовища та звіт про використання диска, показані на сторінці "Стан системи".
 - `terminal.rs` / `terminal_commands.rs` / `quick_commands.rs` — PTY-сесії термінала, а також збережені "швидкі команди" та історія команд для кожного сайту.
 - `settings.rs` / `settings_commands.rs` — загальні налаштування панелі (мова, оформлення, типові значення проєкту).
+- `notifications.rs` / `webhook.rs` — постійне сховище сповіщень у застосунку та опційна пересилка на сумісний зі Slack/Discord webhook, використовується як єдина точка виклику щоразу, коли трапляється подія, важлива для користувача.
+- `auto_heal_monitor.rs`, `auto_stop_monitor.rs`, `git_status_monitor.rs`, `tls_expiry_monitor.rs`, `disk_space_monitor.rs`, `backup_scheduler.rs` — опційні фонові потоки (`std::thread::spawn(move || loop { check(&app); sleep(interval) })`), запущені з `bootstrap.rs`, кожен опитує одну умову й звертається до `notifications.rs`, коли вона спрацьовує.
+- `project_export.rs` / `project_export_commands.rs` — упаковує сайт (код, базу даних, конфігурацію середовища) у переносний пакет і повторно імпортує його як новий сайт.
 
 ## Збірка та інструменти
 
 - **Фронтенд**: Vite 6 + TypeScript + React 19, Tailwind CSS 4. `npm run build` спочатку перевіряє типи, потім збирає; `npm run dev` запускає лише dev-сервер Vite.
-- **Бекенд**: стандартний Cargo workspace у `src-tauri/`, зібраний через `tauri-build`; `npm run tauri` / `npm run tauri build` запускають повну збірку десктопного застосунку через Tauri CLI.
+- **Бекенд**: стандартний Cargo workspace у `src-tauri/`, зібраний через `tauri-build`; `npm run tauri dev` / `npm run tauri build` запускають повний десктопний застосунок через Tauri CLI (npm-скрипт `tauri` обгортає CLI в `scripts/tauri-clean-env.sh` і передає далі підкоманду — потрібно явно вказати `dev`/`build`).
 - **CI** (`.github/workflows/ci.yml`) виконує перевірки фронтенду (Prettier, ESLint, фронтенд-тести, `tsc`, збірка Vite), перевірки Rust (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`), а потім збирає Linux-бандли `.deb`/`.rpm`/`.AppImage`.
 
 Дивіться [FEATURES.uk.md](FEATURES.uk.md) для огляду кожної фічі та бекенд-команд, що її реалізують.

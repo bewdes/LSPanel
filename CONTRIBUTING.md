@@ -8,7 +8,7 @@ Thanks for your interest in contributing! This project is a Tauri (Rust + React/
 
 ```bash
 npm install
-npm run tauri   # dev app (frontend + Rust backend)
+npm run tauri dev   # dev app (frontend + Rust backend)
 ```
 
 See [README.md](README.md) for prerequisites (Node.js 22+, Rust stable, Docker/Podman, Tauri Linux build dependencies).

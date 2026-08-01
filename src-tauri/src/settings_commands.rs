@@ -10,5 +10,12 @@ pub fn save_settings(
     app: tauri::AppHandle,
     settings: crate::settings::AppSettings,
 ) -> Result<crate::settings::AppSettings, String> {
-    crate::settings::save(&app, settings)
+    let saved = crate::settings::save(&app, settings)?;
+    crate::notifications::send_localized(
+        &app,
+        "settings",
+        "Налаштування збережено",
+        "Settings saved",
+    );
+    Ok(saved)
 }

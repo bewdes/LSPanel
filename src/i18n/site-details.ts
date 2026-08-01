@@ -29,13 +29,6 @@ export const siteDetailsText = {
     tags: "Теги",
     tagsPlaceholder: "клієнт, api, важливе",
     tagsHint: "Розділяйте теги комами.",
-    documentRoot: "Корінь сайту",
-    documentRootProject: "Корінь проєкту",
-    documentRootPublicHtml: "public_html",
-    documentRootHint:
-      "public_html ізолює файли, які віддаються браузеру, від конфігурацій та інших файлів проєкту.",
-    documentRootFrameworkHint:
-      "Для цього типу проєкту корінь визначає сам фреймворк (папка public).",
     cancel: "Скасувати",
     save: "Зберегти",
     duplicateProject: "Дублювати проєкт",
@@ -43,6 +36,8 @@ export const siteDetailsText = {
     newName: "Нова назва",
     newDomain: "Новий домен",
     duplicate: "Дублювати",
+    exportProject: "Експортувати проєкт",
+    exportSuccessMessage: (path: string) => `Проєкт експортовано в ${path}`,
     deleteSiteTitle: "Видалити сайт?",
     deleteSiteDescription: (name: string) =>
       `Сайт ${name} буде видалено з панелі. Цю дію не можна скасувати.`,
@@ -83,6 +78,8 @@ export const siteDetailsText = {
     gitNotInitializedDescription: "Git не ініціалізовано для цього проєкту.",
     workingTreeClean: "чисте робоче дерево",
     changedFiles: (count: number) => `${count} змінених файл(ів)`,
+    commitsBehind: (count: number) => `відстає на ${count}`,
+    commitsAhead: (count: number) => `випереджає на ${count}`,
     initializeGit: "Ініціалізувати Git",
     fetch: "Отримати",
     pull: "Підтягнути",
@@ -139,13 +136,6 @@ export const siteDetailsText = {
     tags: "Tags",
     tagsPlaceholder: "client, api, important",
     tagsHint: "Separate tags with commas.",
-    documentRoot: "Site root",
-    documentRootProject: "Project root",
-    documentRootPublicHtml: "public_html",
-    documentRootHint:
-      "public_html isolates the files served to the browser from configs and other project files.",
-    documentRootFrameworkHint:
-      "For this project type the framework itself defines the root (public folder).",
     cancel: "Cancel",
     save: "Save",
     duplicateProject: "Duplicate project",
@@ -154,6 +144,8 @@ export const siteDetailsText = {
     newName: "New name",
     newDomain: "New domain",
     duplicate: "Duplicate",
+    exportProject: "Export project",
+    exportSuccessMessage: (path: string) => `Project exported to ${path}`,
     deleteSiteTitle: "Delete site?",
     deleteSiteDescription: (name: string) =>
       `${name} will be removed from the panel. This action cannot be undone.`,
@@ -194,6 +186,8 @@ export const siteDetailsText = {
     gitNotInitializedDescription: "Git is not initialized for this project.",
     workingTreeClean: "working tree clean",
     changedFiles: (count: number) => `${count} changed file(s)`,
+    commitsBehind: (count: number) => `${count} behind`,
+    commitsAhead: (count: number) => `${count} ahead`,
     initializeGit: "Initialize Git",
     fetch: "Fetch",
     pull: "Pull",

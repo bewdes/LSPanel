@@ -22,7 +22,14 @@ pub fn write_site_environment(
     site_id: String,
     text: String,
 ) -> Result<crate::environment_files::EnvironmentFile, String> {
-    crate::environment_files::write(&app, &site_id, &text)
+    let result = crate::environment_files::write(&app, &site_id, &text)?;
+    crate::notifications::send_localized(
+        &app,
+        "environment-file",
+        "Файл .env збережено",
+        ".env file saved",
+    );
+    Ok(result)
 }
 
 #[tauri::command]
@@ -36,7 +43,14 @@ pub fn import_site_environment(
     site_id: String,
     path: String,
 ) -> Result<crate::environment_files::EnvironmentFile, String> {
-    crate::environment_files::import_file(&app, &site_id, Path::new(&path))
+    let result = crate::environment_files::import_file(&app, &site_id, Path::new(&path))?;
+    crate::notifications::send_localized(
+        &app,
+        "environment-file",
+        "Файл .env імпортовано",
+        ".env file imported",
+    );
+    Ok(result)
 }
 
 #[tauri::command]
@@ -63,7 +77,14 @@ pub fn save_site_environment_profile(
     profile: String,
     text: String,
 ) -> Result<(), String> {
-    crate::environment_files::save_profile(&app, &site_id, &profile, &text)
+    crate::environment_files::save_profile(&app, &site_id, &profile, &text)?;
+    crate::notifications::send_localized(
+        &app,
+        "environment-file",
+        &format!("Профіль «{profile}» збережено"),
+        &format!("Profile \"{profile}\" saved"),
+    );
+    Ok(())
 }
 
 #[tauri::command]
@@ -72,7 +93,14 @@ pub fn activate_site_environment_profile(
     site_id: String,
     profile: String,
 ) -> Result<crate::environment_files::EnvironmentFile, String> {
-    crate::environment_files::activate_profile(&app, &site_id, &profile)
+    let result = crate::environment_files::activate_profile(&app, &site_id, &profile)?;
+    crate::notifications::send_localized(
+        &app,
+        "environment-file",
+        &format!("Профіль «{profile}» активовано"),
+        &format!("Profile \"{profile}\" activated"),
+    );
+    Ok(result)
 }
 
 #[tauri::command]
@@ -81,5 +109,12 @@ pub fn delete_site_environment_profile(
     site_id: String,
     profile: String,
 ) -> Result<(), String> {
-    crate::environment_files::delete_profile(&app, &site_id, &profile)
+    crate::environment_files::delete_profile(&app, &site_id, &profile)?;
+    crate::notifications::send_localized(
+        &app,
+        "environment-file",
+        &format!("Профіль «{profile}» видалено"),
+        &format!("Profile \"{profile}\" deleted"),
+    );
+    Ok(())
 }

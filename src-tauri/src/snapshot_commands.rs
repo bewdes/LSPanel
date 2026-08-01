@@ -60,12 +60,22 @@ pub async fn restore_project_snapshot(
 }
 
 #[tauri::command]
-pub fn delete_project_snapshot(
+pub async fn delete_project_snapshot(
     app: tauri::AppHandle,
     site_id: String,
     snapshot_id: String,
-) -> Result<(), String> {
-    crate::snapshots::delete(&app, &site_id, &snapshot_id)
+) -> Result<(), crate::app_error::AppError> {
+    let site = crate::sites::list(&app)?
+        .into_iter()
+        .find(|site| site.id == site_id)
+        .ok_or("Site not found")?;
+    crate::database_commands::run_operation(
+        app,
+        site.environment_id,
+        "snapshot-delete",
+        move |app, _| crate::snapshots::delete(app, &site_id, &snapshot_id),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -88,12 +98,18 @@ pub async fn import_project_snapshot(
     app: tauri::AppHandle,
     site_id: String,
     source: String,
-) -> Result<crate::snapshots::Snapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::snapshots::import(&app, &site_id, Path::new(&source))
-    })
+) -> Result<crate::snapshots::Snapshot, crate::app_error::AppError> {
+    let site = crate::sites::list(&app)?
+        .into_iter()
+        .find(|site| site.id == site_id)
+        .ok_or("Site not found")?;
+    crate::database_commands::run_operation(
+        app,
+        site.environment_id,
+        "snapshot-import",
+        move |app, _| crate::snapshots::import(app, &site_id, Path::new(&source)),
+    )
     .await
-    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

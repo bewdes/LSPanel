@@ -51,12 +51,18 @@ pub async fn restore_database_backup(
 }
 
 #[tauri::command]
-pub fn delete_database_backup(
+pub async fn delete_database_backup(
     app: tauri::AppHandle,
     environment_id: String,
     backup_id: String,
-) -> Result<(), String> {
-    crate::backups::delete(&app, &environment_id, &backup_id)
+) -> Result<(), crate::app_error::AppError> {
+    run_operation(
+        app,
+        environment_id,
+        "database-backup-delete",
+        move |app, id| crate::backups::delete(app, id, &backup_id),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -107,12 +113,10 @@ pub async fn create_database(
     environment_id: String,
     name: String,
 ) -> Result<(), crate::app_error::AppError> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        crate::backups::create_database(&app, &environment_id, &name)
+    run_operation(app, environment_id, "database-create", move |app, id| {
+        crate::backups::create_database(app, id, &name)
     })
     .await
-    .map_err(|error| crate::app_error::AppError::from(error.to_string()))?;
-    result.map_err(Into::into)
 }
 
 #[tauri::command]
@@ -121,12 +125,10 @@ pub async fn delete_database(
     environment_id: String,
     name: String,
 ) -> Result<(), crate::app_error::AppError> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        crate::backups::delete_database(&app, &environment_id, &name)
+    run_operation(app, environment_id, "database-delete", move |app, id| {
+        crate::backups::delete_database(app, id, &name)
     })
     .await
-    .map_err(|error| crate::app_error::AppError::from(error.to_string()))?;
-    result.map_err(Into::into)
 }
 
 #[tauri::command]

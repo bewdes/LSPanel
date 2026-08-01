@@ -25,6 +25,15 @@ export const sitesText = {
     create: "Створити",
     terminal: "Термінал",
     nativeBadge: "Native",
+    importProject: "Імпортувати проєкт",
+    importProjectDescription:
+      "Створить новий сайт і оточення з портативного бандла (app/ + дамп бази даних), експортованого з LS Panel.",
+    importBundleFolder: "Папка бандла (.lspanel-project)",
+    chooseBundleFolder: "Обрати папку…",
+    newName: "Назва",
+    newDomain: "Локальний домен",
+    cancel: "Скасувати",
+    importing: "Імпортування…",
   },
   en: {
     localSites: "Local sites",
@@ -52,5 +61,14 @@ export const sitesText = {
     create: "Create",
     terminal: "Terminal",
     nativeBadge: "Native",
+    importProject: "Import project",
+    importProjectDescription:
+      "Creates a new site and environment from a portable bundle (app/ + database dump) exported from LS Panel.",
+    importBundleFolder: "Bundle folder (.lspanel-project)",
+    chooseBundleFolder: "Choose folder…",
+    newName: "Name",
+    newDomain: "Local domain",
+    cancel: "Cancel",
+    importing: "Importing…",
   },
 }

@@ -1,10 +1,12 @@
 import * as React from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import {
   ArrowLeft,
   Archive,
   Code2,
   Copy,
+  Download,
   ExternalLink,
   Folder,
   GitBranch,
@@ -120,9 +122,6 @@ export function SiteDetailsPage({
   const [editGroup, setEditGroup] = React.useState(site?.group ?? "")
   const [editTags, setEditTags] = React.useState((site?.tags ?? []).join(", "))
   const [editAliases, setEditAliases] = React.useState((site?.aliases ?? []).join(", "))
-  const [editDocumentRoot, setEditDocumentRoot] = React.useState(
-    site?.documentRoot ?? "public_html",
-  )
   const [duplicateOpen, setDuplicateOpen] = React.useState(false)
   const [duplicateName, setDuplicateName] = React.useState("")
   const [duplicateDomain, setDuplicateDomain] = React.useState("")
@@ -133,21 +132,14 @@ export function SiteDetailsPage({
     setEditGroup(site?.group ?? "")
     setEditTags((site?.tags ?? []).join(", "))
     setEditAliases((site?.aliases ?? []).join(", "))
-    setEditDocumentRoot(site?.documentRoot ?? "public_html")
-  }, [
-    site?.id,
-    site?.name,
-    site?.domain,
-    site?.group,
-    site?.tags,
-    site?.aliases,
-    site?.documentRoot,
-  ])
+  }, [site?.id, site?.name, site?.domain, site?.group, site?.tags, site?.aliases])
   React.useEffect(() => {
     if (site?.directory)
       void Promise.all([
-        invoke<GitStatus>("site_git_status", { directory: site.directory }),
-        invoke<GitDetails>("site_git_details", { directory: site.directory }).catch(() => null),
+        invoke<GitStatus>("site_git_status", { directory: `${site.directory}/app` }),
+        invoke<GitDetails>("site_git_details", { directory: `${site.directory}/app` }).catch(
+          () => null,
+        ),
       ])
         .then(([status, details]) => {
           setGitStatus(status)
@@ -209,7 +201,6 @@ export function SiteDetailsPage({
     group?: string
     tags?: string[]
     aliases?: string[]
-    documentRoot?: string
   }) {
     setBusy(true)
     setMessage("")
@@ -223,7 +214,6 @@ export function SiteDetailsPage({
         group: values.group ?? currentSite.group ?? "",
         tags: values.tags ?? currentSite.tags ?? [],
         aliases: values.aliases ?? currentSite.aliases ?? [],
-        documentRoot: values.documentRoot ?? currentSite.documentRoot ?? "public_html",
       })
       setEditOpen(false)
       await onChanged()
@@ -250,10 +240,29 @@ export function SiteDetailsPage({
       setBusy(false)
     }
   }
+  async function exportProject() {
+    const destination = await openDialog({ directory: true, multiple: false })
+    if (typeof destination !== "string") return
+    setBusy(true)
+    setMessage("")
+    try {
+      const path = await invoke<string>("export_project", {
+        siteId: currentSite.id,
+        destination,
+      })
+      setMessage(text.exportSuccessMessage(path))
+      setMessageOk(true)
+    } catch (error) {
+      setMessage(errorMessage(error))
+      setMessageOk(false)
+    } finally {
+      setBusy(false)
+    }
+  }
   async function refreshGit() {
     const [status, details] = await Promise.all([
-      invoke<GitStatus>("site_git_status", { directory: currentSite.directory }),
-      invoke<GitDetails>("site_git_details", { directory: currentSite.directory }),
+      invoke<GitStatus>("site_git_status", { directory: `${currentSite.directory}/app` }),
+      invoke<GitDetails>("site_git_details", { directory: `${currentSite.directory}/app` }),
     ])
     setGitStatus(status)
     setGitDetails(details)
@@ -263,7 +272,7 @@ export function SiteDetailsPage({
     setMessage("")
     try {
       await invoke<GitStatus>("site_git_action", {
-        directory: currentSite.directory,
+        directory: `${currentSite.directory}/app`,
         action,
         message: commitMessage,
       })
@@ -299,7 +308,7 @@ export function SiteDetailsPage({
     setMessage("")
     try {
       await invoke<GitStatus>("site_git_checkout", {
-        directory: currentSite.directory,
+        directory: `${currentSite.directory}/app`,
         branch,
         create,
       })
@@ -362,7 +371,7 @@ export function SiteDetailsPage({
           "/tmp/lspanel-wpcli.phar",
           ...args,
           "--allow-root",
-          `--path=/var/www/sites/${currentSite.name}`,
+          `--path=/var/www/sites/${currentSite.name}/app`,
         ],
       })
       setWpCliOutput(`$ wp ${trimmed}\n${output}`)
@@ -443,7 +452,7 @@ export function SiteDetailsPage({
         <Button
           variant="outline"
           size="sm"
-          onClick={() => open("open_editor", { path: site.directory })}
+          onClick={() => open("open_editor", { path: `${site.directory}/app` })}
         >
           <Code2 />
           VS Code
@@ -484,6 +493,15 @@ export function SiteDetailsPage({
           }}
         >
           <Copy />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          disabled={busy}
+          title={text.exportProject}
+          onClick={() => void exportProject()}
+        >
+          <Download />
         </Button>
         <Button
           variant="ghost"
@@ -539,7 +557,8 @@ export function SiteDetailsPage({
                   <div className="flex items-center justify-between py-1.5">
                     <span className="text-muted-foreground">{text.webServer}</span>
                     <span className="font-medium">
-                      {environment.webServer} {environment.webVersion}
+                      {environment.webServer}
+                      {environment.webServer === "Nginx" ? ` ${environment.webVersion}` : ""}
                     </span>
                   </div>
                   {site.projectType !== "node" && site.projectType !== "react" && (
@@ -775,7 +794,7 @@ export function SiteDetailsPage({
                       variant="outline"
                       onClick={() =>
                         open("open_editor", {
-                          path: `${site.directory}/storage/logs/laravel.log`,
+                          path: `${site.directory}/app/storage/logs/laravel.log`,
                         })
                       }
                     >
@@ -876,7 +895,7 @@ export function SiteDetailsPage({
               <CardTitle>Git</CardTitle>
               <CardDescription>
                 {gitStatus?.repository
-                  ? `${gitStatus.branch} · ${gitStatus.dirty ? text.changedFiles(gitStatus.changedFiles) : text.workingTreeClean}`
+                  ? `${gitStatus.branch} · ${gitStatus.dirty ? text.changedFiles(gitStatus.changedFiles) : text.workingTreeClean}${gitStatus.behind > 0 ? ` · ${text.commitsBehind(gitStatus.behind)}` : ""}${gitStatus.ahead > 0 ? ` · ${text.commitsAhead(gitStatus.ahead)}` : ""}`
                   : text.gitNotInitializedDescription}
               </CardDescription>
             </CardHeader>
@@ -1098,27 +1117,6 @@ export function SiteDetailsPage({
               />
               <p className="text-xs text-muted-foreground">{text.tagsHint}</p>
             </div>
-            <div className="grid gap-2">
-              <Label>{text.documentRoot}</Label>
-              <Select
-                value={editDocumentRoot}
-                disabled={["laravel", "symfony"].includes(currentSite.projectType ?? "")}
-                onValueChange={(value) => value && setEditDocumentRoot(String(value))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="project">{text.documentRootProject}</SelectItem>
-                  <SelectItem value="public_html">{text.documentRootPublicHtml}</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {["laravel", "symfony"].includes(currentSite.projectType ?? "")
-                  ? text.documentRootFrameworkHint
-                  : text.documentRootHint}
-              </p>
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" disabled={busy} onClick={() => setEditOpen(false)}>
@@ -1129,7 +1127,6 @@ export function SiteDetailsPage({
               onClick={() =>
                 void updateProject({
                   name: editName,
-                  documentRoot: editDocumentRoot,
                   domain: editDomain,
                   group: editGroup,
                   tags: editTags.split(","),

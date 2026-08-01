@@ -3,6 +3,8 @@ export type GitStatus = {
   branch: string
   dirty: boolean
   changedFiles: number
+  ahead: number
+  behind: number
 }
 export type GitDetails = {
   branches: string[]

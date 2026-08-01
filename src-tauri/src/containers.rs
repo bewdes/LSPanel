@@ -109,6 +109,22 @@ pub struct Environment {
     pub redis_memory_limit: String,
     #[serde(default = "default_redis_eviction_policy")]
     pub redis_eviction_policy: String,
+    #[serde(default = "default_elasticsearch_version")]
+    pub elasticsearch_version: String,
+    #[serde(default = "default_elasticsearch_memory_limit")]
+    pub elasticsearch_memory_limit: String,
+    #[serde(default = "default_minio_version")]
+    pub minio_version: String,
+    #[serde(default = "default_minio_root_user")]
+    pub minio_root_user: String,
+    #[serde(default = "default_minio_root_password")]
+    pub minio_root_password: String,
+    #[serde(default = "default_rabbitmq_version")]
+    pub rabbitmq_version: String,
+    #[serde(default = "default_rabbitmq_user")]
+    pub rabbitmq_user: String,
+    #[serde(default = "default_rabbitmq_password")]
+    pub rabbitmq_password: String,
     #[serde(default = "default_node_package_manager")]
     pub node_package_manager: String,
     #[serde(default = "default_node_auto_install")]
@@ -238,6 +254,30 @@ fn default_redis_memory_limit() -> String {
 }
 fn default_redis_eviction_policy() -> String {
     "allkeys-lru".into()
+}
+fn default_elasticsearch_version() -> String {
+    "8.15.3".into()
+}
+fn default_elasticsearch_memory_limit() -> String {
+    "512m".into()
+}
+fn default_minio_version() -> String {
+    "RELEASE.2024-11-07T00-52-20Z".into()
+}
+fn default_minio_root_user() -> String {
+    "minioadmin".into()
+}
+fn default_minio_root_password() -> String {
+    "minioadmin123".into()
+}
+fn default_rabbitmq_version() -> String {
+    "3.13".into()
+}
+fn default_rabbitmq_user() -> String {
+    "guest".into()
+}
+fn default_rabbitmq_password() -> String {
+    "guest".into()
 }
 fn default_node_package_manager() -> String {
     "npm".into()
@@ -485,6 +525,46 @@ fn validate(environment: &Environment) -> Result<(), String> {
             | "volatile-random"
     ) {
         return Err("Unsupported Redis eviction policy".into());
+    }
+    if environment.elasticsearch_memory_limit.is_empty()
+        || !environment
+            .elasticsearch_memory_limit
+            .chars()
+            .all(|character| character.is_ascii_digit() || matches!(character, 'k' | 'm' | 'g'))
+    {
+        return Err("Elasticsearch memory limit must use a value such as 512m".into());
+    }
+    for (label, value) in [
+        ("MinIO root user", &environment.minio_root_user),
+        ("RabbitMQ user", &environment.rabbitmq_user),
+    ] {
+        if value.is_empty()
+            || !value.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+            })
+        {
+            return Err(format!("{label} may contain only letters, digits, - and _"));
+        }
+    }
+    // MinIO refuses to start unless MINIO_ROOT_PASSWORD is at least 8 characters.
+    if environment.minio_root_password.chars().count() < 8
+        || !environment
+            .minio_root_password
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+    {
+        return Err(
+            "MinIO root password must be at least 8 characters and contain only letters, digits, - and _"
+                .into(),
+        );
+    }
+    if environment.rabbitmq_password.is_empty()
+        || !environment
+            .rabbitmq_password
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+    {
+        return Err("RabbitMQ password may contain only letters, digits, - and _".into());
     }
     if !matches!(
         environment.node_package_manager.as_str(),
@@ -1105,7 +1185,14 @@ fn ensure_gateway(app: &tauri::AppHandle, executable: &str) -> Result<(), String
         })
         .collect::<Vec<_>>();
     for environment in &environments {
-        for (service, port) in [("mailpit", 8025), ("adminer", 80), ("phpmyadmin", 80)] {
+        for (service, port) in [
+            ("mailpit", 8025),
+            ("adminer", 80),
+            ("phpmyadmin", 80),
+            ("elasticsearch", 9200),
+            ("minio", 9001),
+            ("rabbitmq", 15672),
+        ] {
             if environment
                 .extra_services
                 .iter()
@@ -1167,7 +1254,7 @@ fn ensure_gateway(app: &tauri::AppHandle, executable: &str) -> Result<(), String
         "server {{ listen 80; server_name {}; return 301 https://$host$request_uri; }}",
         hostnames.join(" ")
     );
-    let gzip = "gzip on;\ngzip_vary on;\ngzip_comp_level 5;\ngzip_min_length 256;\ngzip_proxied any;\ngzip_types text/plain text/css text/javascript application/javascript application/json application/xml application/xml+rss image/svg+xml font/woff2 font/woff;\n";
+    let gzip = "gzip on;\ngzip_vary on;\ngzip_comp_level 5;\ngzip_min_length 256;\ngzip_proxied any;\ngzip_types text/plain text/css text/javascript application/javascript application/json application/xml application/xml+rss image/svg+xml font/woff2 font/woff;\nclient_max_body_size 1024m;\n";
     let blocks = format!("{}{}\n{}\n{}", gzip, fallback, redirect, blocks.join("\n"));
     fs::write(directory.join("default.conf"), blocks).map_err(|error| error.to_string())?;
     let mut published_ports = vec![
@@ -1530,7 +1617,10 @@ pub fn service_url(app: &tauri::AppHandle, id: &str, service: &str) -> Result<St
         .into_iter()
         .find(|environment| environment.id == id)
         .ok_or("Environment not found")?;
-    if matches!(service, "mailpit" | "adminer" | "phpmyadmin") {
+    if matches!(
+        service,
+        "mailpit" | "adminer" | "phpmyadmin" | "elasticsearch" | "minio" | "rabbitmq"
+    ) {
         return Ok(format!(
             "https://{}",
             service_hostname(service, &environment.name)
@@ -1740,8 +1830,8 @@ pub fn terminal_context(
         .runtime
         .filter(|_| runtime.running && runtime.compose_available)
         .ok_or(runtime.message)?;
-    let working_directory =
-        matches!(service, "web" | "php" | "node").then(|| format!("/var/www/sites/{}", site.name));
+    let working_directory = matches!(service, "web" | "php" | "node")
+        .then(|| format!("/var/www/sites/{}/app", site.name));
     Ok((
         executable,
         stack_directory(app, &environment.id)?,
@@ -1816,7 +1906,7 @@ pub(crate) fn stack_directory(app: &tauri::AppHandle, id: &str) -> Result<PathBu
         return Err("Invalid environment identifier".into());
     }
     if let Some(directory) = environment_project_directory(app, id)? {
-        return Ok(directory.join(".lspanel").join("stack"));
+        return Ok(directory.join("container"));
     }
     Ok(app
         .path()
@@ -1825,22 +1915,115 @@ pub(crate) fn stack_directory(app: &tauri::AppHandle, id: &str) -> Result<PathBu
         .join("stacks")
         .join(id))
 }
+
+/// Raw MySQL/PostgreSQL data files always live in LS Panel's own app-data
+/// storage, never inside a project folder: they're internal engine state
+/// (permission-sensitive, not portable, thousands of files), not something a
+/// project export should ever need to carry around.
+pub(crate) fn database_directory(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
+    if !safe_resource_id(id) {
+        return Err("Invalid environment identifier".into());
+    }
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("databases")
+        .join(id))
+}
+
+/// Same reasoning as `database_directory`: Redis's raw data directory is
+/// engine-internal state, not project content.
+pub(crate) fn redis_directory(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
+    if !safe_resource_id(id) {
+        return Err("Invalid environment identifier".into());
+    }
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("redis")
+        .join(id))
+}
+
+/// Same reasoning as `database_directory`: Elasticsearch's index data is
+/// engine-internal state, not project content.
+pub(crate) fn elasticsearch_directory(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
+    if !safe_resource_id(id) {
+        return Err("Invalid environment identifier".into());
+    }
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("elasticsearch")
+        .join(id))
+}
+
+/// Same reasoning as `database_directory`: MinIO's object storage is
+/// engine-internal state, not project content.
+pub(crate) fn minio_directory(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
+    if !safe_resource_id(id) {
+        return Err("Invalid environment identifier".into());
+    }
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("minio")
+        .join(id))
+}
+
+/// Same reasoning as `database_directory`: RabbitMQ's queue/message data is
+/// engine-internal state, not project content.
+pub(crate) fn rabbitmq_directory(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
+    if !safe_resource_id(id) {
+        return Err("Invalid environment identifier".into());
+    }
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("rabbitmq")
+        .join(id))
+}
+
 pub(crate) fn prepare(
     app: &tauri::AppHandle,
     environment: &Environment,
 ) -> Result<PathBuf, String> {
     let directory = stack_directory(app, &environment.id)?;
+    let database_dir = database_directory(app, &environment.id)?;
+    let redis_dir = redis_directory(app, &environment.id)?;
+    let elasticsearch_dir = elasticsearch_directory(app, &environment.id)?;
+    let minio_dir = minio_directory(app, &environment.id)?;
+    let rabbitmq_dir = rabbitmq_directory(app, &environment.id)?;
     let settings =
         crate::settings::load(app)?.ok_or("Сначала завершите первоначальную настройку")?;
     let sites_directory = PathBuf::from(settings.sites_directory);
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     fs::create_dir_all(&sites_directory).map_err(|error| error.to_string())?;
+    fs::create_dir_all(&database_dir).map_err(|error| error.to_string())?;
+    for (service, service_dir) in [
+        ("redis", &redis_dir),
+        ("elasticsearch", &elasticsearch_dir),
+        ("minio", &minio_dir),
+        ("rabbitmq", &rabbitmq_dir),
+    ] {
+        if environment
+            .extra_services
+            .iter()
+            .any(|item| item == service)
+        {
+            fs::create_dir_all(service_dir).map_err(|error| error.to_string())?;
+        }
+    }
     let sites: Vec<_> = crate::sites::list(app)?
         .into_iter()
         .filter(|site| site.environment_id == environment.id)
         .collect();
     if environment.web_server == "Nginx" {
-        let config = sites.iter().map(|site| { let root = site_document_root(site); format!("server {{ listen 80; server_name {}; root {}; index index.php index.html; location / {{ try_files $uri $uri/ /index.php?$query_string; }} location ~ \\.php$ {{ include fastcgi_params; fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name; fastcgi_pass php:9000; }} }}", site_hostnames(site), root) }).collect::<Vec<_>>().join("\n");
+        let config = sites.iter().map(|site| { let root = site_document_root(site); format!("server {{ listen 80; server_name {}; root {}; index index.php index.html; location ~ /\\. {{ deny all; }} location / {{ try_files $uri $uri/ /index.php?$query_string; }} location ~ \\.php$ {{ include fastcgi_params; fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name; fastcgi_pass php:9000; }} }}", site_hostnames(site), root) }).collect::<Vec<_>>().join("\n");
         fs::write(
             directory.join("default.conf"),
             if config.is_empty() {
@@ -1851,7 +2034,7 @@ pub(crate) fn prepare(
         )
         .map_err(|error| error.to_string())?;
     } else {
-        let config = sites.iter().map(|site| { let root = site_document_root(site); let aliases=if site.aliases.is_empty(){String::new()}else{format!("\nServerAlias {}",site.aliases.join(" "))}; format!("<VirtualHost *:80>\nServerName {}{}\nDocumentRoot {}\n<Directory {}>\nAllowOverride All\nRequire all granted\n</Directory>\n</VirtualHost>", site.domain, aliases, root, root) }).collect::<Vec<_>>().join("\n");
+        let config = sites.iter().map(|site| { let root = site_document_root(site); let aliases=if site.aliases.is_empty(){String::new()}else{format!("\nServerAlias {}",site.aliases.join(" "))}; format!("<VirtualHost *:80>\nServerName {}{}\nDocumentRoot {}\n<Directory {}>\nAllowOverride All\nRequire all granted\n<FilesMatch \"^\\.\">\nRequire all denied\n</FilesMatch>\n</Directory>\n</VirtualHost>", site.domain, aliases, root, root) }).collect::<Vec<_>>().join("\n");
         fs::write(
             directory.join("000-default.conf"),
             if config.is_empty() {
@@ -1931,7 +2114,16 @@ pub(crate) fn prepare(
     .map_err(|error| error.to_string())?;
     fs::write(
         directory.join("compose.yaml"),
-        compose(environment, &sites_directory, &sites),
+        compose(
+            environment,
+            &sites_directory,
+            &sites,
+            &database_dir,
+            &redis_dir,
+            &elasticsearch_dir,
+            &minio_dir,
+            &rabbitmq_dir,
+        ),
     )
     .map_err(|error| error.to_string())?;
     Ok(directory)
@@ -1946,11 +2138,9 @@ fn site_hostnames(site: &crate::sites::Site) -> String {
 
 fn site_document_root(site: &crate::sites::Site) -> String {
     let suffix = if matches!(site.project_type.as_str(), "laravel" | "symfony") {
-        "/public"
-    } else if site.document_root == "public_html" {
-        "/public_html"
+        "/app/public"
     } else {
-        ""
+        "/app"
     };
     format!("/var/www/sites/{}{}", site.name, suffix)
 }
@@ -2010,7 +2200,17 @@ fn php_dockerfile(environment: &Environment, owner_uid: u32, owner_gid: u32) -> 
     dockerfile
 }
 
-fn compose(e: &Environment, sites_directory: &Path, sites: &[crate::sites::Site]) -> String {
+#[allow(clippy::too_many_arguments)]
+fn compose(
+    e: &Environment,
+    sites_directory: &Path,
+    sites: &[crate::sites::Site],
+    database_directory: &Path,
+    redis_directory: &Path,
+    elasticsearch_directory: &Path,
+    minio_directory: &Path,
+    rabbitmq_directory: &Path,
+) -> String {
     // Every generated environment joins the external `lspanel` network. These
     // stable aliases let applications reach services in sibling projects
     // without publishing database/cache ports on the host.
@@ -2071,7 +2271,7 @@ fn compose(e: &Environment, sites_directory: &Path, sites: &[crate::sites::Site]
     if e.php_cron {
         let cron_working_directory = sites
             .first()
-            .map(|site| format!("/var/www/sites/{}", site.name))
+            .map(|site| format!("/var/www/sites/{}/app", site.name))
             .unwrap_or_else(|| "/var/www/sites".into());
         extras.push_str(&format!("  cron:\n    build:\n      context: .\n      dockerfile: Dockerfile.php\n    command: [\"cron\", \"-f\"]\n    working_dir: {}\n    volumes: [{}]\n    depends_on: [database]\n    networks:\n      default: {{}}\n      lspanel: {{}}\n", cron_working_directory, site_rw));
     }
@@ -2086,7 +2286,30 @@ fn compose(e: &Environment, sites_directory: &Path, sites: &[crate::sites::Site]
         } else {
             format!(", \"-a\", \"{}\"", e.redis_password)
         };
-        extras.push_str(&format!("  redis:\n    image: docker.io/library/redis:{}-alpine\n    command: [\"redis-server\", \"--appendonly\", \"yes\", \"--maxmemory\", \"{}\", \"--maxmemory-policy\", \"{}\"{}]\n    volumes: [\"redis_data:/data\"]\n    healthcheck:\n      test: [\"CMD\", \"redis-cli\"{}, \"ping\"]\n      interval: 10s\n      timeout: 3s\n      retries: 5\n    networks:\n      default: {{}}\n      lspanel:\n        aliases: [\"redis.{}.localhost\"]\n", e.redis_version, e.redis_memory_limit, e.redis_eviction_policy, password_args, health_auth, network_name));
+        let redis_volume_mount =
+            serde_json::to_string(&format!("{}:/data", redis_directory.display())).unwrap();
+        extras.push_str(&format!("  redis:\n    image: docker.io/library/redis:{}-alpine\n    command: [\"redis-server\", \"--appendonly\", \"yes\", \"--maxmemory\", \"{}\", \"--maxmemory-policy\", \"{}\"{}]\n    volumes: [{}]\n    healthcheck:\n      test: [\"CMD\", \"redis-cli\"{}, \"ping\"]\n      interval: 10s\n      timeout: 3s\n      retries: 5\n    networks:\n      default: {{}}\n      lspanel:\n        aliases: [\"redis.{}.localhost\"]\n", e.redis_version, e.redis_memory_limit, e.redis_eviction_policy, password_args, redis_volume_mount, health_auth, network_name));
+    }
+    if e.extra_services.iter().any(|item| item == "elasticsearch") {
+        let elasticsearch_volume_mount = serde_json::to_string(&format!(
+            "{}:/usr/share/elasticsearch/data",
+            elasticsearch_directory.display()
+        ))
+        .unwrap();
+        extras.push_str(&format!("  elasticsearch:\n    image: docker.elastic.co/elasticsearch/elasticsearch:{}\n    environment:\n      discovery.type: single-node\n      xpack.security.enabled: \"false\"\n      ES_JAVA_OPTS: \"-Xms{} -Xmx{}\"\n    volumes: [{}]\n    healthcheck:\n      test: [\"CMD-SHELL\", \"curl -sf http://127.0.0.1:9200/_cluster/health || exit 1\"]\n      interval: 10s\n      timeout: 5s\n      retries: 10\n    networks:\n      default: {{}}\n      lspanel:\n        aliases: [\"lsp-{}-elasticsearch\", \"elasticsearch.{}.localhost\"]\n", e.elasticsearch_version, e.elasticsearch_memory_limit, e.elasticsearch_memory_limit, elasticsearch_volume_mount, e.id, network_name));
+    }
+    if e.extra_services.iter().any(|item| item == "minio") {
+        let minio_volume_mount =
+            serde_json::to_string(&format!("{}:/data", minio_directory.display())).unwrap();
+        extras.push_str(&format!("  minio:\n    image: docker.io/minio/minio:{}\n    command: [\"server\", \"/data\", \"--console-address\", \":9001\"]\n    environment:\n      MINIO_ROOT_USER: {}\n      MINIO_ROOT_PASSWORD: {}\n    volumes: [{}]\n    healthcheck:\n      test: [\"CMD\", \"mc\", \"ready\", \"local\"]\n      interval: 10s\n      timeout: 5s\n      retries: 5\n    networks:\n      default: {{}}\n      lspanel:\n        aliases: [\"lsp-{}-minio\", \"minio.{}.localhost\"]\n", e.minio_version, serde_json::to_string(&e.minio_root_user).unwrap(), serde_json::to_string(&e.minio_root_password).unwrap(), minio_volume_mount, e.id, network_name));
+    }
+    if e.extra_services.iter().any(|item| item == "rabbitmq") {
+        let rabbitmq_volume_mount = serde_json::to_string(&format!(
+            "{}:/var/lib/rabbitmq",
+            rabbitmq_directory.display()
+        ))
+        .unwrap();
+        extras.push_str(&format!("  rabbitmq:\n    image: docker.io/library/rabbitmq:{}-management\n    environment:\n      RABBITMQ_DEFAULT_USER: {}\n      RABBITMQ_DEFAULT_PASS: {}\n    volumes: [{}]\n    healthcheck:\n      test: [\"CMD\", \"rabbitmq-diagnostics\", \"-q\", \"ping\"]\n      interval: 10s\n      timeout: 5s\n      retries: 5\n    networks:\n      default: {{}}\n      lspanel:\n        aliases: [\"lsp-{}-rabbitmq\", \"rabbitmq.{}.localhost\"]\n", e.rabbitmq_version, serde_json::to_string(&e.rabbitmq_user).unwrap(), serde_json::to_string(&e.rabbitmq_password).unwrap(), rabbitmq_volume_mount, e.id, network_name));
     }
     if e.extra_services.iter().any(|item| item == "node") {
         let install = if e.node_auto_install {
@@ -2135,7 +2358,7 @@ fn compose(e: &Environment, sites_directory: &Path, sites: &[crate::sites::Site]
         let working_dir = sites
             .iter()
             .find(|site| crate::project_templates::is_node_project(&site.project_type))
-            .map(|site| format!("/var/www/sites/{}", site.name))
+            .map(|site| format!("/var/www/sites/{}/app", site.name))
             .unwrap_or_else(|| "/var/www/sites".into());
         extras.push_str(&format!("  node:\n    image: docker.io/library/node:{}-alpine\n    command: [\"sh\", \"-lc\", {}]\n    working_dir: {}\n{}{}    volumes: [{}]\n    healthcheck:\n      test: [\"CMD\", \"wget\", \"-qO-\", \"http://127.0.0.1:3000\"]\n      interval: 10s\n      timeout: 3s\n      retries: 10\n    networks:\n      default: {{}}\n      lspanel:\n        aliases: [\"lsp-{}-node\", \"node.{}.localhost\"]\n", e.node_version, startup, working_dir, inspector_environment, inspector_port, site_rw, e.id, network_name));
     }
@@ -2163,11 +2386,6 @@ fn compose(e: &Environment, sites_directory: &Path, sites: &[crate::sites::Site]
     if e.extra_services.iter().any(|item| item == "phpmyadmin") {
         extras.push_str(&format!("  phpmyadmin:\n    image: docker.io/library/phpmyadmin:5-apache\n    environment:\n      PMA_HOST: database\n      PMA_USER: {}\n      PMA_PASSWORD: {}\n    depends_on: [database]\n    networks:\n      default: {{}}\n      lspanel:\n        aliases: [\"lsp-{}-phpmyadmin\"]\n", e.database_user, e.database_password, e.id));
     }
-    let redis_volume = if e.extra_services.iter().any(|item| item == "redis") {
-        "  redis_data:\n"
-    } else {
-        ""
-    };
     let database_healthcheck = if e.database == "PostgreSQL" {
         format!(
             "[\"CMD-SHELL\", \"pg_isready -U {} -d {}\"]",
@@ -2181,7 +2399,17 @@ fn compose(e: &Environment, sites_directory: &Path, sites: &[crate::sites::Site]
         };
         format!("[\"CMD\", \"{}\", \"ping\", \"-h\", \"127.0.0.1\", \"-uroot\", \"-p{}\", \"--silent\"]", admin, e.database_root_password)
     };
-    apply_runtime_defaults(format!("name: {}\nservices:\n{}  database:\n    container_name: {}\n    image: {}:{}\n    environment:\n      {}\n    volumes: [\"database_data:/var/lib/{}\"]\n    healthcheck:\n      test: {}\n      interval: 10s\n      timeout: 5s\n      retries: 10\n    networks:\n      default: {{}}\n      lspanel:\n        aliases: [\"database.{}.localhost\"]\n{}volumes:\n  database_data:\n{}networks:\n  default: {{}}\n  lspanel:\n    external: true\n", e.name, app, database_container_name, db_image, e.database_version, db_environment, if e.database == "PostgreSQL" { "postgresql/data" } else { "mysql" }, database_healthcheck, network_name, extras, redis_volume), e)
+    let database_volume_mount = serde_json::to_string(&format!(
+        "{}:/var/lib/{}",
+        database_directory.display(),
+        if e.database == "PostgreSQL" {
+            "postgresql/data"
+        } else {
+            "mysql"
+        }
+    ))
+    .unwrap();
+    apply_runtime_defaults(format!("name: {}\nservices:\n{}  database:\n    container_name: {}\n    image: {}:{}\n    environment:\n      {}\n    volumes: [{}]\n    healthcheck:\n      test: {}\n      interval: 10s\n      timeout: 5s\n      retries: 10\n    networks:\n      default: {{}}\n      lspanel:\n        aliases: [\"database.{}.localhost\"]\n{}networks:\n  default: {{}}\n  lspanel:\n    external: true\n", e.name, app, database_container_name, db_image, e.database_version, db_environment, database_volume_mount, database_healthcheck, network_name, extras), e)
 }
 
 fn apply_runtime_defaults(mut yaml: String, environment: &Environment) -> String {
@@ -2190,6 +2418,9 @@ fn apply_runtime_defaults(mut yaml: String, environment: &Environment) -> String
         "php",
         "database",
         "redis",
+        "elasticsearch",
+        "minio",
+        "rabbitmq",
         "node",
         "mailpit",
         "adminer",
@@ -2219,7 +2450,7 @@ fn apply_runtime_defaults(mut yaml: String, environment: &Environment) -> String
 mod tests {
     use super::*;
 
-    fn test_site(project_type: &str, document_root: &str) -> crate::sites::Site {
+    fn test_site(project_type: &str) -> crate::sites::Site {
         crate::sites::Site {
             id: "site-test".into(),
             name: "demo".into(),
@@ -2227,7 +2458,6 @@ mod tests {
             environment_id: "env-test".into(),
             directory: "/tmp/demo".into(),
             project_type: project_type.into(),
-            document_root: document_root.into(),
             auto_init_git: false,
             pinned: false,
             archived: false,
@@ -2241,18 +2471,22 @@ mod tests {
     }
 
     #[test]
-    fn document_root_prefers_framework_public_folder_over_public_html() {
+    fn document_root_prefers_framework_public_folder() {
         assert_eq!(
-            site_document_root(&test_site("php", "project")),
-            "/var/www/sites/demo"
+            site_document_root(&test_site("php")),
+            "/var/www/sites/demo/app"
         );
         assert_eq!(
-            site_document_root(&test_site("php", "public_html")),
-            "/var/www/sites/demo/public_html"
+            site_document_root(&test_site("wordpress")),
+            "/var/www/sites/demo/app"
         );
         assert_eq!(
-            site_document_root(&test_site("laravel", "public_html")),
-            "/var/www/sites/demo/public"
+            site_document_root(&test_site("laravel")),
+            "/var/www/sites/demo/app/public"
+        );
+        assert_eq!(
+            site_document_root(&test_site("symfony")),
+            "/var/www/sites/demo/app/public"
         );
     }
 
@@ -2302,7 +2536,16 @@ mod tests {
         assert!(
             dockerfile.contains("groupmod -g 1000 www-data && usermod -u 1000 -g 1000 www-data")
         );
-        let yaml = compose(&environment, Path::new("/tmp/LSP Sites"), &[]);
+        let yaml = compose(
+            &environment,
+            Path::new("/tmp/LSP Sites"),
+            &[],
+            Path::new("/tmp/lspanel-test-db"),
+            Path::new("/tmp/lspanel-test-redis"),
+            Path::new("/tmp/lspanel-test-es"),
+            Path::new("/tmp/lspanel-test-minio"),
+            Path::new("/tmp/lspanel-test-rabbitmq"),
+        );
         assert!(yaml.contains("host.docker.internal:host-gateway"));
 
         environment.php_xdebug_mode = "trace".into();
@@ -2315,7 +2558,16 @@ mod tests {
         environment.node_inspector = true;
         environment.node_inspector_port = 9230;
         validate(&environment).unwrap();
-        let yaml = compose(&environment, Path::new("/tmp/LSP Sites"), &[]);
+        let yaml = compose(
+            &environment,
+            Path::new("/tmp/LSP Sites"),
+            &[],
+            Path::new("/tmp/lspanel-test-db"),
+            Path::new("/tmp/lspanel-test-redis"),
+            Path::new("/tmp/lspanel-test-es"),
+            Path::new("/tmp/lspanel-test-minio"),
+            Path::new("/tmp/lspanel-test-rabbitmq"),
+        );
         assert!(yaml.contains("NODE_OPTIONS: \"--inspect=0.0.0.0:9230\""));
         assert!(yaml.contains("127.0.0.1:9230:9230"));
         assert!(!yaml.contains("ports: [\"9230:9230\"]"));
@@ -2382,6 +2634,14 @@ mod tests {
             redis_password: "redis-secret".into(),
             redis_memory_limit: "256mb".into(),
             redis_eviction_policy: "allkeys-lru".into(),
+            elasticsearch_version: "8.15.3".into(),
+            elasticsearch_memory_limit: "512m".into(),
+            minio_version: "RELEASE.2024-11-07T00-52-20Z".into(),
+            minio_root_user: "minioadmin".into(),
+            minio_root_password: "minioadmin123".into(),
+            rabbitmq_version: "3.13".into(),
+            rabbitmq_user: "guest".into(),
+            rabbitmq_password: "guest".into(),
             node_package_manager: "pnpm".into(),
             node_auto_install: true,
             node_auto_restart: true,
@@ -2458,7 +2718,16 @@ mod tests {
     #[test]
     fn nginx_compose_contains_services_and_project_path() {
         let environment = test_environment();
-        let yaml = compose(&environment, Path::new("/tmp/LSP Sites/demo"), &[]);
+        let yaml = compose(
+            &environment,
+            Path::new("/tmp/LSP Sites/demo"),
+            &[],
+            Path::new("/tmp/lspanel-test-db"),
+            Path::new("/tmp/lspanel-test-redis"),
+            Path::new("/tmp/lspanel-test-es"),
+            Path::new("/tmp/lspanel-test-minio"),
+            Path::new("/tmp/lspanel-test-rabbitmq"),
+        );
         let dockerfile = php_dockerfile(&environment, 1000, 1000);
         assert!(yaml.contains("nginx:1.28"));
         assert!(yaml.contains("dockerfile: Dockerfile.php"));
@@ -2496,6 +2765,47 @@ mod tests {
     }
 
     #[test]
+    fn extra_services_generate_elasticsearch_minio_and_rabbitmq_containers() {
+        let mut environment = test_environment();
+        environment.extra_services =
+            vec!["elasticsearch".into(), "minio".into(), "rabbitmq".into()];
+        assert!(validate(&environment).is_ok());
+        let yaml = compose(
+            &environment,
+            Path::new("/tmp/LSP Sites/demo"),
+            &[],
+            Path::new("/tmp/lspanel-test-db"),
+            Path::new("/tmp/lspanel-test-redis"),
+            Path::new("/tmp/lspanel-test-es"),
+            Path::new("/tmp/lspanel-test-minio"),
+            Path::new("/tmp/lspanel-test-rabbitmq"),
+        );
+        assert!(yaml.contains("  elasticsearch:\n"));
+        assert!(yaml.contains("docker.elastic.co/elasticsearch/elasticsearch:8.15.3"));
+        assert!(yaml.contains("discovery.type: single-node"));
+        assert!(yaml.contains("/tmp/lspanel-test-es:/usr/share/elasticsearch/data"));
+        assert!(yaml
+            .contains("aliases: [\"lsp-demo-elasticsearch\", \"elasticsearch.demo.localhost\"]"));
+        assert!(yaml.contains("  minio:\n"));
+        assert!(yaml.contains("docker.io/minio/minio:RELEASE.2024-11-07T00-52-20Z"));
+        assert!(yaml.contains("MINIO_ROOT_USER: \"minioadmin\""));
+        assert!(yaml.contains("/tmp/lspanel-test-minio:/data"));
+        assert!(yaml.contains("aliases: [\"lsp-demo-minio\", \"minio.demo.localhost\"]"));
+        assert!(yaml.contains("  rabbitmq:\n"));
+        assert!(yaml.contains("docker.io/library/rabbitmq:3.13-management"));
+        assert!(yaml.contains("RABBITMQ_DEFAULT_USER: \"guest\""));
+        assert!(yaml.contains("/tmp/lspanel-test-rabbitmq:/var/lib/rabbitmq"));
+        assert!(yaml.contains("aliases: [\"lsp-demo-rabbitmq\", \"rabbitmq.demo.localhost\"]"));
+
+        let mut invalid = environment.clone();
+        invalid.minio_root_password = "short".into();
+        assert!(validate(&invalid).is_err());
+        let mut invalid = environment;
+        invalid.rabbitmq_password = String::new();
+        assert!(validate(&invalid).is_err());
+    }
+
+    #[test]
     fn php_cron_generates_a_dedicated_service_and_validates_schedule() {
         let mut environment = test_environment();
         environment.php_cron = true;
@@ -2503,7 +2813,16 @@ mod tests {
         environment.php_cron_command = "php artisan schedule:run".into();
 
         validate(&environment).unwrap();
-        let yaml = compose(&environment, Path::new("/tmp/LSP Sites/demo"), &[]);
+        let yaml = compose(
+            &environment,
+            Path::new("/tmp/LSP Sites/demo"),
+            &[],
+            Path::new("/tmp/lspanel-test-db"),
+            Path::new("/tmp/lspanel-test-redis"),
+            Path::new("/tmp/lspanel-test-es"),
+            Path::new("/tmp/lspanel-test-minio"),
+            Path::new("/tmp/lspanel-test-rabbitmq"),
+        );
         assert!(yaml.contains("  cron:\n"));
         assert!(yaml.contains("command: [\"cron\", \"-f\"]"));
         assert!(yaml.contains("working_dir: /var/www/sites"));
@@ -2542,7 +2861,16 @@ mod tests {
                 ];
 
                 validate(&environment).unwrap();
-                let yaml = compose(&environment, Path::new("/tmp/LSP Sites/demo"), &[]);
+                let yaml = compose(
+                    &environment,
+                    Path::new("/tmp/LSP Sites/demo"),
+                    &[],
+                    Path::new("/tmp/lspanel-test-db"),
+                    Path::new("/tmp/lspanel-test-redis"),
+                    Path::new("/tmp/lspanel-test-es"),
+                    Path::new("/tmp/lspanel-test-minio"),
+                    Path::new("/tmp/lspanel-test-rabbitmq"),
+                );
                 let dockerfile = php_dockerfile(&environment, 1000, 1000);
 
                 assert!(yaml.contains("  web:\n"));
@@ -2583,7 +2911,17 @@ mod tests {
             environment.database = database.into();
             environment.extra_services = vec!["phpmyadmin".into()];
             validate(&environment).unwrap();
-            assert!(compose(&environment, Path::new("/tmp/sites"), &[]).contains("  phpmyadmin:\n"));
+            assert!(compose(
+                &environment,
+                Path::new("/tmp/sites"),
+                &[],
+                Path::new("/tmp/lspanel-test-db"),
+                Path::new("/tmp/lspanel-test-redis"),
+                Path::new("/tmp/lspanel-test-es"),
+                Path::new("/tmp/lspanel-test-minio"),
+                Path::new("/tmp/lspanel-test-rabbitmq")
+            )
+            .contains("  phpmyadmin:\n"));
         }
 
         let mut postgres = test_environment();
@@ -2596,7 +2934,16 @@ mod tests {
         fs::create_dir_all(directory.join("sites")).unwrap();
         fs::write(
             directory.join("compose.yaml"),
-            compose(environment, &directory.join("sites"), &[]),
+            compose(
+                environment,
+                &directory.join("sites"),
+                &[],
+                Path::new("/tmp/lspanel-test-db"),
+                Path::new("/tmp/lspanel-test-redis"),
+                Path::new("/tmp/lspanel-test-es"),
+                Path::new("/tmp/lspanel-test-minio"),
+                Path::new("/tmp/lspanel-test-rabbitmq"),
+            ),
         )
         .unwrap();
         fs::write(

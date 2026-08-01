@@ -8,7 +8,7 @@
 
 ```bash
 npm install
-npm run tauri   # dev-застосунок (фронтенд + бекенд на Rust)
+npm run tauri dev   # dev-застосунок (фронтенд + бекенд на Rust)
 ```
 
 Передумови (Node.js 22+, стабільний Rust, Docker/Podman, залежності для збірки Tauri на Linux) — див. [README.uk.md](README.uk.md).

@@ -13,6 +13,8 @@ pub struct GitStatus {
     pub branch: String,
     pub dirty: bool,
     pub changed_files: usize,
+    pub ahead: usize,
+    pub behind: usize,
 }
 
 #[derive(Serialize)]
@@ -51,6 +53,8 @@ pub fn status(directory: &str) -> Result<GitStatus, String> {
             branch: String::new(),
             dirty: false,
             changed_files: 0,
+            ahead: 0,
+            behind: 0,
         });
     }
     let output = crate::process::output(
@@ -69,21 +73,43 @@ pub fn status(directory: &str) -> Result<GitStatus, String> {
     }
     let text = String::from_utf8_lossy(&output.stdout);
     let mut lines = text.lines();
-    let branch = lines
-        .next()
-        .and_then(|line| line.strip_prefix("## "))
+    let header = lines.next().unwrap_or("## HEAD");
+    let branch = header
+        .strip_prefix("## ")
         .unwrap_or("HEAD")
         .split("...")
         .next()
         .unwrap_or("HEAD")
         .to_owned();
+    let (ahead, behind) = parse_ahead_behind(header);
     let changed_files = lines.count();
     Ok(GitStatus {
         repository: true,
         branch,
         dirty: changed_files > 0,
         changed_files,
+        ahead,
+        behind,
     })
+}
+
+fn parse_ahead_behind(branch_header: &str) -> (usize, usize) {
+    let Some(start) = branch_header.find('[') else {
+        return (0, 0);
+    };
+    let Some(end) = branch_header[start..].find(']') else {
+        return (0, 0);
+    };
+    let mut ahead = 0;
+    let mut behind = 0;
+    for part in branch_header[start + 1..start + end].split(", ") {
+        if let Some(value) = part.strip_prefix("ahead ") {
+            ahead = value.trim().parse().unwrap_or(0);
+        } else if let Some(value) = part.strip_prefix("behind ") {
+            behind = value.trim().parse().unwrap_or(0);
+        }
+    }
+    (ahead, behind)
 }
 
 pub fn action(directory: &str, action: &str, message: &str) -> Result<GitStatus, String> {
@@ -326,18 +352,18 @@ pub fn initialize(directory: &str, project_type: &str) -> Result<GitStatus, Stri
 fn gitignore_template(project_type: &str) -> &'static str {
     match project_type {
         "node" | "react" => {
-            "node_modules/\ndist/\nbuild/\n.env\n.env.*\n!.env.example\n*.log\n.DS_Store\n.lspanel/\n"
+            "node_modules/\ndist/\nbuild/\n.env\n.env.*\n!.env.example\n*.log\n.DS_Store\n"
         }
         "wordpress" => {
-            ".env\n.env.*\n!.env.example\nwp-content/uploads/\nwp-content/cache/\n*.log\n.DS_Store\n.lspanel/\n"
+            ".env\n.env.*\n!.env.example\nwp-content/uploads/\nwp-content/cache/\n*.log\n.DS_Store\n"
         }
         "laravel" => {
-            "/vendor/\n/node_modules/\n/public/build/\n/storage/*.key\n.env\n.env.*\n!.env.example\n*.log\n.DS_Store\n.lspanel/\n"
+            "/vendor/\n/node_modules/\n/public/build/\n/storage/*.key\n.env\n.env.*\n!.env.example\n*.log\n.DS_Store\n"
         }
         "symfony" => {
-            "/vendor/\n/var/\n/node_modules/\n/public/build/\n.env.local\n.env.*.local\n*.log\n.DS_Store\n.lspanel/\n"
+            "/vendor/\n/var/\n/node_modules/\n/public/build/\n.env.local\n.env.*.local\n*.log\n.DS_Store\n"
         }
-        _ => ".env\n.env.*\n!.env.example\n/vendor/\n/node_modules/\n*.log\n.DS_Store\n.lspanel/\n",
+        _ => ".env\n.env.*\n!.env.example\n/vendor/\n/node_modules/\n*.log\n.DS_Store\n",
     }
 }
 
@@ -361,7 +387,7 @@ pub fn checkout(directory: &str, branch: &str, create: bool) -> Result<GitStatus
 
 #[cfg(test)]
 mod tests {
-    use super::{browser_url, gitignore_template};
+    use super::{browser_url, gitignore_template, parse_ahead_behind};
 
     #[test]
     fn templates_ignore_secrets_and_runtime_dependencies() {
@@ -370,12 +396,6 @@ mod tests {
         assert!(gitignore_template("wordpress").contains("wp-content/uploads/"));
         assert!(gitignore_template("php").contains(".env"));
         assert!(gitignore_template("php").contains("!.env.example"));
-        for project_type in ["node", "react", "wordpress", "laravel", "symfony", "php"] {
-            assert!(
-                gitignore_template(project_type).contains(".lspanel/"),
-                "{project_type} must ignore .lspanel/, which holds container secrets and database dumps"
-            );
-        }
     }
 
     #[test]
@@ -390,5 +410,23 @@ mod tests {
         );
         assert!(browser_url("https://user:token@example.com/project.git").is_err());
         assert!(browser_url("file:///tmp/project").is_err());
+    }
+
+    #[test]
+    fn parses_ahead_behind_counts_from_the_branch_header() {
+        assert_eq!(
+            parse_ahead_behind("## main...origin/main [ahead 2, behind 1]"),
+            (2, 1)
+        );
+        assert_eq!(
+            parse_ahead_behind("## main...origin/main [behind 3]"),
+            (0, 3)
+        );
+        assert_eq!(
+            parse_ahead_behind("## main...origin/main [ahead 1]"),
+            (1, 0)
+        );
+        assert_eq!(parse_ahead_behind("## main...origin/main"), (0, 0));
+        assert_eq!(parse_ahead_behind("## main"), (0, 0));
     }
 }

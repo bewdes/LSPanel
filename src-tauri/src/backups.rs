@@ -626,7 +626,7 @@ fn environment(app: &tauri::AppHandle, id: &str) -> Result<crate::containers::En
 }
 fn backup_directory(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
     if let Some(directory) = crate::containers::environment_project_directory(app, id)? {
-        return Ok(directory.join(".lspanel").join("backups").join("database"));
+        return Ok(directory.join("database").join("backups"));
     }
     Ok(app
         .path()

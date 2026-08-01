@@ -30,7 +30,7 @@
 - HTTPS out of the box via a local certificate authority — no self-signed warnings.
 - Local-first: your data (SQLite metadata, backups, snapshots) stays on your machine.
 - No cloud account, license server, or telemetry required to use it.
-- Built for PHP and modern web development, with first-class Laravel and WordPress project provisioning.
+- Built for PHP and modern web development, with first-class Laravel, WordPress, and Symfony project provisioning, plus dedicated handling for Node/React projects.
 
 ## Features
 
@@ -104,10 +104,16 @@ npm install
 ### Run in development
 
 ```bash
-npm run tauri     # launches the Tauri dev app (frontend + Rust backend)
+npm run tauri dev # launches the Tauri dev app (frontend + Rust backend)
 # or, frontend only:
 npm run dev
 ```
+
+> The `tauri` script wraps the Tauri CLI through `scripts/tauri-clean-env.sh` and forwards whatever subcommand you pass — running `npm run tauri` with no subcommand just prints the Tauri CLI's help text, it does not start the app.
+
+#### Why a wrapper script?
+
+If you launch `npm run tauri dev` from a terminal running inside a **snap-packaged editor** (e.g. VS Code installed via snap), that terminal inherits `SNAP_*`/`XDG_DATA_HOME` variables pointing at the editor's own sandboxed data directory. Docker/Podman then read/write their storage state through that redirected path instead of your real `~/.local/share/containers`, which can make container tooling report a storage/database mismatch after the editor updates to a new snap revision. `scripts/tauri-clean-env.sh` starts the Tauri process with a clean, explicit environment (`env -i` plus an allowlist of the variables GTK/WebKit/Cargo actually need) so this never happens, regardless of which terminal you launched it from.
 
 ### Build
 

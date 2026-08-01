@@ -50,6 +50,9 @@ pub(crate) fn validate_identity_and_platform(environment: &Environment) -> Resul
         &environment.database_version,
         &environment.node_version,
         &environment.redis_version,
+        &environment.elasticsearch_version,
+        &environment.minio_version,
+        &environment.rabbitmq_version,
     ] {
         if value.is_empty()
             || !value.chars().all(|character| {
@@ -102,7 +105,16 @@ pub(crate) fn validate_services_and_database(environment: &Environment) -> Resul
         "xdebug",
         "zip",
     ];
-    const SERVICES: &[&str] = &["redis", "node", "mailpit", "adminer", "phpmyadmin"];
+    const SERVICES: &[&str] = &[
+        "redis",
+        "node",
+        "mailpit",
+        "adminer",
+        "phpmyadmin",
+        "elasticsearch",
+        "minio",
+        "rabbitmq",
+    ];
     if environment
         .php_extensions
         .iter()

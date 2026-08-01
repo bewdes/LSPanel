@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::{fs, path::PathBuf};
 use tauri::Manager;
 
-const CURRENT_SCHEMA_VERSION: u32 = 1;
+const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 fn data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|error| error.to_string())
@@ -33,19 +33,27 @@ fn migrate_schema(connection: &mut Connection) -> Result<(), String> {
             "Database schema version {version} is newer than this LS Panel supports ({CURRENT_SCHEMA_VERSION})"
         ));
     }
-    if version == CURRENT_SCHEMA_VERSION {
-        return Ok(());
-    }
 
     let transaction = connection
         .transaction()
         .map_err(|error| format!("Failed to start database migration: {error}"))?;
-    if version < 1 {
-        migrate_schema_v1(&transaction)?;
+    // Every versioned step so far is a purely additive, idempotent set of
+    // `CREATE TABLE/INDEX IF NOT EXISTS` statements. Re-running all of them
+    // unconditionally on every launch (rather than gating each one behind
+    // `version < N`) makes schema creation self-healing: if `user_version`
+    // ever ends up recorded ahead of what actually got created — e.g. a
+    // build was replaced mid-migration during development — the next
+    // launch still fills in whatever tables are missing instead of being
+    // permanently skipped. A future migration that isn't idempotent (a data
+    // transformation, a column rename) would need its own `version < N`
+    // guard here instead of being folded into this pattern.
+    migrate_schema_v1(&transaction)?;
+    migrate_schema_v2(&transaction)?;
+    if version != CURRENT_SCHEMA_VERSION {
+        transaction
+            .pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)
+            .map_err(|error| format!("Failed to record database schema version: {error}"))?;
     }
-    transaction
-        .pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)
-        .map_err(|error| format!("Failed to record database schema version: {error}"))?;
     transaction
         .commit()
         .map_err(|error| format!("Failed to commit database migration: {error}"))
@@ -95,6 +103,22 @@ fn migrate_schema_v1(transaction: &Transaction<'_>) -> Result<(), String> {
          CREATE INDEX IF NOT EXISTS idx_command_history_site ON command_history(site_id, id DESC);"
     )
     .map_err(|error| format!("Failed to migrate database schema to version 1: {error}"))
+}
+
+fn migrate_schema_v2(transaction: &Transaction<'_>) -> Result<(), String> {
+    transaction
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS notifications (
+           id TEXT PRIMARY KEY,
+           category TEXT NOT NULL,
+           title TEXT NOT NULL,
+           body TEXT NOT NULL,
+           created_at INTEGER NOT NULL,
+           read INTEGER NOT NULL DEFAULT 0
+         );
+         CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);",
+        )
+        .map_err(|error| format!("Failed to migrate database schema to version 2: {error}"))
 }
 
 pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
@@ -289,13 +313,65 @@ mod tests {
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN (
                     'metadata', 'settings', 'environments', 'sites', 'operations',
-                    'saved_commands', 'command_history'
+                    'saved_commands', 'command_history', 'notifications'
                 )",
                 [],
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(table_count, 7);
+        assert_eq!(table_count, 8);
+    }
+
+    #[test]
+    fn upgrades_a_v1_database_to_add_the_notifications_table() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate_schema(&mut connection).unwrap();
+        // Simulate a real installation that already migrated to v1 before the
+        // notifications table existed: drop it and roll the version back, the
+        // same shape a pre-upgrade database would have on disk.
+        connection
+            .execute_batch("DROP TABLE notifications;")
+            .unwrap();
+        connection
+            .pragma_update(None, "user_version", 1u32)
+            .unwrap();
+
+        migrate_schema(&mut connection).unwrap();
+
+        assert_eq!(schema_version(&connection), CURRENT_SCHEMA_VERSION);
+        let table_exists: u32 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'notifications'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1);
+    }
+
+    #[test]
+    fn heals_a_database_whose_recorded_version_outran_its_actual_tables() {
+        // Reproduces a real drift that happened during development: the
+        // stored user_version said "2" but the notifications table was
+        // never actually created (a build got replaced mid-migration).
+        // Schema creation must not trust the version number alone.
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrate_schema(&mut connection).unwrap();
+        connection
+            .execute_batch("DROP TABLE notifications;")
+            .unwrap();
+        assert_eq!(schema_version(&connection), CURRENT_SCHEMA_VERSION);
+
+        migrate_schema(&mut connection).unwrap();
+
+        let table_exists: u32 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'notifications'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1);
     }
 
     #[test]

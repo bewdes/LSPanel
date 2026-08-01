@@ -1,5 +1,6 @@
 import * as React from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import {
   Archive,
   Code2,
@@ -15,21 +16,34 @@ import {
   ShieldAlert,
   Square,
   Terminal,
+  Upload,
   MoreHorizontal,
 } from "lucide-react"
 
 import { PageHeading } from "@/components/page-heading"
 import { pickLanguage } from "@/i18n"
 import { sitesText } from "@/i18n/sites"
+import { errorMessage } from "@/lib/errors"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -60,6 +74,7 @@ export function SitesPage({
   onCreate,
   onSelect,
   onOperate,
+  onImported,
 }: {
   uk: boolean
   sites: Site[]
@@ -68,6 +83,7 @@ export function SitesPage({
   onCreate: () => void
   onSelect: (id: string) => void
   onOperate: (id: string, action: "start" | "stop") => void
+  onImported: (id: string) => void
 }) {
   const [showArchived, setShowArchived] = React.useState(false)
   const [groupFilter, setGroupFilter] = React.useState("all")
@@ -75,7 +91,39 @@ export function SitesPage({
   const [resources, setResources] = React.useState<Record<string, ServiceResource[]>>({})
   const [branches, setBranches] = React.useState<Record<string, string>>({})
   const [httpsTrusted, setHttpsTrusted] = React.useState(false)
+  const [importOpen, setImportOpen] = React.useState(false)
+  const [importSource, setImportSource] = React.useState("")
+  const [importName, setImportName] = React.useState("")
+  const [importDomain, setImportDomain] = React.useState("")
+  const [importBusy, setImportBusy] = React.useState(false)
+  const [importError, setImportError] = React.useState("")
   const text = pickLanguage(sitesText, uk)
+  const chooseImportBundle = async () => {
+    const selected = await openDialog({ directory: true, multiple: false })
+    if (typeof selected !== "string") return
+    setImportSource(selected)
+  }
+  async function importProject() {
+    setImportBusy(true)
+    setImportError("")
+    try {
+      const created = await invoke<Site[]>("import_project_bundle", {
+        source: importSource,
+        name: importName,
+        domain: importDomain,
+      })
+      const imported = created.find((site) => site.name === importName)
+      setImportOpen(false)
+      setImportSource("")
+      setImportName("")
+      setImportDomain("")
+      if (imported) onImported(imported.id)
+    } catch (error) {
+      setImportError(errorMessage(error))
+    } finally {
+      setImportBusy(false)
+    }
+  }
   React.useEffect(() => {
     let disposed = false
     const load = async () => {
@@ -153,6 +201,10 @@ export function SitesPage({
             >
               <Archive />
               {text.archive}
+            </Button>
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload />
+              {text.importProject}
             </Button>
             <Button onClick={onCreate}>
               <Plus />
@@ -407,6 +459,58 @@ export function SitesPage({
           )}
         </Card>
       </div>
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{text.importProject}</DialogTitle>
+            <DialogDescription>{text.importProjectDescription}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            {importError && (
+              <Alert variant="destructive">
+                <AlertDescription>{importError}</AlertDescription>
+              </Alert>
+            )}
+            <div className="grid gap-2">
+              <Label>{text.importBundleFolder}</Label>
+              <Button variant="outline" onClick={() => void chooseImportBundle()}>
+                <Folder />
+                {importSource || text.chooseBundleFolder}
+              </Button>
+            </div>
+            <div className="grid gap-2">
+              <Label>{text.newName}</Label>
+              <Input
+                value={importName}
+                onChange={(event) => {
+                  setImportName(event.target.value)
+                  setImportDomain(
+                    `${event.target.value.toLowerCase().replace(/_/g, "-")}.localhost`,
+                  )
+                }}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>{text.newDomain}</Label>
+              <Input
+                value={importDomain}
+                onChange={(event) => setImportDomain(event.target.value.toLowerCase())}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={importBusy} onClick={() => setImportOpen(false)}>
+              {text.cancel}
+            </Button>
+            <Button
+              disabled={importBusy || !importSource || !importName || !importDomain}
+              onClick={() => void importProject()}
+            >
+              {importBusy ? text.importing : text.importProject}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

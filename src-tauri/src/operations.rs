@@ -2,7 +2,6 @@ use rusqlite::{params, OptionalExtension};
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
-use tauri_plugin_notification::NotificationExt;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -127,12 +126,7 @@ fn notify_operation(app: &tauri::AppHandle, operation: &Operation) {
         "failed" => format!("Operation \"{}\" failed", operation.kind),
         _ => return,
     };
-    let _ = app
-        .notification()
-        .builder()
-        .title("LS Panel")
-        .body(body)
-        .show();
+    crate::notifications::send(app, "operation", "LS Panel", &body);
 }
 
 pub fn delete(app: &tauri::AppHandle, id: &str) -> Result<Vec<Operation>, String> {

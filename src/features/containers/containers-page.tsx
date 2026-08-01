@@ -189,7 +189,8 @@ export function ContainersPage({
                     <div className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0">
                       <span className="text-muted-foreground">{text.webServer}</span>
                       <span className="font-medium">
-                        {environment.webServer} {environment.webVersion}
+                        {environment.webServer}
+                        {environment.webServer === "Nginx" ? ` ${environment.webVersion}` : ""}
                       </span>
                     </div>
                     <div className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0">

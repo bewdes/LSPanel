@@ -32,6 +32,26 @@ export const settingsText = {
     diskSpaceAlertDescription:
       "Показувати системне сповіщення, коли вільного місця в каталозі сайтів стає мало.",
     diskSpaceAlertThresholdLabel: "Поріг сповіщення (ГБ)",
+    autoStopIdleTitle: "Автозупинка простоюючих оточень",
+    autoStopIdleDescription:
+      "Автоматично зупиняти контейнери, якщо в сайті немає активності (CPU близький до нуля) протягом заданого часу.",
+    autoStopIdleMinutesLabel: "Час простою до зупинки (хв)",
+    autoHealTitle: "Автовідновлення контейнерів",
+    autoHealDescription:
+      "Стежити за впалими/нездоровими контейнерами й сповіщати про це; якщо політика перезапуску вимкнена ('no'), LS Panel спробує підняти контейнер сама.",
+    gitStatusNotifyTitle: "Сповіщення про відставання від origin",
+    gitStatusNotifyDescription:
+      "Періодично перевіряти git-статус проєктів (з fetch) і сповіщати, коли гілка відстає від origin на задану кількість комітів.",
+    gitStatusBehindThresholdLabel: "Поріг відставання (комітів)",
+    tlsExpiryNotifyTitle: "Нагадування про TLS-сертифікати",
+    tlsExpiryNotifyDescription:
+      "Сповіщати, коли кореневий сертифікат (CA) чи сертифікат сайтів добігає кінця, або якщо CA не довірений системою/браузерами.",
+    tlsExpiryWarningDaysLabel: "Попередити за (днів до завершення)",
+    webhookUrlLabel: "URL вебхука (Slack / Discord)",
+    webhookUrlPlaceholder:
+      "https://hooks.slack.com/services/... або https://discord.com/api/webhooks/...",
+    webhookUrlHint:
+      "Якщо задано, усі сповіщення LS Panel (операції, диск, автовідновлення, git, TLS) додатково надсилаються сюди. Лише HTTPS.",
     appearanceCardDescription: "Тема, бічна панель та анімація.",
     themeLabel: "Тема",
     darkOption: "Темна",
@@ -88,6 +108,26 @@ export const settingsText = {
     diskSpaceAlertDescription:
       "Show a system notification when the sites directory is running low on free space.",
     diskSpaceAlertThresholdLabel: "Alert threshold (GB)",
+    autoStopIdleTitle: "Auto-stop idle environments",
+    autoStopIdleDescription:
+      "Automatically stop containers when a project shows no activity (CPU near zero) for the configured time.",
+    autoStopIdleMinutesLabel: "Idle time before stopping (min)",
+    autoHealTitle: "Auto-heal containers",
+    autoHealDescription:
+      "Watch for crashed or unhealthy containers and notify about it; if the restart policy is 'no', LS Panel will try to bring the container back up itself.",
+    gitStatusNotifyTitle: "Behind-origin notifications",
+    gitStatusNotifyDescription:
+      "Periodically check each project's Git status (with a fetch) and notify when a branch falls behind origin by the configured number of commits.",
+    gitStatusBehindThresholdLabel: "Behind threshold (commits)",
+    tlsExpiryNotifyTitle: "TLS certificate reminders",
+    tlsExpiryNotifyDescription:
+      "Notify when the root (CA) or sites certificate is close to expiring, or if the CA is not trusted by the system/browsers.",
+    tlsExpiryWarningDaysLabel: "Warn this many days before expiry",
+    webhookUrlLabel: "Webhook URL (Slack / Discord)",
+    webhookUrlPlaceholder:
+      "https://hooks.slack.com/services/... or https://discord.com/api/webhooks/...",
+    webhookUrlHint:
+      "When set, every LS Panel notification (operations, disk, auto-heal, git, TLS) is also sent here. HTTPS only.",
     appearanceCardDescription: "Theme, sidebar, and motion.",
     themeLabel: "Theme",
     darkOption: "Dark",

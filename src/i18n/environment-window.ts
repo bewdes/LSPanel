@@ -114,6 +114,11 @@ export const environmentWindowText = {
     redisVersionLabel: "Версія Redis",
     memoryLabel: "Пам'ять",
     evictionPolicyLabel: "Політика витіснення",
+    elasticsearchVersionLabel: "Версія Elasticsearch",
+    minioVersionLabel: "Версія MinIO",
+    minioRootUserLabel: "Root-користувач MinIO",
+    rabbitmqVersionLabel: "Версія RabbitMQ",
+    rabbitmqUserLabel: "Користувач RabbitMQ",
     environmentVariablesLabel: "Змінні середовища",
     environmentVariablesHint:
       "По одному запису KEY=value на рядок. Імена змінних використовують A-Z, 0-9 та підкреслення.",
@@ -280,6 +285,11 @@ export const environmentWindowText = {
     redisVersionLabel: "Redis version",
     memoryLabel: "Memory",
     evictionPolicyLabel: "Eviction policy",
+    elasticsearchVersionLabel: "Elasticsearch version",
+    minioVersionLabel: "MinIO version",
+    minioRootUserLabel: "MinIO root user",
+    rabbitmqVersionLabel: "RabbitMQ version",
+    rabbitmqUserLabel: "RabbitMQ user",
     environmentVariablesLabel: "Environment variables",
     environmentVariablesHint:
       "One KEY=value entry per line. Variable names use A-Z, 0-9 and underscores.",

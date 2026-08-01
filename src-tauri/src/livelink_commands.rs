@@ -14,28 +14,51 @@ pub async fn start_livelink(
     mode: String,
     provider: String,
 ) -> Result<LiveLinkStatus, AppError> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::livelink::start(&app, &site_id, &mode, &provider)
+    let worker = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::livelink::start(&worker, &site_id, &mode, &provider)
     })
     .await
     .map_err(|error| AppError::from(format!("Не вдалося запустити LiveLink: {error}")))?
-    .map_err(AppError::from)
+    .map_err(AppError::from)?;
+    crate::notifications::send_localized(
+        &app,
+        "livelink",
+        "LiveLink увімкнено",
+        "LiveLink enabled",
+    );
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn stop_livelink(app: tauri::AppHandle) -> Result<LiveLinkStatus, AppError> {
-    tauri::async_runtime::spawn_blocking(move || crate::livelink::stop(&app))
+    let worker = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || crate::livelink::stop(&worker))
         .await
         .map_err(|error| AppError::from(format!("Не вдалося зупинити LiveLink: {error}")))?
-        .map_err(AppError::from)
+        .map_err(AppError::from)?;
+    crate::notifications::send_localized(
+        &app,
+        "livelink",
+        "LiveLink вимкнено",
+        "LiveLink disabled",
+    );
+    Ok(result)
 }
 
 #[tauri::command]
-pub async fn set_ngrok_authtoken(token: String) -> Result<(), AppError> {
+pub async fn set_ngrok_authtoken(app: tauri::AppHandle, token: String) -> Result<(), AppError> {
     tauri::async_runtime::spawn_blocking(move || {
         crate::tunnel_provider::set_ngrok_authtoken(&token)
     })
     .await
     .map_err(|error| AppError::from(format!("Failed to save the ngrok authtoken: {error}")))?
-    .map_err(AppError::from)
+    .map_err(AppError::from)?;
+    crate::notifications::send_localized(
+        &app,
+        "livelink",
+        "Ngrok authtoken збережено",
+        "Ngrok authtoken saved",
+    );
+    Ok(())
 }

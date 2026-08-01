@@ -8,7 +8,7 @@ A closer look at each area of LS Panel and the backend modules/commands behind i
 
 Create, browse, and manage local projects.
 
-- Create a new site from scratch, **import** an existing local directory, or **clone** a Git repository, via a project creation wizard with stack-specific templates (currently Laravel and WordPress get automated provisioning — Composer install and `.env` wiring for Laravel, download/database/install for WordPress — alongside a generic path for any other project type).
+- Create a new site from scratch, **import** an existing local directory, or **clone** a Git repository, via a project creation wizard with stack-specific templates: Laravel, WordPress, and Symfony get automated provisioning (Composer install and `.env`/config wiring), Node/React projects get a dedicated single-process service instead of the usual web+PHP container pair, and anything else falls back to a generic path.
 - Duplicate or delete a site, with a `DirectoryBaseline` capture so a failed provisioning step can be rolled back instead of leaving a half-set-up project.
 - Repair site file permissions when ownership drifts (common after container-root writes).
 - Backed by: `site_commands.rs`, `sites.rs`, `project_templates.rs`.
@@ -20,8 +20,10 @@ Manage the Docker/Podman stack backing a site.
 - Auto-detects `docker` or `podman` on the system (or a configured preference), and the matching Compose provider (`docker compose` or `podman-compose`).
 - Start/stop/restart services, inspect a running environment's topology and resource usage, and stream container logs live.
 - Connect projects through the shared `lspanel` network, with stable service addresses such as `web.demo.localhost`, `database.demo.localhost`, and `redis.demo.localhost`.
+- Optional extra services per environment, each with its own version, credentials, and limits: Redis, Elasticsearch, MinIO, RabbitMQ.
+- Auto-heal restarts a service that crashes or reports unhealthy, and auto-stop shuts down containers that sit idle past a configurable threshold — both optional, both configured in Settings.
 - Long-running actions are tracked through the operation center so the UI reflects real progress instead of a blocking spinner.
-- Backed by: `container_lifecycle.rs`, `container_inspection.rs`, `container_logs.rs`, `container_routes.rs`, `container_runtime.rs`, `container_validation.rs`, `containers.rs`, `runtime_commands.rs`.
+- Backed by: `container_lifecycle.rs`, `container_inspection.rs`, `container_logs.rs`, `container_routes.rs`, `container_runtime.rs`, `container_validation.rs`, `containers.rs`, `runtime_commands.rs`, `auto_heal_monitor.rs`, `auto_stop_monitor.rs`.
 
 ## Databases
 
@@ -36,10 +38,11 @@ Per-project database management, independent of LS Panel's own SQLite metadata s
 
 The single place for two kinds of local, file-based safety nets:
 
-- **Database backups** — on-demand SQL dumps, stored locally under LS Panel's application data and restorable back into the project's database.
+- **Database backups** — on-demand or scheduled SQL dumps (per-environment interval + retention count), stored locally under LS Panel's application data and restorable back into the project's database.
 - **Project snapshots** — a point-in-time capture of a project's database, `.env`, and environment configuration (not the Git-managed source tree, which Git already versions). Snapshots support export/import to a portable `.lspanel-snapshot` directory, and retention pruning (keep the newest _N_, delete the rest).
 - Restoring a snapshot first takes a fresh safety snapshot, then restores environment config, `.env`, and the database, and rebuilds containers.
-- Backed by: `backups.rs`, `database_commands.rs` (database backup commands), `snapshot_commands.rs`, `snapshots.rs`.
+- **Project export/import** — package a whole site (source, database, environment config) into a portable bundle you can move to another machine, distinct from the in-place snapshot restore above.
+- Backed by: `backups.rs`, `backup_scheduler.rs`, `database_commands.rs` (database backup commands), `snapshot_commands.rs`, `snapshots.rs`, `project_export.rs`, `project_export_commands.rs`.
 
 ## Files
 
@@ -86,7 +89,8 @@ A local certificate authority so development sites can use trusted HTTPS instead
 Exposes a running local site through a temporary, shareable public link — useful for showing work-in-progress to a client or teammate without deploying anywhere.
 
 - Start/stop a LiveLink for a site and check its current status.
-- Backed by: `livelink.rs`, `livelink_commands.rs`.
+- Choice of tunnel provider: Tailscale Serve/Funnel (default), ngrok, or Cloudflare Tunnel.
+- Backed by: `livelink.rs`, `livelink_commands.rs`, `tunnel_provider.rs`.
 
 ## System health & diagnostics
 
@@ -111,6 +115,25 @@ Panel-wide preferences, not tied to any one project:
 - Appearance: theme, sidebar behavior, motion/animation.
 - Defaults applied to newly created projects, including whether to auto-initialize a Git repository.
 - Backed by: `settings.rs`, `settings_commands.rs`.
+
+## Notifications
+
+A persistent, in-app notification bell alongside OS-level toast notifications — every tracked action across sites, containers, databases, the file manager, certificates, LiveLink, and settings records a notification you can revisit later.
+
+- View, mark as read, delete individually, or clear all notifications.
+- Optionally forward every notification to a Slack- or Discord-compatible webhook URL, configured once in Settings.
+- Backed by: `notifications.rs`, `webhook.rs`, plus the corresponding commands in `administration_commands.rs`.
+
+## Background monitors
+
+Opt-in checks that run continuously in the background and notify you instead of requiring you to go look:
+
+- **Auto-heal** — restarts a container that crashes or reports unhealthy.
+- **Auto-stop** — stops environments that sit idle (near-zero CPU) past a configurable duration, to save resources.
+- **Git status** — periodically fetches each site's repository and warns when the local branch falls behind its origin by more than a configurable number of commits.
+- **TLS/CA expiry** — warns before the local certificate authority or an issued certificate expires.
+- **Disk space** — warns when free space under the configured sites directory drops below a configurable threshold.
+- All are opt-in and configured in Settings; each is backed by its own module: `auto_heal_monitor.rs`, `auto_stop_monitor.rs`, `git_status_monitor.rs`, `tls_expiry_monitor.rs`, `disk_space_monitor.rs`.
 
 ## Operation center
 

@@ -119,6 +119,14 @@ export type Environment = {
   redisPassword: string
   redisMemoryLimit: string
   redisEvictionPolicy: string
+  elasticsearchVersion: string
+  elasticsearchMemoryLimit: string
+  minioVersion: string
+  minioRootUser: string
+  minioRootPassword: string
+  rabbitmqVersion: string
+  rabbitmqUser: string
+  rabbitmqPassword: string
   nodePackageManager: string
   nodeAutoInstall: boolean
   nodeAutoRestart: boolean
@@ -201,6 +209,14 @@ const defaults = (): Environment => ({
   redisPassword: "",
   redisMemoryLimit: "256mb",
   redisEvictionPolicy: "allkeys-lru",
+  elasticsearchVersion: "8.15.3",
+  elasticsearchMemoryLimit: "512m",
+  minioVersion: "RELEASE.2024-11-07T00-52-20Z",
+  minioRootUser: "minioadmin",
+  minioRootPassword: "minioadmin123",
+  rabbitmqVersion: "3.13",
+  rabbitmqUser: "guest",
+  rabbitmqPassword: "guest",
   nodePackageManager: "npm",
   nodeAutoInstall: true,
   nodeAutoRestart: true,
@@ -220,7 +236,16 @@ const defaults = (): Environment => ({
   backupScheduleIntervalHours: 24,
   backupRetentionCount: 7,
 })
-const services = ["redis", "node", "mailpit", "adminer", "phpmyadmin"]
+const services = [
+  "redis",
+  "node",
+  "mailpit",
+  "adminer",
+  "phpmyadmin",
+  "elasticsearch",
+  "minio",
+  "rabbitmq",
+]
 
 export function EnvironmentWindow({
   environmentId,
@@ -802,8 +827,7 @@ export function EnvironmentWindow({
                                 ? {
                                     ...current,
                                     webServer: value,
-                                    webVersion:
-                                      WEB_SERVER_VERSIONS[value]?.[0] ?? current.webVersion,
+                                    webVersion: WEB_SERVER_VERSIONS[value]?.[0] ?? "2.4",
                                   }
                                 : current,
                             )
@@ -1400,6 +1424,68 @@ export function EnvironmentWindow({
                               "volatile-ttl",
                             ]}
                             onChange={(value) => update("redisEvictionPolicy", value)}
+                          />
+                        </Field>
+                      </div>
+                    )}
+                    {draft.extraServices.includes("elasticsearch") && (
+                      <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
+                        <Field label={text.elasticsearchVersionLabel}>
+                          <Input
+                            value={draft.elasticsearchVersion}
+                            onChange={(e) => update("elasticsearchVersion", e.target.value)}
+                          />
+                        </Field>
+                        <Field label={text.memoryLabel}>
+                          <Input
+                            value={draft.elasticsearchMemoryLimit}
+                            onChange={(e) => update("elasticsearchMemoryLimit", e.target.value)}
+                          />
+                        </Field>
+                      </div>
+                    )}
+                    {draft.extraServices.includes("minio") && (
+                      <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
+                        <Field label={text.minioVersionLabel}>
+                          <Input
+                            value={draft.minioVersion}
+                            onChange={(e) => update("minioVersion", e.target.value)}
+                          />
+                        </Field>
+                        <Field label={text.minioRootUserLabel}>
+                          <Input
+                            value={draft.minioRootUser}
+                            onChange={(e) => update("minioRootUser", e.target.value)}
+                          />
+                        </Field>
+                        <Field label={text.passwordLabel}>
+                          <Input
+                            type="password"
+                            value={draft.minioRootPassword}
+                            onChange={(e) => update("minioRootPassword", e.target.value)}
+                          />
+                        </Field>
+                      </div>
+                    )}
+                    {draft.extraServices.includes("rabbitmq") && (
+                      <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
+                        <Field label={text.rabbitmqVersionLabel}>
+                          <Input
+                            value={draft.rabbitmqVersion}
+                            onChange={(e) => update("rabbitmqVersion", e.target.value)}
+                          />
+                        </Field>
+                        <Field label={text.rabbitmqUserLabel}>
+                          <Input
+                            value={draft.rabbitmqUser}
+                            onChange={(e) => update("rabbitmqUser", e.target.value)}
+                          />
+                        </Field>
+                        <Field label={text.passwordLabel}>
+                          <Input
+                            type="password"
+                            value={draft.rabbitmqPassword}
+                            onChange={(e) => update("rabbitmqPassword", e.target.value)}
                           />
                         </Field>
                       </div>

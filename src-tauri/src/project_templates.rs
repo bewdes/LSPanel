@@ -301,7 +301,7 @@ pub fn configure_duplicate(site: &Site, environment: &Environment) -> Result<(),
         "laravel" => configure_laravel_env(site, environment),
         "symfony" => configure_symfony_env(site, environment),
         "wordpress" => {
-            let path = Path::new(&site.directory).join("wp-config.php");
+            let path = Path::new(&site.directory).join("app").join("wp-config.php");
             let mut contents = fs::read_to_string(&path)
                 .map_err(|error| format!("Failed to read duplicated wp-config.php: {error}"))?;
             for (key, value) in [
@@ -363,7 +363,9 @@ fn provision_wordpress(
         );
     }
     crate::operations::progress_for_environment(app, &environment.id, 88, "Downloading WordPress")?;
-    clear_directory(Path::new(&site.directory))?;
+    let app_directory = Path::new(&site.directory).join("app");
+    fs::create_dir_all(&app_directory).map_err(|error| error.to_string())?;
+    clear_directory(&app_directory)?;
     run_in_php(app, site, environment, "php -r '$d=file_get_contents(\"https://wordpress.org/latest.zip\"); if($d===false){exit(2);} file_put_contents(\"/tmp/lspanel-wordpress.zip\",$d); $z=new ZipArchive(); if($z->open(\"/tmp/lspanel-wordpress.zip\")!==true){exit(3);} $z->extractTo(\"/tmp/lspanel-wordpress\"); $z->close();' && cp -a /tmp/lspanel-wordpress/wordpress/. . && rm -rf /tmp/lspanel-wordpress /tmp/lspanel-wordpress.zip")?;
     crate::operations::progress_for_environment(
         app,
@@ -373,7 +375,7 @@ fn provision_wordpress(
     )?;
     restore_ownership(app, site, environment)?;
     let config = format!("<?php\n{}define('DB_NAME', {});\ndefine('DB_USER', {});\ndefine('DB_PASSWORD', {});\ndefine('DB_HOST', 'database');\ndefine('DB_CHARSET', 'utf8mb4');\ndefine('DB_COLLATE', '');\ndefine('WP_DEBUG', true);\ndefine('WP_HOME', 'https://{}');\ndefine('WP_SITEURL', 'https://{}');\n$table_prefix='wp_';\nif(!defined('ABSPATH')) define('ABSPATH', __DIR__.'/');\nrequire_once ABSPATH.'wp-settings.php';\n", wordpress_proxy_https_config(), php_string(&environment.database_name), php_string(&environment.database_user), php_string(&environment.database_password), site.domain, site.domain);
-    fs::write(Path::new(&site.directory).join("wp-config.php"), config)
+    fs::write(app_directory.join("wp-config.php"), config)
         .map_err(|error| format!("Failed to write wp-config.php: {error}"))?;
     crate::operations::progress_for_environment(
         app,
@@ -405,7 +407,7 @@ fn provision_laravel(
         88,
         "Installing Laravel with Composer",
     )?;
-    clear_directory(Path::new(&site.directory))?;
+    clear_directory(&Path::new(&site.directory).join("app"))?;
     run_in_php(app, site, environment, "COMPOSER_MEMORY_LIMIT=-1 composer create-project --no-interaction --prefer-dist laravel/laravel .")?;
     restore_ownership(app, site, environment)?;
     crate::operations::progress_for_environment(
@@ -428,7 +430,7 @@ fn provision_symfony(
         88,
         "Installing Symfony with Composer",
     )?;
-    clear_directory(Path::new(&site.directory))?;
+    clear_directory(&Path::new(&site.directory).join("app"))?;
     run_in_php(app, site, environment, SYMFONY_INSTALL_COMMAND)?;
     restore_ownership(app, site, environment)?;
     crate::operations::progress_for_environment(
@@ -441,7 +443,7 @@ fn provision_symfony(
 }
 
 fn configure_laravel_env(site: &Site, environment: &Environment) -> Result<(), String> {
-    let env_path = Path::new(&site.directory).join(".env");
+    let env_path = Path::new(&site.directory).join("app").join(".env");
     let mut contents = fs::read_to_string(&env_path)
         .map_err(|error| format!("Failed to read Laravel .env: {error}"))?;
     let driver = if environment.database == "PostgreSQL" {
@@ -471,7 +473,7 @@ fn configure_laravel_env(site: &Site, environment: &Environment) -> Result<(), S
 }
 
 fn configure_symfony_env(site: &Site, environment: &Environment) -> Result<(), String> {
-    let env_path = Path::new(&site.directory).join(".env");
+    let env_path = Path::new(&site.directory).join("app").join(".env");
     let mut contents = fs::read_to_string(&env_path)
         .map_err(|error| format!("Failed to read Symfony .env: {error}"))?;
     let url = if environment.database == "PostgreSQL" {
@@ -516,7 +518,7 @@ fn run_in_service(
         .runtime
         .filter(|_| status.running && status.compose_available)
         .ok_or(status.message)?;
-    let workdir = format!("/var/www/sites/{}", site.name);
+    let workdir = format!("/var/www/sites/{}/app", site.name);
     let output = crate::process::output(
         crate::containers::runtime_command(&executable)
             .args([
@@ -560,7 +562,7 @@ fn run_in_temporary_service(
         .runtime
         .filter(|_| status.running && status.compose_available)
         .ok_or(status.message)?;
-    let workdir = format!("/var/www/sites/{}", site.name);
+    let workdir = format!("/var/www/sites/{}/app", site.name);
     let output = crate::process::output(
         crate::containers::runtime_command(&executable)
             .args([
@@ -712,8 +714,9 @@ fn set_env(contents: String, key: &str, value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        detect_project_type, ensure_wordpress_proxy_https, is_node_project, set_env,
-        set_php_define, supports_existing_environment, DirectoryBaseline, SYMFONY_INSTALL_COMMAND,
+        detect_project_type, ensure_wordpress_proxy_https, import_project, is_node_project,
+        set_env, set_php_define, supports_existing_environment, DirectoryBaseline,
+        SYMFONY_INSTALL_COMMAND,
     };
 
     #[test]
@@ -737,6 +740,45 @@ mod tests {
         fs::write(root.join("package.json"), "{}").unwrap();
         assert_eq!(detect_project_type(&root), "node");
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn import_copies_source_files_directly_into_the_destination() {
+        // Callers pass the site's `app/` folder as `destination`, so
+        // `import_project` itself just copies and detects — the caller owns
+        // deciding where `app/` lives relative to the project root.
+        let base = std::env::temp_dir().join(format!("lspanel-import-copy-{}", std::process::id()));
+        let source = base.join("source");
+        let destination = base.join("destination/app");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("index.php"), "<?php echo 'hi';").unwrap();
+        fs::write(source.join(".env"), "SECRET=1").unwrap();
+
+        let project_type = import_project(&source, &destination).unwrap();
+
+        assert_eq!(project_type, "php");
+        assert!(destination.join("index.php").is_file());
+        assert!(destination.join(".env").is_file());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn import_detects_a_laravel_project() {
+        let base =
+            std::env::temp_dir().join(format!("lspanel-import-laravel-{}", std::process::id()));
+        let source = base.join("source");
+        let destination = base.join("destination/app");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(source.join("public")).unwrap();
+        fs::write(source.join("artisan"), "#!/usr/bin/env php").unwrap();
+        fs::write(source.join("public/index.php"), "<?php").unwrap();
+
+        let project_type = import_project(&source, &destination).unwrap();
+
+        assert_eq!(project_type, "laravel");
+        assert!(destination.join("public/index.php").is_file());
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

@@ -47,7 +47,15 @@ pub fn save_environment(
     app: tauri::AppHandle,
     environment: crate::containers::Environment,
 ) -> Result<Vec<crate::containers::Environment>, String> {
-    crate::containers::save(&app, environment)
+    let name = environment.name.clone();
+    let result = crate::containers::save(&app, environment)?;
+    crate::notifications::send_localized(
+        &app,
+        "environment-save",
+        &format!("Середовище «{name}» збережено"),
+        &format!("Environment \"{name}\" saved"),
+    );
+    Ok(result)
 }
 
 #[tauri::command]
@@ -55,7 +63,13 @@ pub fn delete_environment(
     app: tauri::AppHandle,
     id: String,
 ) -> Result<Vec<crate::containers::Environment>, String> {
-    crate::containers::delete(&app, &id)
+    let operation = crate::operations::create(&app, Some(&id), "delete-environment")?;
+    let result = crate::containers::delete(&app, &id);
+    match &result {
+        Ok(_) => crate::operations::complete(&app, &operation.id)?,
+        Err(error) => crate::operations::fail(&app, &operation.id, error)?,
+    }
+    result
 }
 
 #[tauri::command]
@@ -113,6 +127,35 @@ pub fn clear_operations(
     app: tauri::AppHandle,
 ) -> Result<Vec<crate::operations::Operation>, String> {
     crate::operations::clear(&app)
+}
+
+#[tauri::command]
+pub fn list_notifications(
+    app: tauri::AppHandle,
+) -> Result<Vec<crate::notifications::AppNotification>, String> {
+    crate::notifications::list(&app)
+}
+
+#[tauri::command]
+pub fn delete_notification(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<Vec<crate::notifications::AppNotification>, String> {
+    crate::notifications::delete(&app, &id)
+}
+
+#[tauri::command]
+pub fn mark_notifications_read(
+    app: tauri::AppHandle,
+) -> Result<Vec<crate::notifications::AppNotification>, String> {
+    crate::notifications::mark_all_read(&app)
+}
+
+#[tauri::command]
+pub fn clear_notifications(
+    app: tauri::AppHandle,
+) -> Result<Vec<crate::notifications::AppNotification>, String> {
+    crate::notifications::clear(&app)
 }
 
 #[tauri::command]
