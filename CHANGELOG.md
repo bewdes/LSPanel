@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-04
+
 ### Added
 
 - Persistent in-app notification center, with per-notification delete, mark-as-read, and clear-all, covering site/container/database/file-manager/certificate/LiveLink/settings operations.
@@ -19,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Symfony project provisioning, and dedicated single-process handling for Node/React projects.
 - LiveLink tunnel provider choice: ngrok and Cloudflare Tunnel, alongside the default Tailscale Serve/Funnel.
 - One-container-per-project enforcement in the project creation wizard (occupied environments are marked and rejected).
+- Cross-distribution dependency installation during onboarding for Docker, Podman, Git/GitHub CLI/npm/NVM, OpenSSL, NSS tools, and Cloudflare Tunnel.
+- Live installation progress with an explicit confirmation dialog showing every command before administrator authorization.
+- Managed Cloudflare Tunnel setup: account authentication, named tunnel creation, local configuration, DNS routing, and hostname validation.
+
+### Fixed
+
+- Docker detection and socket-access recovery after installation.
+- Onboarding disk-space detection for project directories that do not exist yet.
+- Blurred modal, menu, select, sheet, drawer, and tooltip rendering in WebKitGTK.
+- Nginx container health checks on images that do not include `wget`.
 
 ## [0.1.0] - 2026-07-28
 
@@ -37,4 +49,6 @@ Initial public beta.
 - Bilingual UI and documentation (English / Ukrainian).
 - Apache-2.0 license.
 
+[Unreleased]: https://github.com/bewdes/LSPanel/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/bewdes/LSPanel/releases/tag/v0.2.0
 [0.1.0]: https://github.com/bewdes/LSPanel/releases/tag/v0.1.0
