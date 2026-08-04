@@ -3,7 +3,7 @@ use std::{
     fs,
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -134,22 +134,39 @@ pub fn inspect(app: &tauri::AppHandle) -> Result<HealthReport, String> {
     ));
 
     let git_version = tool_version("git", &["--version"]);
+    let gh_version = tool_version("gh", &["--version"]);
+    let npm_version = tool_version("npm", &["--version"]);
+    let nvm_installed = nvm_installed();
+    let development_tools_ready =
+        git_version.is_some() && gh_version.is_some() && npm_version.is_some() && nvm_installed;
+    let missing_development_tools = [
+        git_version.is_none().then_some("Git"),
+        gh_version.is_none().then_some("gh"),
+        npm_version.is_none().then_some("npm"),
+        (!nvm_installed).then_some("nvm"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    let development_tools_summary = if development_tools_ready {
+        "Git, gh, npm and nvm are available.".into()
+    } else {
+        format!("Missing: {}.", missing_development_tools.join(", "))
+    };
     checks.push(check(
         "GIT",
-        "Git",
-        if git_version.is_some() {
+        "Git, GitHub CLI, npm and NVM",
+        if development_tools_ready {
             "healthy"
         } else {
             "warning"
         },
-        git_version
-            .as_deref()
-            .unwrap_or("Git was not found on PATH."),
-        "Cloning, committing, and branch operations on projects require Git.",
-        if git_version.is_none() {
-            vec!["Install Git (e.g. apt install git).".into()]
-        } else {
+        &development_tools_summary,
+        "Project source control and Node.js workflows use this development toolset.",
+        if development_tools_ready {
             Vec::new()
+        } else {
+            vec!["Install Git together with gh, npm and nvm.".into()]
         },
     ));
 
@@ -394,6 +411,20 @@ fn tool_version(command: &str, version_args: &[&str]) -> Option<String> {
                 .map(str::to_owned)
         });
     Some(version_line.unwrap_or_else(|| "Installed".into()))
+}
+
+fn nvm_installed() -> bool {
+    let configured = std::env::var_os("NVM_DIR").map(PathBuf::from);
+    let xdg = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .map(|path| path.join("nvm"));
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .map(|path| path.join(".nvm"));
+    [configured, xdg, home]
+        .into_iter()
+        .flatten()
+        .any(|directory| directory.join("nvm.sh").is_file())
 }
 
 fn check(

@@ -26,8 +26,17 @@ pub fn container_runtime_status(app: tauri::AppHandle) -> crate::containers::Run
 }
 
 #[tauri::command]
-pub fn dependency_install_command(tool: String) -> Option<String> {
-    crate::dependency_install::command_for(&tool)
+pub fn dependency_install_plan(
+    tool: String,
+) -> Result<crate::dependency_install::InstallPlan, String> {
+    crate::dependency_install::plan(&tool)
+}
+
+#[tauri::command]
+pub async fn install_dependency(app: tauri::AppHandle, tool: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::dependency_install::install(&app, &tool))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

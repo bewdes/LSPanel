@@ -29,6 +29,8 @@ pub struct LiveLinkEntry {
     pub mode: String,
     pub port: u16,
     pub local_port: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
 }
 
 fn default_provider() -> String {
@@ -40,6 +42,8 @@ fn default_provider() -> String {
 pub struct ProviderStatus {
     pub id: String,
     pub installed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authenticated: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -93,6 +97,7 @@ fn load_config(app: &tauri::AppHandle) -> Option<LiveLinkConfig> {
                 mode,
                 port: 443,
                 local_port: 18_080,
+                hostname: None,
             });
         }
     }
@@ -248,11 +253,17 @@ fn restore_links(app: &tauri::AppHandle, links: &[LiveLinkEntry]) {
             let _ = start_mode(&link.mode, link.port, link.local_port);
         } else {
             let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
+            let cloudflare_directory = cloudflare_config_directory(app).ok();
+            let cloudflare = link
+                .hostname
+                .as_deref()
+                .zip(cloudflare_directory.as_deref());
             let _ = crate::tunnel_provider::start(
                 &tunnel_state,
                 &link.provider,
                 &link.site_id,
                 link.local_port,
+                cloudflare,
             );
         }
     }
@@ -305,14 +316,17 @@ pub fn status(app: &tauri::AppHandle) -> LiveLinkStatus {
         ProviderStatus {
             id: "tailscale".into(),
             installed,
+            authenticated: None,
         },
         ProviderStatus {
             id: "ngrok".into(),
             installed: crate::tunnel_provider::installed("ngrok"),
+            authenticated: None,
         },
         ProviderStatus {
             id: "cloudflare".into(),
             installed: crate::tunnel_provider::installed("cloudflare"),
+            authenticated: Some(crate::tunnel_provider::cloudflare_authenticated()),
         },
     ];
     let configured_links = load_config(app)
@@ -446,6 +460,7 @@ pub fn start(
     site_id: &str,
     mode: &str,
     provider: &str,
+    hostname: Option<&str>,
 ) -> Result<LiveLinkStatus, String> {
     if !matches!(provider, "tailscale" | "ngrok" | "cloudflare") {
         return Err("Unsupported LiveLink provider".into());
@@ -466,6 +481,13 @@ pub fn start(
             "Спочатку запустіть середовище вибраного сайту, а потім увімкніть LiveLink".into(),
         );
     }
+    let hostname = if provider == "cloudflare" {
+        Some(validate_cloudflare_hostname(
+            hostname.ok_or("Enter a public hostname for Cloudflare Tunnel")?,
+        )?)
+    } else {
+        None
+    };
     let mode = if provider == "tailscale" {
         if !matches!(mode, "serve" | "funnel") {
             return Err("LiveLink mode must be serve or funnel".into());
@@ -527,6 +549,7 @@ pub fn start(
         mode: mode.clone(),
         port,
         local_port,
+        hostname: hostname.clone(),
     });
     save_config(app, links)?;
     if let Err(error) = crate::containers::refresh_gateway(app) {
@@ -556,14 +579,45 @@ pub fn start(
         }
     } else {
         let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
+        let cloudflare_directory = cloudflare_config_directory(app)?;
+        let cloudflare = hostname
+            .as_deref()
+            .map(|hostname| (hostname, cloudflare_directory.as_path()));
         if let Err(error) =
-            crate::tunnel_provider::start(&tunnel_state, provider, site_id, local_port)
+            crate::tunnel_provider::start(&tunnel_state, provider, site_id, local_port, cloudflare)
         {
             restore_links(app, &previous_links);
             return Err(error);
         }
     }
     Ok(status(app))
+}
+
+fn cloudflare_config_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|directory| directory.join("cloudflare"))
+        .map_err(|error| error.to_string())
+}
+
+fn validate_cloudflare_hostname(hostname: &str) -> Result<String, String> {
+    let hostname = hostname.trim().trim_end_matches('.').to_ascii_lowercase();
+    let valid = hostname.len() <= 253
+        && hostname.contains('.')
+        && hostname.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || character == '-')
+        });
+    if valid {
+        Ok(hostname)
+    } else {
+        Err("Enter a valid DNS hostname without https:// or a path".into())
+    }
 }
 
 pub fn stop(app: &tauri::AppHandle) -> Result<LiveLinkStatus, String> {
@@ -603,7 +657,8 @@ pub fn shutdown(app: &tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        missing_serve_handler, status_has_link, tailscale_permission_error, LiveLinkEntry,
+        missing_serve_handler, status_has_link, tailscale_permission_error,
+        validate_cloudflare_hostname, LiveLinkEntry,
     };
     use std::process::{ExitStatus, Output};
 
@@ -614,6 +669,17 @@ mod tests {
         )
         .unwrap();
         assert_eq!(entry.provider, "tailscale");
+    }
+
+    #[test]
+    fn cloudflare_hostname_accepts_dns_names_only() {
+        assert_eq!(
+            validate_cloudflare_hostname("App.Example.com.").unwrap(),
+            "app.example.com"
+        );
+        assert!(validate_cloudflare_hostname("https://app.example.com/path").is_err());
+        assert!(validate_cloudflare_hostname("../config.yml").is_err());
+        assert!(validate_cloudflare_hostname("localhost").is_err());
     }
 
     #[cfg(unix)]

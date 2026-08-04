@@ -28,6 +28,7 @@ mod file_manager_commands;
 mod git;
 mod git_commands;
 mod git_status_monitor;
+mod linux_platform;
 mod livelink;
 mod livelink_commands;
 mod logs;

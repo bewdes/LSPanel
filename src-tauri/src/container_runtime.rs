@@ -77,10 +77,13 @@ fn score(status: &RuntimeStatus) -> u8 {
 }
 
 fn inspect(runtime: &str) -> Option<RuntimeStatus> {
+    // `docker version --format ...` contacts both the client and the daemon.
+    // It exits with code 1 when Docker is installed but the current user does
+    // not yet have access to docker.sock, which previously made onboarding
+    // incorrectly report the client as not installed. `--version` is a pure
+    // client-side presence check; daemon access is assessed separately below.
     let version_output = crate::process::output(
-        command(runtime)
-            .args(["version", "--format", "{{.Client.Version}}"])
-            .stdin(Stdio::null()),
+        command(runtime).arg("--version").stdin(Stdio::null()),
         crate::process::SHORT_TIMEOUT,
         "container runtime version",
     )
@@ -88,9 +91,7 @@ fn inspect(runtime: &str) -> Option<RuntimeStatus> {
     if !version_output.status.success() {
         return None;
     }
-    let version = String::from_utf8_lossy(&version_output.stdout)
-        .trim()
-        .to_owned();
+    let version = client_version(runtime, &String::from_utf8_lossy(&version_output.stdout));
     let info_template = if runtime == "podman" {
         "{{.Version.Version}}"
     } else {
@@ -126,7 +127,7 @@ fn inspect(runtime: &str) -> Option<RuntimeStatus> {
         runtime: Some(runtime.into()),
         installed: true,
         running,
-        version: (!version.is_empty()).then_some(version),
+        version,
         compose_available,
         message: if !running {
             format!(
@@ -150,6 +151,27 @@ fn inspect(runtime: &str) -> Option<RuntimeStatus> {
     })
 }
 
+fn client_version(runtime: &str, output: &str) -> Option<String> {
+    let output = output.trim();
+    if output.is_empty() {
+        return None;
+    }
+    if runtime == "docker" {
+        return output
+            .strip_prefix("Docker version ")
+            .and_then(|value| value.split(',').next())
+            .map(str::to_owned)
+            .or_else(|| Some(output.to_owned()));
+    }
+    output
+        .strip_prefix("podman version ")
+        .or_else(|| output.strip_prefix("podman version"))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .or_else(|| Some(output.to_owned()))
+}
+
 pub(crate) fn command(runtime: &str) -> Command {
     let mut command = Command::new(runtime);
     #[cfg(unix)]
@@ -166,4 +188,21 @@ pub(crate) fn command(runtime: &str) -> Command {
         command.env("PODMAN_COMPOSE_PROVIDER", "/usr/bin/podman-compose");
     }
     command
+}
+
+#[cfg(test)]
+mod tests {
+    use super::client_version;
+
+    #[test]
+    fn parses_client_only_runtime_versions() {
+        assert_eq!(
+            client_version("docker", "Docker version 29.7.1, build e9452d6\n").as_deref(),
+            Some("29.7.1")
+        );
+        assert_eq!(
+            client_version("podman", "podman version 5.4.2\n").as_deref(),
+            Some("5.4.2")
+        );
+    }
 }

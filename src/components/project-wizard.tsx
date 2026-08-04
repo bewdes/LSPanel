@@ -1444,7 +1444,7 @@ export function ProjectWizard({
           )}
         </div>
       </div>
-      <div className="relative z-30 shrink-0 border-t bg-background/95 px-4 py-3 shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.45)] backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-6">
+      <div className="relative z-30 shrink-0 border-t bg-background px-4 py-3 shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.45)] lg:px-6">
         <div className="mx-auto flex max-w-3xl items-center gap-4">
           <Button
             className="shrink-0"

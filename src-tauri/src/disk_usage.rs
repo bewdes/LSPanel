@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::process::Stdio;
+use std::{path::Path, process::Stdio};
 
 use crate::containers::{detect_runtime, runtime_command};
 
@@ -71,14 +71,29 @@ fn parse_available_kilobytes(output: &str) -> Option<u64> {
     available.parse().ok()
 }
 
+fn existing_ancestor(path: &Path) -> Option<&Path> {
+    path.ancestors().find(|candidate| candidate.is_dir())
+}
+
 /// Available disk space, in bytes, for the filesystem containing `path`.
 /// Used by onboarding to show free space for the chosen projects directory
-/// before it necessarily exists, so callers should pass an existing ancestor
-/// (e.g. the parent directory) when the target itself may not be created yet.
+/// before it necessarily exists. The nearest existing ancestor is resolved
+/// here so every caller gets the same behavior for a future directory.
 pub fn free_space(path: &str) -> Result<u64, String> {
+    let requested = Path::new(path);
+    if path.trim().is_empty() {
+        return Err("The workspace path is empty".into());
+    }
+    let target = existing_ancestor(requested).ok_or_else(|| {
+        format!(
+            "Could not find an existing parent directory for {}",
+            requested.display()
+        )
+    })?;
     let output = crate::process::output(
         std::process::Command::new("df")
-            .args(["-Pk", path])
+            .arg("-Pk")
+            .arg(target)
             .stdin(Stdio::null()),
         crate::process::SHORT_TIMEOUT,
         "disk free space",
@@ -87,7 +102,7 @@ pub fn free_space(path: &str) -> Result<u64, String> {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
     }
     parse_available_kilobytes(&String::from_utf8_lossy(&output.stdout))
-        .map(|kilobytes| kilobytes * 1024)
+        .and_then(|kilobytes| kilobytes.checked_mul(1024))
         .ok_or_else(|| "Could not determine free disk space".to_owned())
 }
 
@@ -138,7 +153,8 @@ pub fn prune_dangling_images(app: &tauri::AppHandle) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_available_kilobytes, parse_categories};
+    use super::{existing_ancestor, parse_available_kilobytes, parse_categories};
+    use std::path::Path;
 
     #[test]
     fn parses_available_space_from_df_output() {
@@ -151,6 +167,16 @@ mod tests {
     fn tolerates_malformed_df_output() {
         assert_eq!(parse_available_kilobytes(""), None);
         assert_eq!(parse_available_kilobytes("Filesystem\n"), None);
+    }
+
+    #[test]
+    fn resolves_a_future_workspace_to_its_existing_parent() {
+        let temporary = std::env::temp_dir();
+        let future = temporary
+            .join("lspanel-directory-that-does-not-exist")
+            .join("sites");
+        assert_eq!(existing_ancestor(&future), Some(temporary.as_path()));
+        assert_eq!(existing_ancestor(Path::new("/")), Some(Path::new("/")));
     }
 
     #[test]

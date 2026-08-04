@@ -33,7 +33,8 @@ import { pickLanguage } from "@/i18n"
 import { welcomeScreenText } from "@/i18n/welcome-screen"
 import { formatMetricBytes } from "@/lib/format"
 import { errorMessage } from "@/lib/errors"
-import { installTool } from "@/lib/install"
+import { dependencyInstallPlan, type DependencyInstallPlan } from "@/lib/install"
+import { DependencyInstallDialog } from "@/components/dependency-install-dialog"
 import type { Runtime } from "@/types"
 
 export type AppSettings = {
@@ -71,7 +72,7 @@ type LiveLinkStatus = {
   installed: boolean
   connected: boolean
   serveEnabled: boolean
-  providers: Array<{ id: string; installed: boolean }>
+  providers: Array<{ id: string; installed: boolean; authenticated?: boolean }>
 }
 
 type HealthCheck = {
@@ -92,7 +93,7 @@ const REMOTE_ACCESS_PROVIDERS = [
     id: "cloudflare",
     name: "Cloudflare Tunnel",
     installUrl:
-      "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-local-tunnel/",
+      "https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/local-management/create-local-tunnel/",
   },
 ] as const
 
@@ -139,6 +140,9 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
   const [liveLinkStatus, setLiveLinkStatus] = React.useState<LiveLinkStatus | null>(null)
   const [error, setError] = React.useState("")
   const [installHint, setInstallHint] = React.useState("")
+  const [installingTool, setInstallingTool] = React.useState("")
+  const [pendingInstall, setPendingInstall] = React.useState<DependencyInstallPlan | null>(null)
+  const [cloudflareAuthBusy, setCloudflareAuthBusy] = React.useState(false)
   const uk = settings.language in welcomeScreenText ? settings.language === "uk" : false
   const text = pickLanguage(welcomeScreenText, uk)
 
@@ -206,11 +210,29 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
   }
   async function handleInstall(tool: string, fallbackUrl: string) {
     setInstallHint("")
+    setError("")
     try {
-      const outcome = await installTool(tool, fallbackUrl)
-      setInstallHint(outcome === "command" ? text.commandCopiedHint : "")
+      setPendingInstall(await dependencyInstallPlan(tool, fallbackUrl))
     } catch (value) {
       setError(errorMessage(value))
+    }
+  }
+  function handleInstalled() {
+    setInstallHint(text.installedHint)
+    checkRuntime()
+    if (step === 4) setLiveLinkStatus(null)
+  }
+  async function authenticateCloudflare() {
+    setCloudflareAuthBusy(true)
+    setError("")
+    try {
+      await invoke("cloudflare_tunnel_login")
+      setInstallHint(text.remoteAccess.cloudflareAuthenticated)
+      setLiveLinkStatus(null)
+    } catch (value) {
+      setError(errorMessage(value))
+    } finally {
+      setCloudflareAuthBusy(false)
     }
   }
   async function finish() {
@@ -270,6 +292,7 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
                 onInstallGuide={() => openExternal("https://docs.docker.com/engine/install/")}
                 onInstall={handleInstall}
                 installHint={installHint}
+                installingTool={installingTool}
               />
             )}
             {step === 4 && (
@@ -278,6 +301,9 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
                 status={liveLinkStatus}
                 onInstall={handleInstall}
                 installHint={installHint}
+                installingTool={installingTool}
+                cloudflareAuthBusy={cloudflareAuthBusy}
+                onAuthenticateCloudflare={() => void authenticateCloudflare()}
               />
             )}
             {step === READY_STEP && (
@@ -308,6 +334,13 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+        <DependencyInstallDialog
+          plan={pendingInstall}
+          text={text.installer}
+          onClose={() => setPendingInstall(null)}
+          onBusyChange={setInstallingTool}
+          onInstalled={handleInstalled}
+        />
       </div>
     </main>
   )
@@ -437,6 +470,7 @@ function EnvironmentStep({
   onInstallGuide,
   onInstall,
   installHint,
+  installingTool,
 }: {
   text: WelcomeText
   status: Runtime | null
@@ -447,6 +481,7 @@ function EnvironmentStep({
   onInstallGuide: () => void
   onInstall: (tool: string, fallbackUrl: string) => void
   installHint: string
+  installingTool: string
 }) {
   const ready = Boolean(status?.installed && status?.running && status?.composeAvailable)
   return (
@@ -464,10 +499,15 @@ function EnvironmentStep({
         {runtimes?.map((runtime) => {
           const name = runtime.runtime === "podman" ? "Podman" : "Docker"
           const runtimeReady = runtime.installed && runtime.running && runtime.composeAvailable
+          const needsDockerAccess =
+            runtime.runtime === "docker" &&
+            runtime.installed &&
+            !runtime.running &&
+            runtime.message.toLowerCase().includes("permission denied")
           const detail = !runtime.installed
             ? text.environment.notFound
             : !runtime.running
-              ? text.environment.notRunning
+              ? runtime.message || text.environment.notRunning
               : !runtime.composeAvailable
                 ? text.environment.notAvailable
                 : text.environment.ready
@@ -491,11 +531,14 @@ function EnvironmentStep({
                   </span>
                 )}
               </span>
-              <span className="text-xs text-muted-foreground">{detail}</span>
+              <span className="max-w-[45%] truncate text-xs text-muted-foreground" title={detail}>
+                {detail}
+              </span>
               {!runtime.installed && (
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={Boolean(installingTool)}
                   onClick={() =>
                     onInstall(
                       runtime.runtime ?? "docker",
@@ -505,13 +548,58 @@ function EnvironmentStep({
                     )
                   }
                 >
-                  <Download />
-                  {text.install}
+                  {installingTool === (runtime.runtime ?? "docker") ? (
+                    <RotateCw className="animate-spin" />
+                  ) : (
+                    <Download />
+                  )}
+                  {installingTool === (runtime.runtime ?? "docker")
+                    ? text.installing
+                    : text.install}
+                </Button>
+              )}
+              {needsDockerAccess && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={Boolean(installingTool)}
+                  onClick={() =>
+                    onInstall(
+                      "docker-access",
+                      "https://docs.docker.com/engine/install/linux-postinstall/",
+                    )
+                  }
+                >
+                  {installingTool === "docker-access" ? (
+                    <RotateCw className="animate-spin" />
+                  ) : (
+                    <Check />
+                  )}
+                  {installingTool === "docker-access"
+                    ? text.installing
+                    : text.environment.grantAccess}
                 </Button>
               )}
             </div>
           )
         })}
+        {status && !ready && (
+          <Alert className="mt-1">
+            <AlertDescription className="flex flex-col gap-2">
+              <span>{text.environment.notReadyHint}</span>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={onInstallGuide}>
+                  <Download />
+                  {text.environment.installGuide}
+                </Button>
+                <Button variant="outline" size="sm" onClick={onRetry} disabled={checking}>
+                  <RotateCw className={checking ? "animate-spin" : ""} />
+                  {text.environment.retry}
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
         {tools && tools.length > 0 && (
           <>
             <p className="mt-2 px-1 text-xs font-medium tracking-[.1em] text-muted-foreground uppercase">
@@ -535,10 +623,15 @@ function EnvironmentStep({
                       <Button
                         variant="outline"
                         size="sm"
+                        disabled={Boolean(installingTool)}
                         onClick={() => onInstall(installInfo.id, installInfo.fallbackUrl)}
                       >
-                        <Download />
-                        {text.install}
+                        {installingTool === installInfo.id ? (
+                          <RotateCw className="animate-spin" />
+                        ) : (
+                          <Download />
+                        )}
+                        {installingTool === installInfo.id ? text.installing : text.install}
                       </Button>
                     )}
                   </div>
@@ -548,23 +641,6 @@ function EnvironmentStep({
           </>
         )}
         {installHint && <p className="px-1 text-xs text-muted-foreground">{installHint}</p>}
-        {status && !ready && (
-          <Alert className="mt-1">
-            <AlertDescription className="flex flex-col gap-2">
-              <span>{text.environment.notReadyHint}</span>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={onInstallGuide}>
-                  <Download />
-                  {text.environment.installGuide}
-                </Button>
-                <Button variant="outline" size="sm" onClick={onRetry} disabled={checking}>
-                  <RotateCw className={checking ? "animate-spin" : ""} />
-                  {text.environment.retry}
-                </Button>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
       </CardContent>
     </>
   )
@@ -575,11 +651,17 @@ function RemoteAccessStep({
   status,
   onInstall,
   installHint,
+  installingTool,
+  cloudflareAuthBusy,
+  onAuthenticateCloudflare,
 }: {
   text: WelcomeText
   status: LiveLinkStatus | null
   onInstall: (tool: string, fallbackUrl: string) => void
   installHint: string
+  installingTool: string
+  cloudflareAuthBusy: boolean
+  onAuthenticateCloudflare: () => void
 }) {
   return (
     <>
@@ -607,10 +689,17 @@ function RemoteAccessStep({
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={Boolean(installingTool)}
                     onClick={() => onInstall(provider.id, provider.installUrl)}
                   >
-                    <Download />
-                    {text.remoteAccess.install(provider.name)}
+                    {installingTool === provider.id ? (
+                      <RotateCw className="animate-spin" />
+                    ) : (
+                      <Download />
+                    )}
+                    {installingTool === provider.id
+                      ? text.installing
+                      : text.remoteAccess.install(provider.name)}
                   </Button>
                 )}
               </div>
@@ -626,6 +715,26 @@ function RemoteAccessStep({
                       ? text.remoteAccess.connected
                       : text.remoteAccess.notConnected}
                   </span>
+                </div>
+              )}
+              {provider.id === "cloudflare" && installed && (
+                <div className="mt-2 flex items-center justify-between gap-3 pl-7 text-xs text-muted-foreground">
+                  <span>
+                    {status?.providers.find((item) => item.id === "cloudflare")?.authenticated
+                      ? text.remoteAccess.cloudflareAuthenticated
+                      : text.remoteAccess.cloudflareAuthenticationRequired}
+                  </span>
+                  {!status?.providers.find((item) => item.id === "cloudflare")?.authenticated && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={cloudflareAuthBusy}
+                      onClick={onAuthenticateCloudflare}
+                    >
+                      {cloudflareAuthBusy && <RotateCw className="animate-spin" />}
+                      {text.remoteAccess.authenticateCloudflare}
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -667,7 +776,9 @@ function ReadyStep({
     { label: text.ready.docker, value: dockerReady ? text.ready.ready : text.ready.notReady },
     {
       label: text.ready.remoteAccess,
-      value: liveLinkStatus?.installed ? text.ready.installedLabel : text.ready.notInstalledLabel,
+      value: liveLinkStatus?.providers.some((provider) => provider.installed)
+        ? text.ready.installedLabel
+        : text.ready.notInstalledLabel,
     },
   ]
   return (

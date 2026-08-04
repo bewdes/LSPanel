@@ -13,10 +13,11 @@ pub async fn start_livelink(
     site_id: String,
     mode: String,
     provider: String,
+    hostname: Option<String>,
 ) -> Result<LiveLinkStatus, AppError> {
     let worker = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        crate::livelink::start(&worker, &site_id, &mode, &provider)
+        crate::livelink::start(&worker, &site_id, &mode, &provider, hostname.as_deref())
     })
     .await
     .map_err(|error| AppError::from(format!("Не вдалося запустити LiveLink: {error}")))?
@@ -28,6 +29,21 @@ pub async fn start_livelink(
         "LiveLink enabled",
     );
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn cloudflare_tunnel_login(app: tauri::AppHandle) -> Result<(), AppError> {
+    tauri::async_runtime::spawn_blocking(crate::tunnel_provider::cloudflare_login)
+        .await
+        .map_err(|error| AppError::from(format!("Failed to authenticate Cloudflare: {error}")))?
+        .map_err(AppError::from)?;
+    crate::notifications::send_localized(
+        &app,
+        "livelink",
+        "Cloudflare Tunnel авторизовано",
+        "Cloudflare Tunnel authenticated",
+    );
+    Ok(())
 }
 
 #[tauri::command]

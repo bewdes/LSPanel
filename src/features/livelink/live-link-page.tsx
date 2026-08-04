@@ -34,7 +34,7 @@ type LiveLinkStatus = {
   siteId?: string
   mode?: string
   url?: string
-  providers: Array<{ id: TunnelProvider; installed: boolean }>
+  providers: Array<{ id: TunnelProvider; installed: boolean; authenticated?: boolean }>
   links: Array<{
     siteId: string
     provider: TunnelProvider
@@ -58,7 +58,7 @@ const PROVIDER_OPTIONS: Array<{ id: TunnelProvider; name: string; installUrl: st
     id: "cloudflare",
     name: "Cloudflare Tunnel",
     installUrl:
-      "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-local-tunnel/",
+      "https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/local-management/create-local-tunnel/",
   },
 ]
 
@@ -77,6 +77,8 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
   const [ngrokToken, setNgrokToken] = React.useState("")
   const [ngrokTokenBusy, setNgrokTokenBusy] = React.useState(false)
   const [ngrokTokenStatus, setNgrokTokenStatus] = React.useState("")
+  const [cloudflareHostname, setCloudflareHostname] = React.useState("")
+  const [cloudflareAuthBusy, setCloudflareAuthBusy] = React.useState(false)
   const initialized = React.useRef(false)
 
   async function handleInstall(tool: string, fallbackUrl: string) {
@@ -84,12 +86,13 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
     try {
       const outcome = await installTool(tool, fallbackUrl)
       setInstallHint(
-        outcome === "command"
+        outcome === "installed"
           ? uk
-            ? "Команду скопійовано в буфер обміну — відкрито термінал, вставте й виконайте її."
-            : "Command copied to clipboard — a terminal opened, paste and run it there."
+            ? "Пакет успішно встановлено."
+            : "The package was installed successfully."
           : "",
       )
+      if (outcome === "installed") await refresh()
     } catch (value) {
       setError(errorMessage(value))
     }
@@ -106,6 +109,20 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
       setNgrokTokenStatus(errorMessage(value))
     } finally {
       setNgrokTokenBusy(false)
+    }
+  }
+
+  async function authenticateCloudflare() {
+    setCloudflareAuthBusy(true)
+    setError("")
+    try {
+      await invoke("cloudflare_tunnel_login")
+      setInstallHint(uk ? "Cloudflare успішно авторизовано." : "Cloudflare authenticated.")
+      await refresh()
+    } catch (value) {
+      setError(errorMessage(value))
+    } finally {
+      setCloudflareAuthBusy(false)
     }
   }
 
@@ -171,6 +188,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
         siteId,
         mode: provider === "tailscale" ? mode : "tunnel",
         provider,
+        hostname: provider === "cloudflare" ? cloudflareHostname : null,
       })
       setStatus(next)
       setSiteId(nextUnlinkedSite(next.links))
@@ -186,7 +204,13 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
   const providerReady =
     provider === "tailscale"
       ? Boolean(status?.connected && status.serveEnabled)
-      : providerInstalled(provider)
+      : provider === "cloudflare"
+        ? Boolean(
+            providerInstalled("cloudflare") &&
+            status?.providers.find((item) => item.id === "cloudflare")?.authenticated &&
+            cloudflareHostname.trim(),
+          )
+        : providerInstalled(provider)
 
   const stop = async () => {
     setBusy(true)
@@ -369,6 +393,48 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                       <span className="text-xs text-muted-foreground">{ngrokTokenStatus}</span>
                     )}
                   </div>
+                </AlertDescription>
+              </Alert>
+            )}
+            {provider === "cloudflare" && status && providerInstalled("cloudflare") && (
+              <Alert>
+                <AlertDescription className="space-y-3">
+                  {!status.providers.find((item) => item.id === "cloudflare")?.authenticated ? (
+                    <>
+                      <p>
+                        {uk
+                          ? "Авторизуйте cloudflared. Відкриється браузер, де треба вибрати домен у вашому обліковому записі Cloudflare."
+                          : "Authenticate cloudflared. A browser will open so you can select a domain from your Cloudflare account."}
+                      </p>
+                      <Button
+                        variant="outline"
+                        disabled={cloudflareAuthBusy}
+                        onClick={() => void authenticateCloudflare()}
+                      >
+                        {cloudflareAuthBusy
+                          ? uk
+                            ? "Очікування авторизації…"
+                            : "Waiting for authentication…"
+                          : uk
+                            ? "Авторизувати Cloudflare"
+                            : "Authenticate Cloudflare"}
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <p>
+                        {uk
+                          ? "Вкажіть повне доменне ім’я. LSPanel створить іменований тунель, DNS-запис і локальний config.yml."
+                          : "Enter a full hostname. LSPanel will create a named tunnel, DNS record, and local config.yml."}
+                      </p>
+                      <Input
+                        value={cloudflareHostname}
+                        onChange={(event) => setCloudflareHostname(event.target.value)}
+                        placeholder="app.example.com"
+                        spellCheck={false}
+                      />
+                    </div>
+                  )}
                 </AlertDescription>
               </Alert>
             )}

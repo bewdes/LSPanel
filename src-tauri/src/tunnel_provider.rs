@@ -3,6 +3,7 @@ use std::{
     collections::HashMap,
     io::{BufRead, BufReader, Read, Write},
     net::TcpStream,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex},
     time::Duration,
@@ -45,6 +46,34 @@ pub fn installed(provider: &str) -> bool {
         &format!("{binary} version"),
     )
     .is_ok_and(|output| output.status.success())
+}
+
+fn cloudflared_directory() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cloudflared"))
+}
+
+pub fn cloudflare_authenticated() -> bool {
+    cloudflared_directory().is_some_and(|directory| directory.join("cert.pem").is_file())
+}
+
+pub fn cloudflare_login() -> Result<(), String> {
+    if !installed("cloudflare") {
+        return Err("cloudflared is not installed or is not available on PATH".into());
+    }
+    let output = Command::new("cloudflared")
+        .args(["tunnel", "login"])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| format!("Failed to launch Cloudflare authentication: {error}"))?;
+    if output.status.success() && cloudflare_authenticated() {
+        return Ok(());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    Err(if detail.is_empty() {
+        "Cloudflare authentication was cancelled or did not create cert.pem".into()
+    } else {
+        format!("Cloudflare authentication failed: {detail}")
+    })
 }
 
 /// Saves the ngrok authtoken via `ngrok config add-authtoken`, so ngrok
@@ -117,11 +146,16 @@ pub fn start(
     provider: &str,
     site_id: &str,
     local_port: u16,
+    cloudflare: Option<(&str, &Path)>,
 ) -> Result<(), String> {
     stop(state, site_id);
     match provider {
         "ngrok" => start_ngrok(state, site_id, local_port),
-        "cloudflare" => start_cloudflare(state, site_id, local_port),
+        "cloudflare" => {
+            let (hostname, config_directory) =
+                cloudflare.ok_or("A hostname is required for Cloudflare Tunnel")?;
+            start_cloudflare(state, site_id, local_port, hostname, config_directory)
+        }
         _ => Err("Unsupported LiveLink provider".into()),
     }
 }
@@ -173,30 +207,84 @@ fn ngrok_public_url(local_port: u16) -> Option<String> {
     })
 }
 
-fn start_cloudflare(state: &TunnelProcesses, site_id: &str, local_port: u16) -> Result<(), String> {
+fn start_cloudflare(
+    state: &TunnelProcesses,
+    site_id: &str,
+    local_port: u16,
+    hostname: &str,
+    config_directory: &Path,
+) -> Result<(), String> {
+    if !cloudflare_authenticated() {
+        return Err("Authenticate Cloudflare Tunnel before publishing a site".into());
+    }
+    let tunnel_name = format!(
+        "lspanel-{}",
+        site_id
+            .chars()
+            .filter(|character| character.is_ascii_alphanumeric() || *character == '-')
+            .take(48)
+            .collect::<String>()
+    );
+    let tunnel_id = cloudflare_tunnel_id(&tunnel_name)?.unwrap_or_else(String::new);
+    let tunnel_id = if tunnel_id.is_empty() {
+        cloudflare_create_tunnel(&tunnel_name)?;
+        cloudflare_tunnel_id(&tunnel_name)?
+            .ok_or("Cloudflare created the tunnel but it was not returned by tunnel list")?
+    } else {
+        tunnel_id
+    };
+    let credentials = cloudflared_directory()
+        .ok_or("The user home directory is unavailable")?
+        .join(format!("{tunnel_id}.json"));
+    if !credentials.is_file() {
+        return Err(format!(
+            "Cloudflare credentials were not found at {}",
+            credentials.display()
+        ));
+    }
+    std::fs::create_dir_all(config_directory)
+        .map_err(|error| format!("Failed to create Cloudflare config directory: {error}"))?;
+    let config_path = config_directory.join(format!("{tunnel_name}.yml"));
+    let credentials_value = serde_json::to_string(&credentials.to_string_lossy())
+        .map_err(|error| format!("Failed to encode the Cloudflare credentials path: {error}"))?;
+    let config = format!(
+        "url: http://127.0.0.1:{local_port}\ntunnel: {tunnel_id}\ncredentials-file: {}\n",
+        credentials_value
+    );
+    std::fs::write(&config_path, config)
+        .map_err(|error| format!("Failed to write Cloudflare tunnel config: {error}"))?;
+    let route = Command::new("cloudflared")
+        .args([
+            "tunnel",
+            "route",
+            "dns",
+            "--overwrite-dns",
+            &tunnel_id,
+            hostname,
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| format!("Failed to create the Cloudflare DNS route: {error}"))?;
+    if !route.status.success() {
+        return Err(format!(
+            "Cloudflare could not route {hostname}: {}",
+            String::from_utf8_lossy(&route.stderr).trim()
+        ));
+    }
     let mut child = Command::new("cloudflared")
-        .args(["tunnel", "--url", &format!("http://127.0.0.1:{local_port}")])
+        .args(["tunnel", "--config"])
+        .arg(&config_path)
+        .args(["run", &tunnel_id])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| format!("Failed to launch cloudflared: {error}"))?;
-    let url = Arc::new(Mutex::new(None));
+    let url = Arc::new(Mutex::new(Some(format!("https://{hostname}"))));
     if let Some(stderr) = child.stderr.take() {
-        let url = Arc::clone(&url);
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
-            for line in reader.lines().map_while(Result::ok) {
-                let Some(start) = line.find("https://") else {
-                    continue;
-                };
-                let Some(found) = line[start..].split_whitespace().next() else {
-                    continue;
-                };
-                if found.contains(".trycloudflare.com") {
-                    *url.lock().unwrap() = Some(found.trim_end_matches(['.', ',']).to_owned());
-                }
-            }
+            for _ in reader.lines().map_while(Result::ok) {}
         });
     }
     let handle = TunnelHandle {
@@ -204,17 +292,51 @@ fn start_cloudflare(state: &TunnelProcesses, site_id: &str, local_port: u16) -> 
         url: Arc::clone(&url),
     };
     state.0.lock().unwrap().insert(site_id.to_owned(), handle);
-    for _ in 0..30 {
+    for _ in 0..10 {
         std::thread::sleep(Duration::from_millis(500));
-        if url.lock().unwrap().is_some() {
+        if is_active(state, site_id) {
             return Ok(());
-        }
-        if !is_active(state, site_id) {
-            break;
         }
     }
     stop(state, site_id);
-    Err("cloudflared did not report a public URL. Make sure it is installed correctly.".into())
+    Err("The Cloudflare tunnel process stopped before it became ready".into())
+}
+
+fn cloudflare_tunnel_id(name: &str) -> Result<Option<String>, String> {
+    let output = Command::new("cloudflared")
+        .args(["tunnel", "list", "--output", "json"])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| format!("Failed to list Cloudflare tunnels: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "Failed to list Cloudflare tunnels: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let tunnels = serde_json::from_slice::<Vec<Value>>(&output.stdout)
+        .map_err(|error| format!("Cloudflare returned an invalid tunnel list: {error}"))?;
+    Ok(tunnels.into_iter().find_map(|tunnel| {
+        (tunnel.get("name")?.as_str()? == name)
+            .then(|| tunnel.get("id")?.as_str().map(str::to_owned))
+            .flatten()
+    }))
+}
+
+fn cloudflare_create_tunnel(name: &str) -> Result<(), String> {
+    let output = Command::new("cloudflared")
+        .args(["tunnel", "create", name])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| format!("Failed to create the Cloudflare tunnel: {error}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Failed to create the Cloudflare tunnel: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
 }
 
 fn http_get_local(port: u16, path: &str) -> Option<String> {
