@@ -1287,10 +1287,7 @@ fn ensure_gateway(app: &tauri::AppHandle, executable: &str) -> Result<(), String
         .output()
         .map_err(|error| error.to_string())?;
     let first_error = String::from_utf8_lossy(&output.stderr);
-    if !output.status.success()
-        && (first_error.contains("address already in use")
-            || first_error.contains("port is already allocated"))
-    {
+    if !output.status.success() && is_transient_recreate_error(&first_error) {
         drop(first_error);
         thread::sleep(Duration::from_millis(500));
         output = runtime_command(executable)
@@ -1315,6 +1312,17 @@ fn ensure_gateway(app: &tauri::AppHandle, executable: &str) -> Result<(), String
             },
         )
     }
+}
+
+/// Both of these are the same underlying race: `compose down` returns before
+/// the daemon has fully released the old gateway container's port binding
+/// and/or its name from the container name registry, so the immediately
+/// following `compose up` can fail as if the old container were still there.
+/// One short retry clears it without surfacing a spurious error to the user.
+fn is_transient_recreate_error(stderr: &str) -> bool {
+    stderr.contains("address already in use")
+        || stderr.contains("port is already allocated")
+        || stderr.contains("is already in use by container")
 }
 
 pub(crate) fn refresh_gateway(app: &tauri::AppHandle) -> Result<(), String> {

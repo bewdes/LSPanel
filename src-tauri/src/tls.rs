@@ -428,10 +428,43 @@ fn browser_stores() -> Vec<PathBuf> {
     browser_stores_in(&home)
 }
 
+/// Best-effort: creates an empty NSS certificate database at `path` (matching
+/// what Chrome would create on first launch) so the CA can be imported before
+/// Chrome has ever run. Returns false (and leaves the caller to skip this
+/// store) if certutil is missing or creation fails for any reason.
+fn create_nssdb(path: &Path) -> bool {
+    if path.join("cert9.db").is_file() {
+        return true;
+    }
+    if !Path::new("/usr/bin/certutil").is_file() {
+        return false;
+    }
+    let Ok(()) = fs::create_dir_all(path) else {
+        return false;
+    };
+    Command::new("certutil")
+        .args([
+            "-N",
+            "-d",
+            &format!("sql:{}", path.display()),
+            "--empty-password",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .is_ok_and(|output| output.status.success())
+}
+
 fn browser_stores_in(home: &Path) -> Vec<PathBuf> {
     let mut stores = Vec::new();
+    // Unlike Firefox's randomized profile directory, `~/.pki/nssdb` is the one
+    // fixed, well-known path Chrome (and any other NSS-aware app) reads for
+    // user-imported CAs — so, unlike Firefox, it's worth creating up front
+    // rather than only importing into it once Chrome happens to have created
+    // it first. Without this, running the installer before Chrome's first
+    // launch silently skipped it (empty store list, nothing to import into),
+    // reporting success while never actually trusting the CA in the browser.
     let chrome = home.join(".pki/nssdb");
-    if chrome.join("cert9.db").is_file() {
+    if chrome.join("cert9.db").is_file() || create_nssdb(&chrome) {
         stores.push(chrome);
     }
 

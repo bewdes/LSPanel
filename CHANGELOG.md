@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The local HTTPS gateway container could fail to recreate with "container name already in use" — the same restart race the port-conflict retry already handled, just under a different Docker error message.
+- The local CA was never actually imported into Chrome's certificate trust store on a machine where Chrome hadn't been launched yet (`~/.pki/nssdb` didn't exist), so "Install/trust CA" silently reported success while sites still showed as insecure.
+
 ## [0.3.0-beta] - 2026-08-05
 
 ### Added
