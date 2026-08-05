@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- LiveLink: per-provider status/setup card that shows only the selected tunnel provider's install and auth state, with explanatory notes for each (Tailscale operator access, ngrok free-plan domain limits, Cloudflare zone delegation).
+- LiveLink: ngrok and Cloudflare Tunnel installs now use the same confirm-then-progress dependency install dialog as onboarding, instead of installing silently.
+- LiveLink: optional reserved custom domain for ngrok tunnels (paid ngrok plans).
+- LiveLink: Cloudflare Tunnel base-domain field that auto-derives each site's hostname from its name; a one-click "reset authorization" to switch Cloudflare zones without leaving the app.
+- LiveLink: Cloudflare Tunnel login now streams the auth URL into the app as soon as it's available, instead of only showing success/failure once the whole flow completes.
+
+### Fixed
+
+- LiveLink: ngrok tunnels were killed and reported as failed even when they started successfully, because the public-URL match required a `127.0.0.1:<port>` address while ngrok reports `localhost:<port>`.
+- LiveLink: Cloudflare Tunnel creation failed with a deserialization error on accounts with zero existing tunnels (`cloudflared tunnel list --output json` prints `null`, not `[]`).
+
 ## [0.2.0] - 2026-08-04
 
 ### Added

@@ -8,6 +8,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+use tauri::Emitter;
 
 struct TunnelHandle {
     child: Child,
@@ -56,24 +57,108 @@ pub fn cloudflare_authenticated() -> bool {
     cloudflared_directory().is_some_and(|directory| directory.join("cert.pem").is_file())
 }
 
-pub fn cloudflare_login() -> Result<(), String> {
+/// `cert.pem` (written by `cloudflared tunnel login`) is scoped to a single
+/// Cloudflare zone chosen in the browser at login time — routing a hostname
+/// under any other zone fails with an authentication error until the user
+/// re-authenticates and picks that zone instead. Removing it lets the next
+/// login start over cleanly rather than silently keeping the old zone.
+pub fn cloudflare_reset_auth() -> Result<(), String> {
+    let Some(cert_path) = cloudflared_directory().map(|directory| directory.join("cert.pem"))
+    else {
+        return Err("The user home directory is unavailable".into());
+    };
+    if cert_path.is_file() {
+        std::fs::remove_file(&cert_path)
+            .map_err(|error| format!("Failed to remove {}: {error}", cert_path.display()))?;
+    }
+    Ok(())
+}
+
+fn ngrok_config_path() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config/ngrok/ngrok.yml"))
+}
+
+/// Cheap local check (no network round-trip): does ngrok's own config file
+/// already have a non-empty authtoken saved? Mirrors `ngrok config
+/// add-authtoken`'s own storage location and format.
+pub fn ngrok_authenticated() -> bool {
+    let Some(path) = ngrok_config_path() else {
+        return false;
+    };
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    contents
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("authtoken:"))
+        .is_some_and(|value| !value.trim().is_empty())
+}
+
+/// `cloudflared tunnel login` prints the auth URL on stdout, then blocks
+/// until the browser flow completes (or the user gives up). We can't rely on
+/// it having actually opened a browser for the user — headless/remote
+/// desktops or a missing default browser leave it silently stuck — so this
+/// streams the URL to the frontend the moment it's printed, via the
+/// "cloudflare-login-url" event, instead of only surfacing success/failure
+/// once the whole thing is done.
+pub fn cloudflare_login(app: &tauri::AppHandle) -> Result<(), String> {
     if !installed("cloudflare") {
         return Err("cloudflared is not installed or is not available on PATH".into());
     }
-    let output = Command::new("cloudflared")
+    let mut child = Command::new("cloudflared")
         .args(["tunnel", "login"])
         .stdin(Stdio::null())
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|error| format!("Failed to launch Cloudflare authentication: {error}"))?;
-    if output.status.success() && cloudflare_authenticated() {
+
+    let stdout = child.stdout.take().expect("stdout was piped");
+    let stderr = child.stderr.take().expect("stderr was piped");
+    let app_for_stdout = app.clone();
+    let stdout_thread = std::thread::spawn(move || {
+        let mut captured = String::new();
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if let Some(url) = extract_cloudflare_login_url(&line) {
+                let _ = app_for_stdout.emit("cloudflare-login-url", url);
+            }
+            captured.push_str(&line);
+            captured.push('\n');
+        }
+        captured
+    });
+    let stderr_thread = std::thread::spawn(move || {
+        BufReader::new(stderr)
+            .lines()
+            .map_while(Result::ok)
+            .collect::<Vec<_>>()
+            .join("\n")
+    });
+
+    let status = child
+        .wait()
+        .map_err(|error| format!("Failed to wait for cloudflared: {error}"))?;
+    let stdout_text = stdout_thread.join().unwrap_or_default();
+    let stderr_text = stderr_thread.join().unwrap_or_default();
+
+    if status.success() && cloudflare_authenticated() {
         return Ok(());
     }
-    let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-    Err(if detail.is_empty() {
+    let detail = if !stderr_text.trim().is_empty() {
+        stderr_text
+    } else {
+        stdout_text
+    };
+    Err(if detail.trim().is_empty() {
         "Cloudflare authentication was cancelled or did not create cert.pem".into()
     } else {
-        format!("Cloudflare authentication failed: {detail}")
+        format!("Cloudflare authentication failed: {}", detail.trim())
     })
+}
+
+fn extract_cloudflare_login_url(line: &str) -> Option<String> {
+    let start = line.find("https://dash.cloudflare.com")?;
+    Some(line[start..].trim().to_owned())
 }
 
 /// Saves the ngrok authtoken via `ngrok config add-authtoken`, so ngrok
@@ -147,10 +232,11 @@ pub fn start(
     site_id: &str,
     local_port: u16,
     cloudflare: Option<(&str, &Path)>,
+    ngrok_hostname: Option<&str>,
 ) -> Result<(), String> {
     stop(state, site_id);
     match provider {
-        "ngrok" => start_ngrok(state, site_id, local_port),
+        "ngrok" => start_ngrok(state, site_id, local_port, ngrok_hostname),
         "cloudflare" => {
             let (hostname, config_directory) =
                 cloudflare.ok_or("A hostname is required for Cloudflare Tunnel")?;
@@ -160,9 +246,21 @@ pub fn start(
     }
 }
 
-fn start_ngrok(state: &TunnelProcesses, site_id: &str, local_port: u16) -> Result<(), String> {
+fn start_ngrok(
+    state: &TunnelProcesses,
+    site_id: &str,
+    local_port: u16,
+    hostname: Option<&str>,
+) -> Result<(), String> {
+    let local_port_arg = local_port.to_string();
+    let mut args = vec!["http", &local_port_arg, "--log", "stdout"];
+    let reserved_url = hostname.map(|hostname| format!("https://{hostname}"));
+    if let Some(url) = reserved_url.as_deref() {
+        args.push("--url");
+        args.push(url);
+    }
     let child = Command::new("ngrok")
-        .args(["http", &local_port.to_string(), "--log", "stdout"])
+        .args(&args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -197,10 +295,14 @@ fn start_ngrok(state: &TunnelProcesses, site_id: &str, local_port: u16) -> Resul
 fn ngrok_public_url(local_port: u16) -> Option<String> {
     let body = http_get_local(4040, "/api/tunnels")?;
     let value: Value = serde_json::from_str(&body).ok()?;
-    let target = format!("127.0.0.1:{local_port}");
+    // Match on the port suffix only: `ngrok http <port>` reports the tunnel's
+    // config.addr as "http://localhost:<port>" (hostname, not "127.0.0.1"),
+    // so a "127.0.0.1:<port>" substring check here never matched and made
+    // every ngrok tunnel look like it failed to start, even when it hadn't.
+    let target_suffix = format!(":{local_port}");
     value.get("tunnels")?.as_array()?.iter().find_map(|tunnel| {
         let config_addr = tunnel.get("config")?.get("addr")?.as_str()?;
-        if !config_addr.contains(&target) {
+        if !config_addr.ends_with(&target_suffix) {
             return None;
         }
         tunnel.get("public_url")?.as_str().map(str::to_owned)
@@ -314,8 +416,12 @@ fn cloudflare_tunnel_id(name: &str) -> Result<Option<String>, String> {
             String::from_utf8_lossy(&output.stderr).trim()
         ));
     }
-    let tunnels = serde_json::from_slice::<Vec<Value>>(&output.stdout)
-        .map_err(|error| format!("Cloudflare returned an invalid tunnel list: {error}"))?;
+    // `cloudflared tunnel list --output json` prints the JSON literal `null`
+    // (not `[]`) when the account has no tunnels yet — e.g. right after a
+    // fresh `tunnel login` — so `Vec<Value>` alone fails to deserialize it.
+    let tunnels = serde_json::from_slice::<Option<Vec<Value>>>(&output.stdout)
+        .map_err(|error| format!("Cloudflare returned an invalid tunnel list: {error}"))?
+        .unwrap_or_default();
     Ok(tunnels.into_iter().find_map(|tunnel| {
         (tunnel.get("name")?.as_str()? == name)
             .then(|| tunnel.get("id")?.as_str().map(str::to_owned))

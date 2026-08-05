@@ -1,7 +1,9 @@
 import * as React from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import { ExternalLink, Globe2, LockKeyhole, RefreshCw, Unplug } from "lucide-react"
 
+import { DependencyInstallDialog } from "@/components/dependency-install-dialog"
 import { PageHeading } from "@/components/page-heading"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -18,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { errorMessage } from "@/lib/errors"
-import { installTool } from "@/lib/install"
+import { dependencyInstallPlan, type DependencyInstallPlan } from "@/lib/install"
 import type { Site } from "@/types"
 
 type TunnelProvider = "tailscale" | "ngrok" | "cloudflare"
@@ -74,28 +76,65 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
   const [installHint, setInstallHint] = React.useState("")
+  const [pendingInstall, setPendingInstall] = React.useState<DependencyInstallPlan | null>(null)
+  const [installingTool, setInstallingTool] = React.useState("")
   const [ngrokToken, setNgrokToken] = React.useState("")
   const [ngrokTokenBusy, setNgrokTokenBusy] = React.useState(false)
   const [ngrokTokenStatus, setNgrokTokenStatus] = React.useState("")
+  const [ngrokTokenEditing, setNgrokTokenEditing] = React.useState(false)
+  const [ngrokHostname, setNgrokHostname] = React.useState("")
   const [cloudflareHostname, setCloudflareHostname] = React.useState("")
+  const [cloudflareBaseDomain, setCloudflareBaseDomain] = React.useState(
+    () => localStorage.getItem("lspanel.cloudflareBaseDomain") ?? "",
+  )
   const [cloudflareAuthBusy, setCloudflareAuthBusy] = React.useState(false)
+  const [cloudflareLoginUrl, setCloudflareLoginUrl] = React.useState("")
   const initialized = React.useRef(false)
+
+  React.useEffect(() => {
+    localStorage.setItem("lspanel.cloudflareBaseDomain", cloudflareBaseDomain)
+  }, [cloudflareBaseDomain])
+
+  // Keeps the hostname field in sync with "<site name>.<base domain>" as the
+  // site or base domain changes — still a plain editable Input afterwards,
+  // so a manual tweak isn't fought on the next render.
+  React.useEffect(() => {
+    if (provider !== "cloudflare" || !cloudflareBaseDomain.trim()) return
+    const site = sites.find((item) => item.id === siteId)
+    if (site) setCloudflareHostname(`${site.name}.${cloudflareBaseDomain.trim()}`)
+  }, [provider, cloudflareBaseDomain, siteId, sites])
 
   async function handleInstall(tool: string, fallbackUrl: string) {
     setInstallHint("")
+    setError("")
     try {
-      const outcome = await installTool(tool, fallbackUrl)
-      setInstallHint(
-        outcome === "installed"
-          ? uk
-            ? "Пакет успішно встановлено."
-            : "The package was installed successfully."
-          : "",
-      )
-      if (outcome === "installed") await refresh()
+      setPendingInstall(await dependencyInstallPlan(tool, fallbackUrl))
     } catch (value) {
       setError(errorMessage(value))
     }
+  }
+
+  async function handleInstalled() {
+    setInstallHint(uk ? "Пакет успішно встановлено." : "The package was installed successfully.")
+    await refresh()
+  }
+
+  const installerText = {
+    warningTitle: uk ? "Підтвердження встановлення" : "Confirm installation",
+    warningDescription: uk
+      ? "Перевірте команди перед запуском. Вони змінять пакети системи."
+      : "Review the commands before running them. They will modify system packages.",
+    adminWarning: uk
+      ? "Система попросить підтвердити права адміністратора через PolicyKit."
+      : "The system will request administrator authorization through PolicyKit.",
+    detectedPlatform: uk ? "Визначена система" : "Detected system",
+    commands: uk ? "Буде виконано такі команди" : "The following commands will be executed",
+    cancel: uk ? "Скасувати" : "Cancel",
+    confirm: uk ? "Запустити встановлення" : "Start installation",
+    progressTitle: uk ? "Встановлення" : "Installing",
+    successTitle: uk ? "Встановлення завершено" : "Installation completed",
+    failedTitle: uk ? "Не вдалося встановити пакет" : "Package installation failed",
+    close: uk ? "Закрити" : "Close",
   }
 
   async function saveNgrokToken() {
@@ -105,6 +144,8 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
       await invoke("set_ngrok_authtoken", { token: ngrokToken })
       setNgrokToken("")
       setNgrokTokenStatus(uk ? "Authtoken збережено." : "Authtoken saved.")
+      setNgrokTokenEditing(false)
+      await refresh()
     } catch (value) {
       setNgrokTokenStatus(errorMessage(value))
     } finally {
@@ -114,10 +155,30 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
 
   async function authenticateCloudflare() {
     setCloudflareAuthBusy(true)
+    setCloudflareLoginUrl("")
     setError("")
+    const unlisten = await listen<string>("cloudflare-login-url", ({ payload }) =>
+      setCloudflareLoginUrl(payload),
+    )
     try {
       await invoke("cloudflare_tunnel_login")
       setInstallHint(uk ? "Cloudflare успішно авторизовано." : "Cloudflare authenticated.")
+      await refresh()
+    } catch (value) {
+      setError(errorMessage(value))
+    } finally {
+      unlisten()
+      setCloudflareAuthBusy(false)
+      setCloudflareLoginUrl("")
+    }
+  }
+
+  async function resetCloudflareAuth() {
+    setCloudflareAuthBusy(true)
+    setError("")
+    try {
+      await invoke("cloudflare_tunnel_reset")
+      setInstallHint(uk ? "Авторизацію Cloudflare скинуто." : "Cloudflare authorization was reset.")
       await refresh()
     } catch (value) {
       setError(errorMessage(value))
@@ -188,7 +249,12 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
         siteId,
         mode: provider === "tailscale" ? mode : "tunnel",
         provider,
-        hostname: provider === "cloudflare" ? cloudflareHostname : null,
+        hostname:
+          provider === "cloudflare"
+            ? cloudflareHostname
+            : provider === "ngrok"
+              ? ngrokHostname.trim() || null
+              : null,
       })
       setStatus(next)
       setSiteId(nextUnlinkedSite(next.links))
@@ -210,7 +276,40 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
             status?.providers.find((item) => item.id === "cloudflare")?.authenticated &&
             cloudflareHostname.trim(),
           )
-        : providerInstalled(provider)
+        : provider === "ngrok"
+          ? Boolean(
+              providerInstalled("ngrok") &&
+              status?.providers.find((item) => item.id === "ngrok")?.authenticated,
+            )
+          : providerInstalled(provider)
+
+  const startBlockedReason = (() => {
+    if (!siteId) return uk ? "Немає доступних сайтів." : "No sites available."
+    if (provider === "tailscale") {
+      if (!status?.installed)
+        return uk ? "Tailscale не встановлено." : "Tailscale is not installed."
+      if (!status?.connected) return uk ? "Tailscale не підключено." : "Tailscale is not connected."
+      if (!status.serveEnabled)
+        return uk
+          ? "Tailscale Serve ще не активовано для цього пристрою."
+          : "Tailscale Serve is not enabled for this device yet."
+    } else if (provider === "ngrok") {
+      if (!providerInstalled("ngrok"))
+        return uk ? "ngrok не встановлено." : "ngrok is not installed."
+      if (!status?.providers.find((item) => item.id === "ngrok")?.authenticated)
+        return uk
+          ? "ngrok не авторизовано — введіть authtoken."
+          : "ngrok is not authenticated — enter the authtoken."
+    } else if (provider === "cloudflare") {
+      if (!providerInstalled("cloudflare"))
+        return uk ? "Cloudflare Tunnel не встановлено." : "Cloudflare Tunnel is not installed."
+      if (!status?.providers.find((item) => item.id === "cloudflare")?.authenticated)
+        return uk ? "Cloudflare не авторизовано." : "Cloudflare is not authenticated."
+      if (!cloudflareHostname.trim())
+        return uk ? "Вкажіть домен Cloudflare." : "Enter the Cloudflare hostname."
+    }
+    return ""
+  })()
 
   const stop = async () => {
     setBusy(true)
@@ -290,155 +389,6 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                 })}
               </div>
             </div>
-            {provider === "tailscale" && !status?.installed && (
-              <Alert>
-                <AlertDescription className="space-y-3">
-                  <p>
-                    {uk
-                      ? "Tailscale CLI не знайдено. Встановіть Tailscale та увійдіть у свій tailnet."
-                      : "Tailscale CLI was not found. Install Tailscale and sign in to your tailnet."}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleInstall("tailscale", PROVIDER_OPTIONS[0].installUrl)}
-                  >
-                    {uk ? "Встановити Tailscale" : "Install Tailscale"}
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-            {provider === "tailscale" &&
-              status?.connected &&
-              !status.serveEnabled &&
-              status.enableUrl && (
-                <Alert>
-                  <AlertDescription className="space-y-3">
-                    <p>
-                      {uk
-                        ? "Tailscale Serve ще не активовано для цього пристрою."
-                        : "Tailscale Serve is not enabled for this device yet."}
-                    </p>
-                    <Button
-                      variant="outline"
-                      onClick={() => void invoke("open_url", { url: status.enableUrl })}
-                    >
-                      <ExternalLink />
-                      {uk ? "Активувати Tailscale Serve" : "Enable Tailscale Serve"}
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              )}
-            {provider !== "tailscale" && status && !providerInstalled(provider) && (
-              <Alert>
-                <AlertDescription className="space-y-3">
-                  <p>
-                    {uk
-                      ? `CLI ${providerName(provider)} не знайдено. Встановіть його й переконайтесь, що він доступний у PATH.`
-                      : `${providerName(provider)} CLI was not found. Install it and make sure it's on PATH.`}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const option = PROVIDER_OPTIONS.find((item) => item.id === provider)
-                      if (option) void handleInstall(option.id, option.installUrl)
-                    }}
-                  >
-                    {uk
-                      ? `Встановити ${providerName(provider)}`
-                      : `Install ${providerName(provider)}`}
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-            {provider === "ngrok" && status && providerInstalled("ngrok") && (
-              <Alert>
-                <AlertDescription className="space-y-3">
-                  <p>
-                    {uk
-                      ? "ngrok потребує authtoken вашого облікового запису, щоб запускати тунелі."
-                      : "ngrok needs your account's authtoken to start tunnels."}
-                  </p>
-                  <div className="flex gap-2">
-                    <Input
-                      value={ngrokToken}
-                      onChange={(event) => setNgrokToken(event.target.value)}
-                      placeholder="authtoken"
-                      type="password"
-                    />
-                    <Button
-                      variant="outline"
-                      disabled={ngrokTokenBusy || !ngrokToken.trim()}
-                      onClick={() => void saveNgrokToken()}
-                    >
-                      {uk ? "Зберегти" : "Save"}
-                    </Button>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="h-auto p-0"
-                      onClick={() =>
-                        void invoke("open_url", {
-                          url: "https://dashboard.ngrok.com/get-started/your-authtoken",
-                        })
-                      }
-                    >
-                      <ExternalLink />
-                      {uk ? "Отримати authtoken" : "Get your authtoken"}
-                    </Button>
-                    {ngrokTokenStatus && (
-                      <span className="text-xs text-muted-foreground">{ngrokTokenStatus}</span>
-                    )}
-                  </div>
-                </AlertDescription>
-              </Alert>
-            )}
-            {provider === "cloudflare" && status && providerInstalled("cloudflare") && (
-              <Alert>
-                <AlertDescription className="space-y-3">
-                  {!status.providers.find((item) => item.id === "cloudflare")?.authenticated ? (
-                    <>
-                      <p>
-                        {uk
-                          ? "Авторизуйте cloudflared. Відкриється браузер, де треба вибрати домен у вашому обліковому записі Cloudflare."
-                          : "Authenticate cloudflared. A browser will open so you can select a domain from your Cloudflare account."}
-                      </p>
-                      <Button
-                        variant="outline"
-                        disabled={cloudflareAuthBusy}
-                        onClick={() => void authenticateCloudflare()}
-                      >
-                        {cloudflareAuthBusy
-                          ? uk
-                            ? "Очікування авторизації…"
-                            : "Waiting for authentication…"
-                          : uk
-                            ? "Авторизувати Cloudflare"
-                            : "Authenticate Cloudflare"}
-                      </Button>
-                    </>
-                  ) : (
-                    <div className="space-y-2">
-                      <p>
-                        {uk
-                          ? "Вкажіть повне доменне ім’я. LSPanel створить іменований тунель, DNS-запис і локальний config.yml."
-                          : "Enter a full hostname. LSPanel will create a named tunnel, DNS record, and local config.yml."}
-                      </p>
-                      <Input
-                        value={cloudflareHostname}
-                        onChange={(event) => setCloudflareHostname(event.target.value)}
-                        placeholder="app.example.com"
-                        spellCheck={false}
-                      />
-                    </div>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
-            {installHint && <p className="px-1 text-xs text-muted-foreground">{installHint}</p>}
             <div className="space-y-2">
               <label className="text-sm font-medium">{uk ? "Сайт" : "Site"}</label>
               <NativeSelect
@@ -453,6 +403,39 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                 ))}
               </NativeSelect>
             </div>
+            {provider === "cloudflare" &&
+              status?.providers.find((item) => item.id === "cloudflare")?.authenticated && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {uk ? "Базовий домен Cloudflare" : "Cloudflare base domain"}
+                  </label>
+                  <Input
+                    value={cloudflareBaseDomain}
+                    onChange={(event) => setCloudflareBaseDomain(event.target.value)}
+                    placeholder="bewdes.studio"
+                    spellCheck={false}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {uk
+                      ? "Домен з вашого акаунту Cloudflare. Піддомен генерується автоматично з назви сайту."
+                      : "A domain from your Cloudflare account. The subdomain is generated automatically from the site name."}
+                  </p>
+                  <label className="text-sm font-medium">
+                    {uk ? "Домен Cloudflare для цього сайту" : "Cloudflare hostname for this site"}
+                  </label>
+                  <Input
+                    value={cloudflareHostname}
+                    onChange={(event) => setCloudflareHostname(event.target.value)}
+                    placeholder="fce.bewdes.studio"
+                    spellCheck={false}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {uk
+                      ? "Автоматично: назва сайту + базовий домен. Можна змінити вручну. LSPanel створить іменований тунель, DNS-запис і локальний config.yml."
+                      : "Auto-filled as site name + base domain. Editable if needed. LSPanel will create a named tunnel, DNS record, and local config.yml."}
+                  </p>
+                </div>
+              )}
             {provider === "tailscale" && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <button
@@ -503,6 +486,9 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                       ? "Запустити"
                       : "Start"}
               </Button>
+              {!busy && startBlockedReason && (
+                <p className="w-full text-xs text-muted-foreground">{startBlockedReason}</p>
+              )}
               {status?.active && (
                 <Button variant="outline" disabled={busy} onClick={() => void stop()}>
                   <Unplug />
@@ -513,24 +499,278 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader>
-            <CardTitle>{uk ? "Стан Tailscale" : "Tailscale status"}</CardTitle>
-            <CardDescription>
-              {status?.message ?? (uk ? "Перевірка…" : "Checking…")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Badge variant={status?.connected ? "default" : "secondary"}>
-              {status?.connected
-                ? uk
-                  ? "Підключено"
-                  : "Connected"
-                : uk
-                  ? "Не підключено"
-                  : "Disconnected"}
-            </Badge>
-            {status?.version && (
-              <p className="text-sm text-muted-foreground">Tailscale {status.version}</p>
+          <CardContent className="space-y-5">
+            {installHint && <p className="text-xs text-muted-foreground">{installHint}</p>}
+
+            {/* Tailscale */}
+            {provider === "tailscale" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">Tailscale</span>
+                  <Badge variant={status?.connected ? "default" : "secondary"}>
+                    {status?.connected
+                      ? uk
+                        ? "Підключено"
+                        : "Connected"
+                      : uk
+                        ? "Не підключено"
+                        : "Disconnected"}
+                  </Badge>
+                </div>
+                {status?.version && (
+                  <p className="text-xs text-muted-foreground">Tailscale {status.version}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {uk
+                    ? "Авторизація відбувається повністю через системний Tailscale (tailscale up), поза LSPanel — LSPanel лише читає стан. Serve/Funnel можуть один раз запросити operator-доступ (pkexec) і активацію Serve у вашому tailnet."
+                    : "Authentication happens entirely through the system Tailscale (tailscale up), outside LSPanel — LSPanel only reads the state. Serve/Funnel may once require operator access (pkexec) and enabling Serve in your tailnet."}
+                </p>
+                {!status?.installed && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={Boolean(installingTool)}
+                    onClick={() => void handleInstall("tailscale", PROVIDER_OPTIONS[0].installUrl)}
+                  >
+                    {installingTool === "tailscale"
+                      ? uk
+                        ? "Встановлення…"
+                        : "Installing…"
+                      : uk
+                        ? "Встановити Tailscale"
+                        : "Install Tailscale"}
+                  </Button>
+                )}
+                {status?.connected && !status.serveEnabled && status.enableUrl && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void invoke("open_url", { url: status.enableUrl })}
+                  >
+                    <ExternalLink />
+                    {uk ? "Активувати Tailscale Serve" : "Enable Tailscale Serve"}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* ngrok */}
+            {provider === "ngrok" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">ngrok</span>
+                  <Badge variant={providerInstalled("ngrok") ? "default" : "secondary"}>
+                    {providerInstalled("ngrok")
+                      ? status?.providers.find((item) => item.id === "ngrok")?.authenticated
+                        ? uk
+                          ? "Авторизовано"
+                          : "Authenticated"
+                        : uk
+                          ? "Не авторизовано"
+                          : "Not authenticated"
+                      : uk
+                        ? "Не знайдено"
+                        : "Not found"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {uk
+                    ? "Токен зберігається локально самим ngrok (~/.config/ngrok/ngrok.yml) — LSPanel лише його встановлює. На безкоштовному плані адреса завжди випадкова (напр. panama-starship-pants.ngrok-free.dev): кастомний домен вимагає платного плану ngrok."
+                    : "The token is stored locally by ngrok itself (~/.config/ngrok/ngrok.yml) — LSPanel only sets it. On the free plan the address is always random (e.g. panama-starship-pants.ngrok-free.dev): a custom domain requires a paid ngrok plan."}
+                </p>
+                {!providerInstalled("ngrok") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={Boolean(installingTool)}
+                    onClick={() => void handleInstall("ngrok", PROVIDER_OPTIONS[1].installUrl)}
+                  >
+                    {installingTool === "ngrok"
+                      ? uk
+                        ? "Встановлення…"
+                        : "Installing…"
+                      : uk
+                        ? "Встановити ngrok"
+                        : "Install ngrok"}
+                  </Button>
+                )}
+                {providerInstalled("ngrok") &&
+                  (!status?.providers.find((item) => item.id === "ngrok")?.authenticated ||
+                  ngrokTokenEditing ? (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Input
+                          value={ngrokToken}
+                          onChange={(event) => setNgrokToken(event.target.value)}
+                          placeholder="authtoken"
+                          type="password"
+                        />
+                        <Button
+                          variant="outline"
+                          disabled={ngrokTokenBusy || !ngrokToken.trim()}
+                          onClick={() => void saveNgrokToken()}
+                        >
+                          {uk ? "Зберегти" : "Save"}
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0"
+                          onClick={() =>
+                            void invoke("open_url", {
+                              url: "https://dashboard.ngrok.com/get-started/your-authtoken",
+                            })
+                          }
+                        >
+                          <ExternalLink />
+                          {uk ? "Отримати authtoken" : "Get your authtoken"}
+                        </Button>
+                        {ngrokTokenStatus && (
+                          <span className="text-xs text-muted-foreground">{ngrokTokenStatus}</span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {uk ? "Кастомний домен (опційно)" : "Custom domain (optional)"}
+                        </span>
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0"
+                          onClick={() => setNgrokTokenEditing(true)}
+                        >
+                          {uk ? "Змінити authtoken" : "Change authtoken"}
+                        </Button>
+                      </div>
+                      <Input
+                        value={ngrokHostname}
+                        onChange={(event) => setNgrokHostname(event.target.value)}
+                        placeholder="fce.ngrok-free.app"
+                        spellCheck={false}
+                      />
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0"
+                        onClick={() =>
+                          void invoke("open_url", { url: "https://dashboard.ngrok.com/domains" })
+                        }
+                      >
+                        <ExternalLink />
+                        {uk ? "Зарезервувати домен" : "Reserve a domain"}
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Cloudflare */}
+            {provider === "cloudflare" && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">Cloudflare Tunnel</span>
+                  <Badge variant={providerInstalled("cloudflare") ? "default" : "secondary"}>
+                    {providerInstalled("cloudflare")
+                      ? status?.providers.find((item) => item.id === "cloudflare")?.authenticated
+                        ? uk
+                          ? "Авторизовано"
+                          : "Authenticated"
+                        : uk
+                          ? "Не авторизовано"
+                          : "Not authenticated"
+                      : uk
+                        ? "Не знайдено"
+                        : "Not found"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {uk
+                    ? "Потрібен власний домен, підключений до вашого акаунту Cloudflare (DNS керується там). Авторизація відкриває браузер для вибору домену; після цього кастомні домени безкоштовні й без обмежень плану."
+                    : "Requires your own domain connected to a Cloudflare account (DNS is managed there). Authenticating opens a browser to pick a domain; after that, custom domains are free with no plan restrictions."}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {uk
+                    ? "Важливо: домен має бути делеговано на Cloudflare (NS-записи в реєстратора змінені на ті, що видає Cloudflare для цієї зони). Якщо домен лише додано в Cloudflare, а NS вказують на іншого провайдера (напр. реєстратора чи хостинг), створені записи існують тільки всередині Cloudflare й публічно не резолвляться — сайт буде недоступний, хоча тунель працює."
+                    : "Important: the domain must be delegated to Cloudflare (its registrar's NS records changed to the ones Cloudflare issues for that zone). If the domain is only added in Cloudflare while NS still points elsewhere (e.g. the registrar or another host), the records it creates only exist inside Cloudflare and never resolve publicly — the site stays unreachable even though the tunnel itself is running."}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {uk
+                    ? "Одна авторизація діє лише для однієї зони (домену), обраної в браузері під час входу. Щоб публікувати сайти на іншому домені, скиньте авторизацію нижче й увійдіть знову, обравши потрібний домен."
+                    : "One authorization covers only the single zone (domain) picked in the browser at login time. To publish sites on a different domain, reset the authorization below and log in again, picking that domain."}
+                </p>
+                {!providerInstalled("cloudflare") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={Boolean(installingTool)}
+                    onClick={() => void handleInstall("cloudflare", PROVIDER_OPTIONS[2].installUrl)}
+                  >
+                    {installingTool === "cloudflare"
+                      ? uk
+                        ? "Встановлення…"
+                        : "Installing…"
+                      : uk
+                        ? "Встановити Cloudflare Tunnel"
+                        : "Install Cloudflare Tunnel"}
+                  </Button>
+                )}
+                {providerInstalled("cloudflare") &&
+                  !status?.providers.find((item) => item.id === "cloudflare")?.authenticated && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={cloudflareAuthBusy}
+                      onClick={() => void authenticateCloudflare()}
+                    >
+                      {cloudflareAuthBusy
+                        ? uk
+                          ? "Очікування авторизації…"
+                          : "Waiting for authentication…"
+                        : uk
+                          ? "Авторизувати Cloudflare"
+                          : "Authenticate Cloudflare"}
+                    </Button>
+                  )}
+                {cloudflareAuthBusy && (
+                  <div className="space-y-2 rounded-lg border border-dashed p-3">
+                    <p className="text-xs text-muted-foreground">
+                      {uk
+                        ? "Має відкритися вкладка браузера — увійдіть у Cloudflare й оберіть домен для авторизації. Якщо вкладка не відкрилась сама, скористайтесь посиланням нижче."
+                        : "A browser tab should open — sign in to Cloudflare and pick a domain to authorize. If it didn't open on its own, use the link below."}
+                    </p>
+                    {cloudflareLoginUrl ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void invoke("open_url", { url: cloudflareLoginUrl })}
+                      >
+                        <ExternalLink />
+                        {uk ? "Відкрити сторінку авторизації" : "Open the authorization page"}
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {uk ? "Отримання посилання…" : "Fetching the link…"}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {providerInstalled("cloudflare") &&
+                  status?.providers.find((item) => item.id === "cloudflare")?.authenticated && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={cloudflareAuthBusy}
+                      onClick={() => void resetCloudflareAuth()}
+                    >
+                      {uk ? "Скинути авторизацію" : "Reset authorization"}
+                    </Button>
+                  )}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -627,6 +867,13 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
           </CardContent>
         </Card>
       </div>
+      <DependencyInstallDialog
+        plan={pendingInstall}
+        text={installerText}
+        onClose={() => setPendingInstall(null)}
+        onBusyChange={setInstallingTool}
+        onInstalled={() => void handleInstalled()}
+      />
     </div>
   )
 }

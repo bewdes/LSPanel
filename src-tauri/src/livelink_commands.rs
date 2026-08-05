@@ -33,7 +33,8 @@ pub async fn start_livelink(
 
 #[tauri::command]
 pub async fn cloudflare_tunnel_login(app: tauri::AppHandle) -> Result<(), AppError> {
-    tauri::async_runtime::spawn_blocking(crate::tunnel_provider::cloudflare_login)
+    let worker = app.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::tunnel_provider::cloudflare_login(&worker))
         .await
         .map_err(|error| AppError::from(format!("Failed to authenticate Cloudflare: {error}")))?
         .map_err(AppError::from)?;
@@ -42,6 +43,21 @@ pub async fn cloudflare_tunnel_login(app: tauri::AppHandle) -> Result<(), AppErr
         "livelink",
         "Cloudflare Tunnel авторизовано",
         "Cloudflare Tunnel authenticated",
+    );
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cloudflare_tunnel_reset(app: tauri::AppHandle) -> Result<(), AppError> {
+    tauri::async_runtime::spawn_blocking(crate::tunnel_provider::cloudflare_reset_auth)
+        .await
+        .map_err(|error| AppError::from(format!("Failed to reset Cloudflare auth: {error}")))?
+        .map_err(AppError::from)?;
+    crate::notifications::send_localized(
+        &app,
+        "livelink",
+        "Авторизацію Cloudflare Tunnel скинуто",
+        "Cloudflare Tunnel authorization reset",
     );
     Ok(())
 }

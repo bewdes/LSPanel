@@ -89,7 +89,9 @@ A local certificate authority so development sites can use trusted HTTPS instead
 Exposes a running local site through a temporary, shareable public link — useful for showing work-in-progress to a client or teammate without deploying anywhere.
 
 - Start/stop a LiveLink for a site and check its current status.
-- Choice of tunnel provider: Tailscale Serve/Funnel (default), ngrok, or Cloudflare Tunnel.
+- Choice of tunnel provider: Tailscale Serve/Funnel (default), ngrok, or Cloudflare Tunnel — install/auth state, setup, and notes are shown per selected provider, with the same confirm-then-progress install dialog used during onboarding.
+- ngrok: authtoken managed in-app; optional reserved custom domain (requires a paid ngrok plan).
+- Cloudflare Tunnel: browser-based login with the auth URL surfaced in-app (in case the browser doesn't open on its own), a base-domain field that auto-derives each site's hostname, and a one-click authorization reset for switching to a different Cloudflare zone.
 - Backed by: `livelink.rs`, `livelink_commands.rs`, `tunnel_provider.rs`.
 
 ## System health & diagnostics

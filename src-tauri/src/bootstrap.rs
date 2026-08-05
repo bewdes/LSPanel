@@ -37,6 +37,7 @@ pub fn run() {
             livelink_commands::stop_livelink,
             livelink_commands::set_ngrok_authtoken,
             livelink_commands::cloudflare_tunnel_login,
+            livelink_commands::cloudflare_tunnel_reset,
             certificate_commands::install_local_ca,
             certificate_commands::reissue_local_https,
             certificate_commands::local_certificate_status,

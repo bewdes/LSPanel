@@ -254,16 +254,23 @@ fn restore_links(app: &tauri::AppHandle, links: &[LiveLinkEntry]) {
         } else {
             let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
             let cloudflare_directory = cloudflare_config_directory(app).ok();
-            let cloudflare = link
-                .hostname
-                .as_deref()
-                .zip(cloudflare_directory.as_deref());
+            let cloudflare = (link.provider == "cloudflare")
+                .then(|| {
+                    link.hostname
+                        .as_deref()
+                        .zip(cloudflare_directory.as_deref())
+                })
+                .flatten();
+            let ngrok_hostname = (link.provider == "ngrok")
+                .then_some(link.hostname.as_deref())
+                .flatten();
             let _ = crate::tunnel_provider::start(
                 &tunnel_state,
                 &link.provider,
                 &link.site_id,
                 link.local_port,
                 cloudflare,
+                ngrok_hostname,
             );
         }
     }
@@ -321,7 +328,7 @@ pub fn status(app: &tauri::AppHandle) -> LiveLinkStatus {
         ProviderStatus {
             id: "ngrok".into(),
             installed: crate::tunnel_provider::installed("ngrok"),
-            authenticated: None,
+            authenticated: Some(crate::tunnel_provider::ngrok_authenticated()),
         },
         ProviderStatus {
             id: "cloudflare".into(),
@@ -482,9 +489,15 @@ pub fn start(
         );
     }
     let hostname = if provider == "cloudflare" {
-        Some(validate_cloudflare_hostname(
+        Some(validate_hostname(
             hostname.ok_or("Enter a public hostname for Cloudflare Tunnel")?,
         )?)
+    } else if provider == "ngrok" {
+        hostname
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(validate_hostname)
+            .transpose()?
     } else {
         None
     };
@@ -580,12 +593,26 @@ pub fn start(
     } else {
         let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
         let cloudflare_directory = cloudflare_config_directory(app)?;
-        let cloudflare = hostname
-            .as_deref()
-            .map(|hostname| (hostname, cloudflare_directory.as_path()));
-        if let Err(error) =
-            crate::tunnel_provider::start(&tunnel_state, provider, site_id, local_port, cloudflare)
-        {
+        let cloudflare = (provider == "cloudflare")
+            .then(|| {
+                hostname
+                    .as_deref()
+                    .map(|hostname| (hostname, cloudflare_directory.as_path()))
+            })
+            .flatten();
+        let ngrok_hostname = if provider == "ngrok" {
+            hostname.as_deref()
+        } else {
+            None
+        };
+        if let Err(error) = crate::tunnel_provider::start(
+            &tunnel_state,
+            provider,
+            site_id,
+            local_port,
+            cloudflare,
+            ngrok_hostname,
+        ) {
             restore_links(app, &previous_links);
             return Err(error);
         }
@@ -600,7 +627,7 @@ fn cloudflare_config_directory(app: &tauri::AppHandle) -> Result<PathBuf, String
         .map_err(|error| error.to_string())
 }
 
-fn validate_cloudflare_hostname(hostname: &str) -> Result<String, String> {
+fn validate_hostname(hostname: &str) -> Result<String, String> {
     let hostname = hostname.trim().trim_end_matches('.').to_ascii_lowercase();
     let valid = hostname.len() <= 253
         && hostname.contains('.')
@@ -657,8 +684,8 @@ pub fn shutdown(app: &tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        missing_serve_handler, status_has_link, tailscale_permission_error,
-        validate_cloudflare_hostname, LiveLinkEntry,
+        missing_serve_handler, status_has_link, tailscale_permission_error, validate_hostname,
+        LiveLinkEntry,
     };
     use std::process::{ExitStatus, Output};
 
@@ -674,12 +701,12 @@ mod tests {
     #[test]
     fn cloudflare_hostname_accepts_dns_names_only() {
         assert_eq!(
-            validate_cloudflare_hostname("App.Example.com.").unwrap(),
+            validate_hostname("App.Example.com.").unwrap(),
             "app.example.com"
         );
-        assert!(validate_cloudflare_hostname("https://app.example.com/path").is_err());
-        assert!(validate_cloudflare_hostname("../config.yml").is_err());
-        assert!(validate_cloudflare_hostname("localhost").is_err());
+        assert!(validate_hostname("https://app.example.com/path").is_err());
+        assert!(validate_hostname("../config.yml").is_err());
+        assert!(validate_hostname("localhost").is_err());
     }
 
     #[cfg(unix)]
