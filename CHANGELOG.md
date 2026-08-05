@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1-beta] - 2026-08-06
+
 ### Fixed
 
 - The local HTTPS gateway container could fail to recreate with "container name already in use" — the same restart race the port-conflict retry already handled, just under a different Docker error message.
@@ -70,7 +72,8 @@ Initial public beta.
 - Bilingual UI and documentation (English / Ukrainian).
 - Apache-2.0 license.
 
-[Unreleased]: https://github.com/bewdes/LSPanel/compare/v0.3.0-beta...HEAD
+[Unreleased]: https://github.com/bewdes/LSPanel/compare/v0.3.1-beta...HEAD
+[0.3.1-beta]: https://github.com/bewdes/LSPanel/releases/tag/v0.3.1-beta
 [0.3.0-beta]: https://github.com/bewdes/LSPanel/releases/tag/v0.3.0-beta
 [0.2.0]: https://github.com/bewdes/LSPanel/releases/tag/v0.2.0
 [0.1.0]: https://github.com/bewdes/LSPanel/releases/tag/v0.1.0
