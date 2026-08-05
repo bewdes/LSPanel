@@ -21,7 +21,7 @@
 ![Linux](https://img.shields.io/badge/platform-Linux-fcc624)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-> ⚠️ **Статус: v0.3.0 Beta.** LS Panel перебуває на ранній стадії активної розробки — можливі суттєві зміни та шорсткі кути.
+> ⚠️ **Статус: v0.3.0-beta.** LS Panel перебуває на ранній стадії активної розробки — можливі суттєві зміни та шорсткі кути.
 
 ## Чому LS Panel?
 
