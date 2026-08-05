@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-05
+
 ### Added
 
 - LiveLink: per-provider status/setup card that shows only the selected tunnel provider's install and auth state, with explanatory notes for each (Tailscale operator access, ngrok free-plan domain limits, Cloudflare zone delegation).
@@ -62,6 +64,7 @@ Initial public beta.
 - Bilingual UI and documentation (English / Ukrainian).
 - Apache-2.0 license.
 
-[Unreleased]: https://github.com/bewdes/LSPanel/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/bewdes/LSPanel/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/bewdes/LSPanel/releases/tag/v0.3.0
 [0.2.0]: https://github.com/bewdes/LSPanel/releases/tag/v0.2.0
 [0.1.0]: https://github.com/bewdes/LSPanel/releases/tag/v0.1.0
