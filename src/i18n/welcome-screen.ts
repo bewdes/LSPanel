@@ -72,6 +72,10 @@ export const welcomeScreenText = {
       cloudflareAuthenticationRequired: "Потрібна авторизація в обліковому записі Cloudflare.",
       authenticateCloudflare: "Авторизувати",
       cloudflareAuthenticated: "Cloudflare авторизовано",
+      cloudflareAuthUrlHint:
+        "Має відкритися вкладка браузера — увійдіть у Cloudflare й оберіть домен. Якщо вкладка не відкрилась сама, скористайтесь посиланням нижче.",
+      cloudflareFetchingUrl: "Отримання посилання…",
+      openCloudflareAuthUrl: "Відкрити сторінку авторизації",
       install: (name: string) => `Встановити ${name}`,
       skip: "Пропустити",
       enableLaterHint: "LiveLink можна увімкнути пізніше в налаштуваннях проєкту.",
@@ -165,6 +169,10 @@ export const welcomeScreenText = {
       cloudflareAuthenticationRequired: "Cloudflare account authentication is required.",
       authenticateCloudflare: "Authenticate",
       cloudflareAuthenticated: "Cloudflare authenticated",
+      cloudflareAuthUrlHint:
+        "A browser tab should open — sign in to Cloudflare and pick a domain. If it didn't open on its own, use the link below.",
+      cloudflareFetchingUrl: "Fetching the link…",
+      openCloudflareAuthUrl: "Open the authorization page",
       install: (name: string) => `Install ${name}`,
       skip: "Skip",
       enableLaterHint: "Enable LiveLink later in project settings.",

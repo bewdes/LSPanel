@@ -542,7 +542,7 @@ fn set_private_permissions(_path: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{browser_stores_in, safe_hostname};
+    use super::{browser_stores_in, create_nssdb, safe_hostname};
     use std::fs;
 
     #[test]
@@ -576,5 +576,28 @@ mod tests {
             assert!(stores.contains(&store), "missing {}", store.display());
         }
         fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn create_nssdb_is_a_noop_when_a_database_already_exists() {
+        let path = std::env::temp_dir().join(format!("lspanel-nssdb-noop-{}", std::process::id()));
+        fs::create_dir_all(&path).unwrap();
+        fs::write(path.join("cert9.db"), []).unwrap();
+        assert!(create_nssdb(&path));
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires the certutil binary (libnss3-tools)"]
+    fn create_nssdb_creates_a_real_database_on_a_fresh_directory() {
+        // Regression test: on a machine where Chrome had never been
+        // launched, ~/.pki/nssdb didn't exist yet, so the CA installer's
+        // browser-store list came back empty and it silently reported
+        // success without ever importing the CA anywhere.
+        let path = std::env::temp_dir().join(format!("lspanel-nssdb-fresh-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&path);
+        assert!(create_nssdb(&path));
+        assert!(path.join("cert9.db").is_file());
+        fs::remove_dir_all(path).unwrap();
     }
 }

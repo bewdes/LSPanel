@@ -1,6 +1,7 @@
 import React from "react"
 import { open } from "@tauri-apps/plugin-dialog"
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import {
   Check,
   CheckCircle2,
@@ -143,6 +144,7 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
   const [installingTool, setInstallingTool] = React.useState("")
   const [pendingInstall, setPendingInstall] = React.useState<DependencyInstallPlan | null>(null)
   const [cloudflareAuthBusy, setCloudflareAuthBusy] = React.useState(false)
+  const [cloudflareLoginUrl, setCloudflareLoginUrl] = React.useState("")
   const uk = settings.language in welcomeScreenText ? settings.language === "uk" : false
   const text = pickLanguage(welcomeScreenText, uk)
 
@@ -224,7 +226,11 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
   }
   async function authenticateCloudflare() {
     setCloudflareAuthBusy(true)
+    setCloudflareLoginUrl("")
     setError("")
+    const unlisten = await listen<string>("cloudflare-login-url", ({ payload }) =>
+      setCloudflareLoginUrl(payload),
+    )
     try {
       await invoke("cloudflare_tunnel_login")
       setInstallHint(text.remoteAccess.cloudflareAuthenticated)
@@ -232,7 +238,9 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
     } catch (value) {
       setError(errorMessage(value))
     } finally {
+      unlisten()
       setCloudflareAuthBusy(false)
+      setCloudflareLoginUrl("")
     }
   }
   async function finish() {
@@ -303,7 +311,9 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
                 installHint={installHint}
                 installingTool={installingTool}
                 cloudflareAuthBusy={cloudflareAuthBusy}
+                cloudflareLoginUrl={cloudflareLoginUrl}
                 onAuthenticateCloudflare={() => void authenticateCloudflare()}
+                onOpenUrl={openExternal}
               />
             )}
             {step === READY_STEP && (
@@ -653,7 +663,9 @@ function RemoteAccessStep({
   installHint,
   installingTool,
   cloudflareAuthBusy,
+  cloudflareLoginUrl,
   onAuthenticateCloudflare,
+  onOpenUrl,
 }: {
   text: WelcomeText
   status: LiveLinkStatus | null
@@ -661,7 +673,9 @@ function RemoteAccessStep({
   installHint: string
   installingTool: string
   cloudflareAuthBusy: boolean
+  cloudflareLoginUrl: string
   onAuthenticateCloudflare: () => void
+  onOpenUrl: (url: string) => void
 }) {
   return (
     <>
@@ -718,22 +732,44 @@ function RemoteAccessStep({
                 </div>
               )}
               {provider.id === "cloudflare" && installed && (
-                <div className="mt-2 flex items-center justify-between gap-3 pl-7 text-xs text-muted-foreground">
-                  <span>
-                    {status?.providers.find((item) => item.id === "cloudflare")?.authenticated
-                      ? text.remoteAccess.cloudflareAuthenticated
-                      : text.remoteAccess.cloudflareAuthenticationRequired}
-                  </span>
-                  {!status?.providers.find((item) => item.id === "cloudflare")?.authenticated && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={cloudflareAuthBusy}
-                      onClick={onAuthenticateCloudflare}
-                    >
-                      {cloudflareAuthBusy && <RotateCw className="animate-spin" />}
-                      {text.remoteAccess.authenticateCloudflare}
-                    </Button>
+                <div className="mt-2 space-y-2 pl-7">
+                  <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <span>
+                      {status?.providers.find((item) => item.id === "cloudflare")?.authenticated
+                        ? text.remoteAccess.cloudflareAuthenticated
+                        : text.remoteAccess.cloudflareAuthenticationRequired}
+                    </span>
+                    {!status?.providers.find((item) => item.id === "cloudflare")?.authenticated && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={cloudflareAuthBusy}
+                        onClick={onAuthenticateCloudflare}
+                      >
+                        {cloudflareAuthBusy && <RotateCw className="animate-spin" />}
+                        {text.remoteAccess.authenticateCloudflare}
+                      </Button>
+                    )}
+                  </div>
+                  {cloudflareAuthBusy && (
+                    <div className="space-y-2 rounded-lg border border-dashed p-3">
+                      <p className="text-xs text-muted-foreground">
+                        {text.remoteAccess.cloudflareAuthUrlHint}
+                      </p>
+                      {cloudflareLoginUrl ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onOpenUrl(cloudflareLoginUrl)}
+                        >
+                          {text.remoteAccess.openCloudflareAuthUrl}
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          {text.remoteAccess.cloudflareFetchingUrl}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

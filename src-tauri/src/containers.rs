@@ -3108,4 +3108,21 @@ mod tests {
             "containers remain after stack deletion"
         );
     }
+
+    #[test]
+    fn transient_recreate_errors_are_recognized() {
+        // Regression test: the gateway's recreate-on-restart retry originally
+        // only covered the port-binding race ("port is already allocated"),
+        // not the equally-common "container name already in use" race that
+        // happens when `compose down` returns before the daemon has fully
+        // released the old container's name.
+        assert!(is_transient_recreate_error(
+            "Bind for 0.0.0.0:443 failed: port is already allocated"
+        ));
+        assert!(is_transient_recreate_error(
+            "Error response from daemon: Conflict. The container name \"/lspanel-gateway-gateway-1\" is already in use by container \"abc123\""
+        ));
+        assert!(is_transient_recreate_error("address already in use"));
+        assert!(!is_transient_recreate_error("no such file or directory"));
+    }
 }

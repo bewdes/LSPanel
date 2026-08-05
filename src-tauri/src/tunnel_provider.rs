@@ -294,11 +294,15 @@ fn start_ngrok(
 
 fn ngrok_public_url(local_port: u16) -> Option<String> {
     let body = http_get_local(4040, "/api/tunnels")?;
-    let value: Value = serde_json::from_str(&body).ok()?;
-    // Match on the port suffix only: `ngrok http <port>` reports the tunnel's
-    // config.addr as "http://localhost:<port>" (hostname, not "127.0.0.1"),
-    // so a "127.0.0.1:<port>" substring check here never matched and made
-    // every ngrok tunnel look like it failed to start, even when it hadn't.
+    find_ngrok_public_url(&body, local_port)
+}
+
+/// Match on the port suffix only: `ngrok http <port>` reports the tunnel's
+/// config.addr as "http://localhost:<port>" (hostname, not "127.0.0.1"), so a
+/// "127.0.0.1:<port>" substring check here never matched and made every
+/// ngrok tunnel look like it failed to start, even when it hadn't.
+fn find_ngrok_public_url(body: &str, local_port: u16) -> Option<String> {
+    let value: Value = serde_json::from_str(body).ok()?;
     let target_suffix = format!(":{local_port}");
     value.get("tunnels")?.as_array()?.iter().find_map(|tunnel| {
         let config_addr = tunnel.get("config")?.get("addr")?.as_str()?;
@@ -416,10 +420,14 @@ fn cloudflare_tunnel_id(name: &str) -> Result<Option<String>, String> {
             String::from_utf8_lossy(&output.stderr).trim()
         ));
     }
-    // `cloudflared tunnel list --output json` prints the JSON literal `null`
-    // (not `[]`) when the account has no tunnels yet — e.g. right after a
-    // fresh `tunnel login` — so `Vec<Value>` alone fails to deserialize it.
-    let tunnels = serde_json::from_slice::<Option<Vec<Value>>>(&output.stdout)
+    find_tunnel_id(&output.stdout, name)
+}
+
+/// `cloudflared tunnel list --output json` prints the JSON literal `null`
+/// (not `[]`) when the account has no tunnels yet — e.g. right after a fresh
+/// `tunnel login` — so `Vec<Value>` alone fails to deserialize it.
+fn find_tunnel_id(stdout: &[u8], name: &str) -> Result<Option<String>, String> {
+    let tunnels = serde_json::from_slice::<Option<Vec<Value>>>(stdout)
         .map_err(|error| format!("Cloudflare returned an invalid tunnel list: {error}"))?
         .unwrap_or_default();
     Ok(tunnels.into_iter().find_map(|tunnel| {
@@ -458,4 +466,72 @@ fn http_get_local(port: u16, path: &str) -> Option<String> {
     buffer
         .split_once("\r\n\r\n")
         .map(|(_, body)| body.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{find_ngrok_public_url, find_tunnel_id};
+
+    #[test]
+    fn ngrok_tunnel_matches_localhost_style_addr() {
+        // Regression test: `ngrok http <port>` reports config.addr as
+        // "http://localhost:<port>", not "127.0.0.1:<port>" — this used to
+        // never match, so LSPanel killed working ngrok tunnels and reported
+        // them as failed to start.
+        let body = r#"{"tunnels":[{"public_url":"https://demo.ngrok-free.dev","config":{"addr":"http://localhost:18080"}}]}"#;
+        assert_eq!(
+            find_ngrok_public_url(body, 18080).as_deref(),
+            Some("https://demo.ngrok-free.dev")
+        );
+    }
+
+    #[test]
+    fn ngrok_tunnel_still_matches_127_0_0_1_style_addr() {
+        let body = r#"{"tunnels":[{"public_url":"https://demo.ngrok-free.dev","config":{"addr":"http://127.0.0.1:18080"}}]}"#;
+        assert_eq!(
+            find_ngrok_public_url(body, 18080).as_deref(),
+            Some("https://demo.ngrok-free.dev")
+        );
+    }
+
+    #[test]
+    fn ngrok_tunnel_does_not_match_a_different_port() {
+        let body = r#"{"tunnels":[{"public_url":"https://demo.ngrok-free.dev","config":{"addr":"http://localhost:18080"}}]}"#;
+        assert_eq!(find_ngrok_public_url(body, 9999), None);
+        // A port that is a numeric substring of the real one (e.g. 8080
+        // inside 18080) must not false-positive match.
+        assert_eq!(find_ngrok_public_url(body, 8080), None);
+    }
+
+    #[test]
+    fn ngrok_tunnel_handles_garbage_json() {
+        assert_eq!(find_ngrok_public_url("not json", 18080), None);
+        assert_eq!(find_ngrok_public_url("{}", 18080), None);
+    }
+
+    #[test]
+    fn cloudflare_null_tunnel_list_is_treated_as_empty() {
+        // Regression test: `cloudflared tunnel list --output json` prints the
+        // literal `null` (not `[]`) when the account has no tunnels yet —
+        // e.g. right after a fresh `tunnel login` — which used to fail
+        // deserialization outright instead of yielding "no matching tunnel".
+        assert_eq!(find_tunnel_id(b"null", "lspanel-site-fce").unwrap(), None);
+    }
+
+    #[test]
+    fn cloudflare_tunnel_list_finds_matching_name() {
+        let stdout = br#"[{"name":"lspanel-site-fce","id":"abc-123"},{"name":"other","id":"xyz"}]"#;
+        assert_eq!(
+            find_tunnel_id(stdout, "lspanel-site-fce")
+                .unwrap()
+                .as_deref(),
+            Some("abc-123")
+        );
+        assert_eq!(find_tunnel_id(stdout, "no-such-tunnel").unwrap(), None);
+    }
+
+    #[test]
+    fn cloudflare_tunnel_list_rejects_invalid_json() {
+        assert!(find_tunnel_id(b"not json", "lspanel-site-fce").is_err());
+    }
 }
