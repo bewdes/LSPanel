@@ -108,17 +108,18 @@ pub fn inspect(app: &tauri::AppHandle) -> Result<HealthReport, String> {
     ));
 
     let https_port_available = TcpListener::bind("127.0.0.1:443").is_ok();
+    let https_gateway = https_gateway_responds();
     checks.push(check(
         "HTTPS_GATEWAY",
         "Local HTTPS",
-        if gateway && !https_port_available {
+        if https_gateway {
             "healthy"
         } else if https_port_available {
             "warning"
         } else {
             "error"
         },
-        if gateway && !https_port_available {
+        if https_gateway {
             "The HTTPS gateway is bound to 127.0.0.1:443."
         } else if https_port_available {
             "HTTPS gateway is not running; port 443 is available."
@@ -387,6 +388,44 @@ fn gateway_responds() -> bool {
     stream.read_to_string(&mut response).is_ok()
         && response.contains("LS Panel")
         && response.starts_with("HTTP/1.1 404")
+}
+
+/// `https_port_available` alone only proves *something* is bound to 443, and
+/// `gateway_responds()` says nothing about port 443 at all since it only
+/// probes plain HTTP on port 80 - combining the two the way the HTTP check
+/// does could report "healthy" for HTTPS while an unrelated process (or a
+/// stale container) squats on 443 instead of the real gateway. This probes
+/// port 443 over an actual TLS connection and checks that the response is
+/// really the LS Panel gateway's fallback page.
+fn https_gateway_responds() -> bool {
+    let Ok(mut child) = Command::new("openssl")
+        .args([
+            "s_client",
+            "-connect",
+            "127.0.0.1:443",
+            "-servername",
+            "healthcheck.invalid",
+            "-quiet",
+            "-verify_quiet",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return false;
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin
+            .write_all(b"GET / HTTP/1.1\r\nHost: healthcheck.invalid\r\nConnection: close\r\n\r\n");
+    }
+    let Ok(output) =
+        crate::process::child_output(child, Duration::from_secs(2), "HTTPS gateway probe")
+    else {
+        return false;
+    };
+    let response = String::from_utf8_lossy(&output.stdout);
+    response.contains("LS Panel") && response.contains("HTTP/1.1 404")
 }
 
 /// Reports whether a CLI tool is installed by attempting to spawn it.
@@ -777,4 +816,19 @@ fn local_response(port: u16, host: &str) -> Result<LocalResponse, String> {
         content_type: header("content-type"),
         location: header("location"),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::https_gateway_responds;
+
+    #[test]
+    fn reports_no_https_gateway_when_nothing_is_listening_on_443() {
+        // Regression test: this must actually verify TLS on port 443 rather
+        // than inferring it from an unrelated plain-HTTP check on port 80
+        // combined with "port 443 merely isn't free to bind" - the old logic
+        // could report "healthy" while an unrelated process, not the real
+        // gateway, held port 443.
+        assert!(!https_gateway_responds());
+    }
 }
