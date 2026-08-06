@@ -229,6 +229,16 @@ fn start_node_process(
             log_buffer,
         )?;
     }
+    // "start" mode is a production-style run (built once, then served) —
+    // build before every start/restart, same as the install step above.
+    // "dev" mode never builds: its whole point is running straight off
+    // source with hot reload, so node_build_command is intentionally unused
+    // there — mirrors the container Node service in containers.rs.
+    if environment.node_run_mode == "start" {
+        if let Some(tokens) = configured_command(&environment.node_build_command) {
+            run_blocking(app, &environment.id, &tokens, directory, log_buffer)?;
+        }
+    }
     let configured_run_command = if environment.node_run_mode == "start" {
         &environment.node_start_command
     } else {

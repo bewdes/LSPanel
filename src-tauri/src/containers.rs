@@ -961,6 +961,24 @@ fn postgres_database_exists_query(database_name: &str) -> String {
     format!("SELECT 1 FROM pg_database WHERE datname = '{database_name}';")
 }
 
+/// Validated `DB_CHARSET` environment variable (set by the project wizard's
+/// "Encoding" field), or MySQL/MariaDB's sane default. Shared with
+/// `backups::clear_database_sql` so charset selection is consistent between
+/// initial creation and a manual "clear database".
+pub(crate) fn database_charset(environment: &Environment) -> &str {
+    environment
+        .environment_variables
+        .get("DB_CHARSET")
+        .filter(|value| {
+            !value.is_empty()
+                && value
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || character == '_')
+        })
+        .map(String::as_str)
+        .unwrap_or("utf8mb4")
+}
+
 fn ensure_database(
     app: &tauri::AppHandle,
     id: &str,
@@ -1060,6 +1078,20 @@ fn ensure_database(
             "Database service did not become ready within 120 seconds.\n{detail}"
         ));
     }
+    // The project wizard's "Automatically create database" toggle is stored
+    // as an environment variable rather than a dedicated field; honor it
+    // here instead of always creating the database regardless of the user's
+    // choice. The database *server* still needs to be up first (waited for
+    // above) even when skipping creation, since an app installer or an
+    // imported SQL dump may create its own database.
+    if environment
+        .environment_variables
+        .get("LS_PANEL_AUTO_CREATE_DATABASE")
+        .map(String::as_str)
+        == Some("false")
+    {
+        return Ok(());
+    }
     if environment.database == "PostgreSQL" {
         let query = postgres_database_exists_query(&environment.database_name);
         let query_args = vec![
@@ -1111,7 +1143,8 @@ fn ensure_database(
     } else {
         "mysql"
     };
-    let sql = format!("CREATE DATABASE IF NOT EXISTS `{}`; CREATE USER IF NOT EXISTS '{}'@'%' IDENTIFIED BY '{}'; ALTER USER '{}'@'%' IDENTIFIED BY '{}'; GRANT ALL PRIVILEGES ON `{}`.* TO '{}'@'%'; FLUSH PRIVILEGES;", environment.database_name, environment.database_user, environment.database_password, environment.database_user, environment.database_password, environment.database_name, environment.database_user);
+    let charset = database_charset(environment);
+    let sql = format!("CREATE DATABASE IF NOT EXISTS `{}` CHARACTER SET {charset}; CREATE USER IF NOT EXISTS '{}'@'%' IDENTIFIED BY '{}'; ALTER USER '{}'@'%' IDENTIFIED BY '{}'; GRANT ALL PRIVILEGES ON `{}`.* TO '{}'@'%'; FLUSH PRIVILEGES;", environment.database_name, environment.database_user, environment.database_password, environment.database_user, environment.database_password, environment.database_name, environment.database_user);
     let args = vec![
         "compose".into(),
         "exec".into(),
@@ -2345,8 +2378,17 @@ fn compose(
         } else {
             "tail -f /dev/null"
         };
+        // "start" mode is a production-style run (built once, then served) —
+        // build before every start/restart, same as `install` above. "dev"
+        // mode never builds: its whole point is running straight off source
+        // with hot reload, so node_build_command is intentionally unused there.
+        let build = if e.node_run_mode == "start" && !e.node_build_command.trim().is_empty() {
+            format!("{}; ", e.node_build_command.trim())
+        } else {
+            String::new()
+        };
         let startup =
-            serde_json::to_string(&format!("{}{}{}", corepack, install, command)).unwrap();
+            serde_json::to_string(&format!("{}{}{}{}", corepack, install, build, command)).unwrap();
         let inspector_port = if e.node_inspector {
             format!(
                 "    ports: [\"127.0.0.1:{0}:{0}\"]\n",
@@ -2579,6 +2621,50 @@ mod tests {
         assert!(yaml.contains("NODE_OPTIONS: \"--inspect=0.0.0.0:9230\""));
         assert!(yaml.contains("127.0.0.1:9230:9230"));
         assert!(!yaml.contains("ports: [\"9230:9230\"]"));
+    }
+
+    #[test]
+    fn node_start_mode_runs_the_build_command_before_starting() {
+        // Regression test: node_build_command was collected in the wizard,
+        // validated, and persisted, but never actually executed anywhere.
+        let mut environment = test_environment();
+        environment.node_run_mode = "start".into();
+        validate(&environment).unwrap();
+        let yaml = compose(
+            &environment,
+            Path::new("/tmp/LSP Sites"),
+            &[],
+            Path::new("/tmp/lspanel-test-db"),
+            Path::new("/tmp/lspanel-test-redis"),
+            Path::new("/tmp/lspanel-test-es"),
+            Path::new("/tmp/lspanel-test-minio"),
+            Path::new("/tmp/lspanel-test-rabbitmq"),
+        );
+        let build_at = yaml.find("pnpm build").expect("build command missing");
+        let start_at = yaml.find("pnpm start").expect("start command missing");
+        assert!(
+            build_at < start_at,
+            "build command must run before the start command"
+        );
+    }
+
+    #[test]
+    fn node_dev_mode_never_runs_the_build_command() {
+        let mut environment = test_environment();
+        environment.node_run_mode = "dev".into();
+        validate(&environment).unwrap();
+        let yaml = compose(
+            &environment,
+            Path::new("/tmp/LSP Sites"),
+            &[],
+            Path::new("/tmp/lspanel-test-db"),
+            Path::new("/tmp/lspanel-test-redis"),
+            Path::new("/tmp/lspanel-test-es"),
+            Path::new("/tmp/lspanel-test-minio"),
+            Path::new("/tmp/lspanel-test-rabbitmq"),
+        );
+        assert!(!yaml.contains("pnpm build"));
+        assert!(yaml.contains("pnpm dev"));
     }
 
     #[test]
@@ -3124,5 +3210,34 @@ mod tests {
         ));
         assert!(is_transient_recreate_error("address already in use"));
         assert!(!is_transient_recreate_error("no such file or directory"));
+    }
+
+    #[test]
+    fn database_charset_defaults_to_utf8mb4() {
+        let mut environment = test_environment();
+        environment.environment_variables.remove("DB_CHARSET");
+        assert_eq!(database_charset(&environment), "utf8mb4");
+    }
+
+    #[test]
+    fn database_charset_uses_a_valid_wizard_selection() {
+        let mut environment = test_environment();
+        environment
+            .environment_variables
+            .insert("DB_CHARSET".into(), "utf8".into());
+        assert_eq!(database_charset(&environment), "utf8");
+    }
+
+    #[test]
+    fn database_charset_rejects_values_that_are_not_a_safe_identifier() {
+        // A charset name is interpolated directly into `CREATE DATABASE ...
+        // CHARACTER SET {charset}` with no further escaping — reject
+        // anything that isn't alphanumeric/underscore rather than trusting
+        // an environment_variables entry that a user could have hand-edited.
+        let mut environment = test_environment();
+        environment
+            .environment_variables
+            .insert("DB_CHARSET".into(), "utf8mb4; DROP TABLE users;".into());
+        assert_eq!(database_charset(&environment), "utf8mb4");
     }
 }

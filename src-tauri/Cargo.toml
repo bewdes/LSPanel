@@ -19,6 +19,5 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
-thiserror = "2"
 portable-pty = "0.8"
 shell-words = "1"

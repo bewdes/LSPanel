@@ -7,6 +7,15 @@ export const databaseBackupsText = {
     databaseBackupsDescription: "SQL-дампи зберігаються локально в даних застосунку LS Panel.",
     working: "Виконання…",
     createBackup: "Створити резервну копію",
+    backupRetention: "Збереження резервних копій",
+    backupRetentionHint: "Зберігати найновіші резервні копії та видаляти старіші локальні дампи.",
+    backupsToKeepLabel: "Кількість резервних копій для збереження",
+    cleanOld: "Очистити старі",
+    nothingToClean: (count: number) =>
+      `Нічого очищати. Збережено ${count} ${count === 1 ? "резервну копію" : "резервних копій"}.`,
+    confirmPrune: (removeCount: number, keep: number) =>
+      `Видалити ${removeCount} найстаріших резервних копій і залишити найновіші ${keep}?`,
+    oldBackupsDeleted: (removed: number) => `Видалено старих резервних копій: ${removed}`,
     createdColumn: "Створено",
     engineColumn: "Двигун",
     sizeColumn: "Розмір",
@@ -30,6 +39,15 @@ export const databaseBackupsText = {
     databaseBackupsDescription: "SQL dumps are stored locally in LS Panel application data.",
     working: "Working…",
     createBackup: "Create backup",
+    backupRetention: "Backup retention",
+    backupRetentionHint: "Keep the newest backups and remove older local dumps.",
+    backupsToKeepLabel: "Backups to keep",
+    cleanOld: "Clean old",
+    nothingToClean: (count: number) =>
+      `Nothing to clean. ${count} backup${count === 1 ? "" : "s"} kept.`,
+    confirmPrune: (removeCount: number, keep: number) =>
+      `Delete ${removeCount} oldest backup${removeCount === 1 ? "" : "s"} and keep the newest ${keep}?`,
+    oldBackupsDeleted: (removed: number) => `Old backups deleted: ${removed}`,
     createdColumn: "Created",
     engineColumn: "Engine",
     sizeColumn: "Size",

@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Backup retention control: keep the newest N database backups and clean up older local dumps with one click, matching the existing project-snapshot retention UI.
+- The "SQL dump" field on project creation now actually imports the file into the new database instead of being silently ignored.
+
+### Fixed
+
+- `LS_PANEL_AUTO_CREATE_DATABASE` set to "false" was ignored — the database was always created on environment start regardless of the toggle. The selected database charset is now also applied when the database is created.
+- Node environments with run mode "start" never ran their configured build command before starting, in both the containerized and native runtimes.
+
+### Removed
+
+- Unused, unwired systemd service wrapper (`service.rs`) and demo data table component that were never reachable from the app.
+
 ## [0.3.1-beta] - 2026-08-06
 
 ### Fixed

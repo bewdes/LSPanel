@@ -219,6 +219,38 @@ pub async fn create_project_environment(
                 format!("Project build failed and was rolled back. {error}"),
             ));
         }
+        // The wizard's "SQL dump" field is stored as an environment variable
+        // rather than a dedicated field (mirroring LS_PANEL_AUTO_CREATE_DATABASE
+        // above); import it into the freshly created database now, once,
+        // rather than on every later start/restart. Container-only, same as
+        // the gateway/native split below — there's no database container to
+        // exec into for a native-mode environment.
+        let sql_dump = environment
+            .environment_variables
+            .get("LS_PANEL_SQL_DUMP")
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+        if let (Some(dump_path), false) = (sql_dump, environment.runtime_mode == "native") {
+            operations::progress_for_environment(
+                &worker,
+                &environment.id,
+                87,
+                "Importing SQL dump",
+            )?;
+            if let Err(error) = crate::backups::import_sql_file(
+                &worker,
+                &environment.id,
+                std::path::Path::new(&dump_path),
+            ) {
+                return Err(rollback_created_project(
+                    &worker,
+                    &project,
+                    &environment,
+                    &directory_baseline,
+                    format!("SQL dump import failed and the project was rolled back. {error}"),
+                ));
+            }
+        }
         if !external {
             if let Err(error) = project_templates::provision(&worker, &project, &environment) {
                 return Err(rollback_created_project(

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { invoke } from "@tauri-apps/api/core"
-import { RefreshCw, Save, Server, Trash2 } from "lucide-react"
+import { Eraser, RefreshCw, Save, Server, Trash2 } from "lucide-react"
 
 import {
   AlertDialog,
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { errorMessage } from "@/lib/errors"
 import { pickLanguage } from "@/i18n"
 import { databaseBackupsText } from "@/i18n/database-backups"
@@ -50,6 +51,7 @@ export function DatabaseBackups({
   const [busy, setBusy] = React.useState(false)
   const [message, setMessage] = React.useState("")
   const [messageOk, setMessageOk] = React.useState(false)
+  const [keep, setKeep] = React.useState(10)
   const [confirm, setConfirm] = React.useState<{
     backup: DatabaseBackup
     action: "restore" | "delete"
@@ -73,6 +75,32 @@ export function DatabaseBackups({
     try {
       await invoke("create_database_backup", { environmentId: environment.id })
       setMessage(text.databaseBackupCreated)
+      setMessageOk(true)
+      await refresh()
+      onChanged?.()
+    } catch (error) {
+      setMessage(errorMessage(error))
+      setMessageOk(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const pruneBackups = async () => {
+    const removeCount = Math.max(0, items.length - keep)
+    if (!removeCount) {
+      setMessage(text.nothingToClean(items.length))
+      setMessageOk(true)
+      return
+    }
+    if (!window.confirm(text.confirmPrune(removeCount, keep))) return
+    setBusy(true)
+    setMessage("")
+    try {
+      const removed = await invoke<number>("prune_database_backups", {
+        environmentId: environment.id,
+        keep,
+      })
+      setMessage(text.oldBackupsDeleted(removed))
       setMessageOk(true)
       await refresh()
       onChanged?.()
@@ -130,6 +158,27 @@ export function DatabaseBackups({
             <AlertDescription>{message}</AlertDescription>
           </Alert>
         )}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{text.backupRetention}</p>
+            <p className="text-xs text-muted-foreground">{text.backupRetentionHint}</p>
+          </div>
+          <Input
+            type="number"
+            min={1}
+            max={100}
+            className="w-20"
+            aria-label={text.backupsToKeepLabel}
+            value={keep}
+            onChange={(event) =>
+              setKeep(Math.min(100, Math.max(1, Number(event.target.value) || 1)))
+            }
+          />
+          <Button variant="outline" disabled={busy} onClick={() => void pruneBackups()}>
+            <Eraser />
+            {text.cleanOld}
+          </Button>
+        </div>
         <div className="overflow-hidden rounded-lg border">
           <Table>
             <TableHeader>

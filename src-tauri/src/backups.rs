@@ -245,17 +245,7 @@ fn clear_database_sql(environment: &crate::containers::Environment) -> Result<St
             environment.database_user
         ))
     } else {
-        let charset = environment
-            .environment_variables
-            .get("DB_CHARSET")
-            .filter(|value| {
-                !value.is_empty()
-                    && value
-                        .chars()
-                        .all(|character| character.is_ascii_alphanumeric() || character == '_')
-            })
-            .map(String::as_str)
-            .unwrap_or("utf8mb4");
+        let charset = crate::containers::database_charset(environment);
         Ok(format!(
             "DROP DATABASE `{name}`;\nCREATE DATABASE `{name}` CHARACTER SET {charset};\nGRANT ALL PRIVILEGES ON `{name}`.* TO '{}'@'%';\nFLUSH PRIVILEGES;",
             environment.database_user
@@ -465,6 +455,9 @@ pub fn create(app: &tauri::AppHandle, environment_id: &str) -> Result<DatabaseBa
 }
 
 pub fn prune(app: &tauri::AppHandle, environment_id: &str, keep: usize) -> Result<usize, String> {
+    if !(1..=100).contains(&keep) {
+        return Err("Keep count must be between 1 and 100".into());
+    }
     let backups = list(app, environment_id)?;
     let obsolete = obsolete_backups(backups, keep);
     let mut removed = 0;
