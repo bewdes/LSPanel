@@ -69,12 +69,9 @@ pub fn open(
         command.cwd(directory);
         command
     };
-    for key in [
-        "LD_LIBRARY_PATH",
-        "LD_PRELOAD",
-        "DOCKER_HOST",
-        "CONTAINER_HOST",
-    ] {
+    // See container_runtime::command for why DOCKER_HOST/CONTAINER_HOST are
+    // deliberately not stripped here.
+    for key in ["LD_LIBRARY_PATH", "LD_PRELOAD"] {
         command.env_remove(key)
     }
     let child = pair

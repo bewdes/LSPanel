@@ -1180,9 +1180,18 @@ fn ensure_network(executable: &str) -> Result<(), String> {
         .output()
         .map_err(|error| error.to_string())?;
     if output.status.success() {
+        return Ok(());
+    }
+    let error = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    // Two environments can start at nearly the same time and both see the
+    // network missing from `network inspect` before either finishes
+    // `network create`; the loser's create fails with an "already exists"
+    // style error even though the network is now present and usable either
+    // way, so that specific failure isn't a real problem.
+    if is_network_already_exists_error(&error) {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_owned())
+        Err(error)
     }
 }
 
@@ -1356,6 +1365,12 @@ fn is_transient_recreate_error(stderr: &str) -> bool {
     stderr.contains("address already in use")
         || stderr.contains("port is already allocated")
         || stderr.contains("is already in use by container")
+}
+
+/// Matches Docker's and Podman's differently-worded "a network with this
+/// name already exists" errors from `network create`.
+fn is_network_already_exists_error(stderr: &str) -> bool {
+    stderr.contains("already exists") || stderr.contains("already used")
 }
 
 pub(crate) fn refresh_gateway(app: &tauri::AppHandle) -> Result<(), String> {
@@ -3210,6 +3225,24 @@ mod tests {
         ));
         assert!(is_transient_recreate_error("address already in use"));
         assert!(!is_transient_recreate_error("no such file or directory"));
+    }
+
+    #[test]
+    fn network_already_exists_errors_are_recognized() {
+        // Regression test: two environments starting at nearly the same
+        // time can both see `network inspect lspanel` fail before either
+        // finishes `network create lspanel`; the loser must not surface
+        // this as a real error since the network exists and works either
+        // way.
+        assert!(is_network_already_exists_error(
+            "Error response from daemon: network with name lspanel already exists"
+        ));
+        assert!(is_network_already_exists_error(
+            "network name lspanel already used"
+        ));
+        assert!(!is_network_already_exists_error(
+            "no such file or directory"
+        ));
     }
 
     #[test]

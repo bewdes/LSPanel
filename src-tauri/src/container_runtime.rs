@@ -179,11 +179,18 @@ pub(crate) fn command(runtime: &str) -> Command {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
+    // LD_LIBRARY_PATH/LD_PRELOAD are stripped because a Snap-launched LS
+    // Panel inherits Snap's own confinement values, which don't apply to the
+    // system `docker`/`podman` binary and can break it with a symbol lookup
+    // error. DOCKER_HOST/CONTAINER_HOST are deliberately left alone: they're
+    // the standard way to point the CLI at a non-default local socket
+    // (Colima, rootless Podman, custom Docker contexts), and rootless
+    // Podman in particular often *requires* CONTAINER_HOST to be set
+    // explicitly for a GUI-launched app that never sourced the user's
+    // login shell profile.
     command
         .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
-        .env_remove("DOCKER_HOST")
-        .env_remove("CONTAINER_HOST");
+        .env_remove("LD_PRELOAD");
     if runtime.ends_with("podman") && Path::new("/usr/bin/podman-compose").is_file() {
         command.env("PODMAN_COMPOSE_PROVIDER", "/usr/bin/podman-compose");
     }

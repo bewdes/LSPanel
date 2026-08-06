@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The branch name shown right after "Initialize Git" on a brand-new project was the literal text "No commits yet on main" instead of "main" — a repository with no commits yet reports its branch in `git status` differently than one with history, and only the normal case was parsed.
 - Project name uniqueness was checked case-sensitively, so creating "MyProject" when "myproject" already existed passed validation but silently aliased the same directory on case-insensitive filesystems (macOS, Windows, exFAT, some Linux setups). Project names also had no length limit, even though they become a DNS label (`{name}.localhost`) capped at 63 characters.
 - System Health's "Local HTTPS" check could report "healthy" without ever verifying HTTPS actually worked: it combined an unrelated plain-HTTP probe on port 80 with "port 443 isn't free to bind," so an unrelated process (or a stale container) squatting on 443 instead of the real gateway still showed as healthy. It now probes port 443 over an actual TLS connection.
+- Two environments starting at nearly the same time could both see the shared `lspanel` Docker/Podman network as missing before either finished creating it, so the loser surfaced a raw "network already exists" error even though the network was now present and usable either way.
+- Every `docker`/`podman` invocation unconditionally stripped `DOCKER_HOST` and `CONTAINER_HOST`, silently ignoring a user's configured Docker context (Colima, custom sockets) — and breaking rootless Podman setups that specifically rely on `CONTAINER_HOST` for GUI-launched apps that never source a login shell profile.
 
 ### Changed
 
