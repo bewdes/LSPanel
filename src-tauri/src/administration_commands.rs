@@ -100,7 +100,28 @@ pub async fn operate_environment(
             )?;
             crate::snapshots::create_safety_for_environment(&worker_app, &id, &action)?;
         }
-        crate::containers::operate(&worker_app, &id, &action)
+        // This is the only "stop" path (the Containers page acts on the
+        // environment directly, unlike the Sites page's operate_site) that
+        // used to leave every site's `enabled` flag untouched. Auto-heal
+        // treats any environment with an enabled site as one that should be
+        // running, so a stop issued from here was silently undone the next
+        // time auto-heal ran (including immediately on the next app
+        // launch), making a manually stopped project start again on its
+        // own with no indication why.
+        let enabling = matches!(
+            action.as_str(),
+            "start" | "restart" | "rebuild" | "rebuild-no-cache" | "unpause"
+        );
+        if enabling {
+            crate::sites::set_environment_enabled(&worker_app, &id, true)?;
+        } else if matches!(action.as_str(), "stop" | "kill" | "destroy") {
+            crate::sites::set_environment_enabled(&worker_app, &id, false)?;
+        }
+        let outcome = crate::containers::operate(&worker_app, &id, &action);
+        if enabling && outcome.is_err() {
+            let _ = crate::sites::set_environment_enabled(&worker_app, &id, false);
+        }
+        outcome
     })
     .await
     .map_err(|error| error.to_string())?;
