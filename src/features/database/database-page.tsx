@@ -34,6 +34,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import {
   Dialog,
@@ -253,6 +254,10 @@ function DatabaseDetails({
   const [cloneTarget, setCloneTarget] = React.useState("")
   const [renameSource, setRenameSource] = React.useState("")
   const [renameTarget, setRenameTarget] = React.useState("")
+  const [tableExportOpen, setTableExportOpen] = React.useState(false)
+  const [availableTables, setAvailableTables] = React.useState<string[]>([])
+  const [selectedTables, setSelectedTables] = React.useState<Set<string>>(new Set())
+  const [tablesLoading, setTablesLoading] = React.useState(false)
 
   const load = React.useCallback(async () => {
     setBusy(true)
@@ -286,7 +291,7 @@ function DatabaseDetails({
 
   const action = async (
     command: string,
-    payload: Record<string, string> = {},
+    payload: Record<string, string | string[]> = {},
     success = text.operationCompleted,
   ) => {
     setBusy(true)
@@ -323,6 +328,53 @@ function DatabaseDetails({
     })
     if (path)
       await action("export_database_file", { path }, text.databaseExported).catch(() => undefined)
+  }
+
+  const openTableExport = async () => {
+    setTableExportOpen(true)
+    setTablesLoading(true)
+    setSelectedTables(new Set())
+    try {
+      const tables = await invoke<string[]>("list_database_tables", {
+        environmentId: environment.id,
+      })
+      setAvailableTables(tables)
+    } catch (value) {
+      setMessage(errorMessage(value))
+      setMessageOk(false)
+      setTableExportOpen(false)
+    } finally {
+      setTablesLoading(false)
+    }
+  }
+
+  const toggleTable = (name: string) => {
+    setSelectedTables((current) => {
+      const next = new Set(current)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  const exportSelectedTables = async () => {
+    if (!selectedTables.size) return
+    const path = await saveDialog({
+      title: text.exportTablesTitle(environment.name),
+      defaultPath: `${environment.databaseName ?? "database"}-tables.sql`,
+      filters: [{ name: "SQL dump", extensions: ["sql"] }],
+    })
+    if (!path) return
+    try {
+      await action(
+        "export_database_tables",
+        { path, tables: Array.from(selectedTables) },
+        text.databaseExported,
+      )
+      setTableExportOpen(false)
+    } catch {
+      // action already exposes the backend error in the page alert.
+    }
   }
 
   const clone = async () => {
@@ -421,6 +473,9 @@ function DatabaseDetails({
           </Button>
           <Button variant="outline" disabled={busy} onClick={() => void exportSql()}>
             <Download /> {text.exportSql}
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={() => void openTableExport()}>
+            <Download /> {text.exportTables}
           </Button>
           <Button
             variant="outline"
@@ -529,7 +584,7 @@ function DatabaseDetails({
         </CardContent>
       </Card>
 
-      <DatabaseConsole environment={environment} />
+      <DatabaseConsole environment={environment} language={language} />
       <DatabaseBackups environment={environment} language={language} />
 
       <Dialog
@@ -592,6 +647,51 @@ function DatabaseDetails({
               onClick={() => void rename()}
             >
               {busy ? text.renaming : text.renameDatabase}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={tableExportOpen}
+        onOpenChange={(open) => {
+          if (!open && !busy) setTableExportOpen(false)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{text.exportTablesTitle(environment.name)}</DialogTitle>
+            <DialogDescription>{text.exportTablesDescription}</DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-72 gap-1 overflow-y-auto">
+            {tablesLoading && (
+              <p className="text-sm text-muted-foreground">{text.checkingEllipsis}</p>
+            )}
+            {!tablesLoading && !availableTables.length && (
+              <p className="text-sm text-muted-foreground">{text.noTablesFound}</p>
+            )}
+            {availableTables.map((table) => (
+              <label
+                key={table}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
+              >
+                <Checkbox
+                  checked={selectedTables.has(table)}
+                  onCheckedChange={() => toggleTable(table)}
+                />
+                {table}
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={busy} onClick={() => setTableExportOpen(false)}>
+              {text.cancel}
+            </Button>
+            <Button
+              disabled={busy || !selectedTables.size}
+              onClick={() => void exportSelectedTables()}
+            >
+              <Download /> {text.exportSelectedTables(selectedTables.size)}
             </Button>
           </DialogFooter>
         </DialogContent>

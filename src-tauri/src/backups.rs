@@ -270,6 +270,31 @@ fn valid_database_name(name: &str) -> Result<&str, String> {
     Ok(name)
 }
 
+/// Same identifier shape as `valid_database_name`. Table names end up as
+/// bare positional/`-t` arguments to `mysqldump`/`pg_dump` (not through a
+/// shell, so no shell-injection risk), but a value starting with `-` would
+/// still be parsed by those tools as an option flag rather than a table
+/// name, so the same strict identifier check applies here.
+fn valid_table_name(name: &str) -> Result<&str, String> {
+    let name = name.trim();
+    if name.is_empty()
+        || name.len() > 64
+        || !name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+        || name
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_digit())
+    {
+        return Err(
+            "Table name must start with a letter and contain only letters, digits and underscores"
+                .into(),
+        );
+    }
+    Ok(name)
+}
+
 pub fn query(app: &tauri::AppHandle, environment_id: &str, sql: &str) -> Result<String, String> {
     if sql.trim().is_empty() {
         return Err("SQL query is empty".into());
@@ -305,6 +330,21 @@ pub fn query(app: &tauri::AppHandle, environment_id: &str, sql: &str) -> Result<
     let text = String::from_utf8_lossy(&output.stdout);
     Ok(text.chars().take(1_000_000).collect())
 }
+pub fn list_tables(app: &tauri::AppHandle, environment_id: &str) -> Result<Vec<String>, String> {
+    let environment = environment(app, environment_id)?;
+    let sql = if environment.database == "PostgreSQL" {
+        "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;".to_owned()
+    } else {
+        "SHOW TABLES;".into()
+    };
+    Ok(query(app, environment_id, &sql)?
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
 pub fn info(app: &tauri::AppHandle, environment_id: &str) -> Result<DatabaseInfo, String> {
     let environment = environment(app, environment_id)?;
     let sql = if environment.database == "PostgreSQL" {
@@ -454,12 +494,17 @@ pub fn create(app: &tauri::AppHandle, environment_id: &str) -> Result<DatabaseBa
         .ok_or("Backup file was not created".into())
 }
 
-pub fn prune(app: &tauri::AppHandle, environment_id: &str, keep: usize) -> Result<usize, String> {
+pub fn prune(
+    app: &tauri::AppHandle,
+    environment_id: &str,
+    keep: usize,
+    max_total_bytes: Option<u64>,
+) -> Result<usize, String> {
     if !(1..=100).contains(&keep) {
         return Err("Keep count must be between 1 and 100".into());
     }
     let backups = list(app, environment_id)?;
-    let obsolete = obsolete_backups(backups, keep);
+    let obsolete = obsolete_backups(backups, keep, max_total_bytes);
     let mut removed = 0;
     for backup in &obsolete {
         if fs::remove_file(&backup.path).is_ok() {
@@ -469,8 +514,26 @@ pub fn prune(app: &tauri::AppHandle, environment_id: &str, keep: usize) -> Resul
     Ok(removed)
 }
 
-fn obsolete_backups(backups: Vec<DatabaseBackup>, keep: usize) -> Vec<DatabaseBackup> {
-    backups.into_iter().skip(keep).collect()
+/// Keeps the newest backups within both budgets at once: at most `keep`
+/// backups, and (when set) a running total no larger than
+/// `max_total_bytes`. `backups` must already be sorted newest-first.
+fn obsolete_backups(
+    backups: Vec<DatabaseBackup>,
+    keep: usize,
+    max_total_bytes: Option<u64>,
+) -> Vec<DatabaseBackup> {
+    let mut kept_bytes: u64 = 0;
+    let mut obsolete = Vec::new();
+    for (index, backup) in backups.into_iter().enumerate() {
+        let within_count = index < keep;
+        let within_size = max_total_bytes.is_none_or(|max| kept_bytes + backup.size <= max);
+        if within_count && within_size {
+            kept_bytes += backup.size;
+        } else {
+            obsolete.push(backup);
+        }
+    }
+    obsolete
 }
 
 pub fn restore(
@@ -583,6 +646,74 @@ pub fn export_sql_file(
         let _ = fs::remove_file(&temporary);
         format!("Failed to export database: {error}")
     })?;
+    if destination.is_file() {
+        fs::remove_file(destination).map_err(|error| {
+            let _ = fs::remove_file(&temporary);
+            format!("Failed to replace database export: {error}")
+        })?;
+    }
+    fs::rename(&temporary, destination).map_err(|error| {
+        let _ = fs::remove_file(&temporary);
+        format!("Failed to finalize database export: {error}")
+    })
+}
+
+/// Exports only the given tables from the project database, rather than the
+/// whole thing. Unlike `export_sql_file`, this never touches the backups
+/// directory - a partial, table-scoped dump isn't a full recoverable backup,
+/// so it wouldn't make sense to file it alongside real ones.
+pub fn export_sql_file_for_tables(
+    app: &tauri::AppHandle,
+    environment_id: &str,
+    destination: &std::path::Path,
+    tables: &[String],
+) -> Result<(), String> {
+    if destination.extension().and_then(|value| value.to_str()) != Some("sql") {
+        return Err("Database export path must end with .sql".into());
+    }
+    if destination
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.file_type().is_symlink())
+    {
+        return Err("Database export cannot overwrite a symbolic link".into());
+    }
+    let parent = destination.parent().ok_or("Invalid database export path")?;
+    if !parent.is_dir() {
+        return Err("Database export directory does not exist".into());
+    }
+    if tables.is_empty() {
+        return Err("Select at least one table to export".into());
+    }
+    let tables = tables
+        .iter()
+        .map(|table| valid_table_name(table).map(str::to_owned))
+        .collect::<Result<Vec<_>, _>>()?;
+    let environment = environment(app, environment_id)?;
+    let (runtime, stack) = context(app, environment_id)?;
+    let temporary = parent.join(format!(".lspanel-export-{}.tmp", std::process::id()));
+    let _ = fs::remove_file(&temporary);
+    let output_file = fs::File::create(&temporary).map_err(|error| error.to_string())?;
+    let args = dump_args_for_tables(&environment, &environment.database_name, &tables);
+    let child = crate::containers::runtime_command(&runtime)
+        .args(args)
+        .current_dir(stack)
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(output_file))
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    let output =
+        crate::process::child_output(child, crate::process::DATABASE_TIMEOUT, "table export")
+            .inspect_err(|_| {
+                let _ = fs::remove_file(&temporary);
+            })?;
+    if !output.status.success() {
+        let _ = fs::remove_file(&temporary);
+        return Err(redact(
+            &environment,
+            &String::from_utf8_lossy(&output.stderr),
+        ));
+    }
     if destination.is_file() {
         fs::remove_file(destination).map_err(|error| {
             let _ = fs::remove_file(&temporary);
@@ -722,6 +853,25 @@ fn dump_args_for(e: &crate::containers::Environment, database: &str) -> Vec<Stri
         ]
     }
 }
+/// Same as `dump_args_for`, but restricted to specific tables:
+/// `mysqldump`/`mariadb-dump` take table names positionally after the
+/// database name, while `pg_dump` takes a repeated `-t <table>` flag.
+fn dump_args_for_tables(
+    e: &crate::containers::Environment,
+    database: &str,
+    tables: &[String],
+) -> Vec<String> {
+    let mut args = dump_args_for(e, database);
+    if e.database == "PostgreSQL" {
+        for table in tables {
+            args.push("-t".into());
+            args.push(table.clone());
+        }
+    } else {
+        args.extend(tables.iter().cloned());
+    }
+    args
+}
 fn restore_args(e: &crate::containers::Environment) -> Vec<String> {
     restore_args_for(e, &e.database_name)
 }
@@ -831,7 +981,7 @@ fn split_sql_statements(sql: &str) -> Vec<&str> {
 mod tests {
     use super::{
         copy_backup_file, obsolete_backups, query_is_read_only, safe_resource_id, valid_backup_id,
-        valid_database_name, DatabaseBackup,
+        valid_database_name, valid_table_name, DatabaseBackup,
     };
     use std::fs;
     #[test]
@@ -860,27 +1010,59 @@ mod tests {
         assert!(!target.with_extension("sql.copying").exists());
         fs::remove_dir_all(directory).unwrap();
     }
-    #[test]
-    fn retention_keeps_the_newest_backups() {
-        let backups = (1..=4)
+    fn backups_fixture(sizes: &[u64]) -> Vec<DatabaseBackup> {
+        sizes
+            .iter()
+            .enumerate()
             .rev()
-            .map(|created_at| DatabaseBackup {
-                id: format!("backup-{created_at}"),
+            .map(|(index, &size)| DatabaseBackup {
+                id: format!("backup-{index}"),
                 environment_id: "env".into(),
                 database: "app".into(),
-                size: 0,
-                created_at,
-                path: format!("/tmp/backup-{created_at}.sql"),
+                size,
+                created_at: index as i64,
+                path: format!("/tmp/backup-{index}.sql"),
             })
-            .collect();
-        let obsolete = obsolete_backups(backups, 2);
+            .collect()
+    }
+
+    #[test]
+    fn retention_keeps_the_newest_backups() {
+        let backups = backups_fixture(&[0, 0, 0, 0]);
+        let obsolete = obsolete_backups(backups, 2, None);
         assert_eq!(
             obsolete
                 .into_iter()
                 .map(|backup| backup.id)
                 .collect::<Vec<_>>(),
-            ["backup-2", "backup-1"]
+            ["backup-1", "backup-0"]
         );
+    }
+
+    #[test]
+    fn retention_also_respects_a_total_size_budget() {
+        // Regression test: retention only ever capped the backup *count*,
+        // with no way to bound total disk usage regardless of how large
+        // individual dumps grow.
+        let backups = backups_fixture(&[10, 10, 10, 10]);
+        // Keep up to 4 by count, but only 25 bytes total: the newest two
+        // (indices 3 and 2, 10 bytes each = 20) fit; the third (index 1)
+        // would push the running total to 30, so it and everything older
+        // become obsolete even though the count budget still has room.
+        let obsolete = obsolete_backups(backups, 4, Some(25));
+        assert_eq!(
+            obsolete
+                .into_iter()
+                .map(|backup| backup.id)
+                .collect::<Vec<_>>(),
+            ["backup-1", "backup-0"]
+        );
+    }
+
+    #[test]
+    fn retention_with_no_size_budget_only_applies_the_count() {
+        let backups = backups_fixture(&[1000, 1000]);
+        assert!(obsolete_backups(backups, 5, None).is_empty());
     }
 
     #[test]
@@ -922,5 +1104,17 @@ mod tests {
         assert!(valid_database_name("2analytics").is_err());
         assert!(valid_database_name("analytics; DROP DATABASE app").is_err());
         assert!(valid_database_name("../analytics").is_err());
+    }
+
+    #[test]
+    fn table_names_cannot_be_mistaken_for_dump_tool_flags() {
+        // Regression test: table names are appended as bare argv entries to
+        // mysqldump/pg_dump (not through a shell), so a value starting with
+        // "-" would be parsed by those tools as an option flag rather than a
+        // table name, e.g. a "table" of "--all-databases".
+        assert_eq!(valid_table_name("users").unwrap(), "users");
+        assert!(valid_table_name("--all-databases").is_err());
+        assert!(valid_table_name("2fa_codes").is_err());
+        assert!(valid_table_name("").is_err());
     }
 }

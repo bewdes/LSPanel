@@ -117,8 +117,12 @@ pub async fn prune_project_snapshots(
     app: tauri::AppHandle,
     site_id: String,
     keep: usize,
+    max_total_mb: Option<u64>,
 ) -> Result<usize, String> {
-    tauri::async_runtime::spawn_blocking(move || crate::snapshots::prune(&app, &site_id, keep))
-        .await
-        .map_err(|error| error.to_string())?
+    let max_total_bytes = max_total_mb.map(|value| value.saturating_mul(1024 * 1024));
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::snapshots::prune(&app, &site_id, keep, max_total_bytes)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }

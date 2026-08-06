@@ -51,6 +51,7 @@ export function DatabaseBackups({
   const [message, setMessage] = React.useState("")
   const [messageOk, setMessageOk] = React.useState(false)
   const [keep, setKeep] = React.useState(10)
+  const [maxTotalMb, setMaxTotalMb] = React.useState("")
   const [confirm, setConfirm] = React.useState<{
     backup: DatabaseBackup
     action: "restore" | "delete"
@@ -85,21 +86,16 @@ export function DatabaseBackups({
     }
   }
   const pruneBackups = async () => {
-    const removeCount = Math.max(0, items.length - keep)
-    if (!removeCount) {
-      setMessage(text.nothingToClean(items.length))
-      setMessageOk(true)
-      return
-    }
-    if (!window.confirm(text.confirmPrune(removeCount, keep))) return
+    if (!window.confirm(text.confirmPruneGeneric)) return
     setBusy(true)
     setMessage("")
     try {
       const removed = await invoke<number>("prune_database_backups", {
         environmentId: environment.id,
         keep,
+        maxTotalMb: maxTotalMb.trim() ? Number(maxTotalMb) : undefined,
       })
-      setMessage(text.oldBackupsDeleted(removed))
+      setMessage(removed ? text.oldBackupsDeleted(removed) : text.nothingToClean(items.length))
       setMessageOk(true)
       await refresh()
       onChanged?.()
@@ -172,6 +168,15 @@ export function DatabaseBackups({
             onChange={(event) =>
               setKeep(Math.min(100, Math.max(1, Number(event.target.value) || 1)))
             }
+          />
+          <Input
+            type="number"
+            min={0}
+            className="w-28"
+            placeholder={text.noSizeLimit}
+            aria-label={text.maxTotalSizeLabel}
+            value={maxTotalMb}
+            onChange={(event) => setMaxTotalMb(event.target.value.replace(/[^0-9]/g, ""))}
           />
           <Button variant="outline" disabled={busy} onClick={() => void pruneBackups()}>
             <Eraser />

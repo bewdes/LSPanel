@@ -123,11 +123,12 @@ const en = {
     backupRetention: "Backup retention",
     backupRetentionHint: "Keep the newest backups and remove older local dumps.",
     backupsToKeepLabel: "Backups to keep",
+    maxTotalSizeLabel: "Max total size (MB)",
+    noSizeLimit: "No size limit",
     cleanOld: "Clean old",
     nothingToClean: (count: number) =>
       `Nothing to clean. ${count} backup${count === 1 ? "" : "s"} kept.`,
-    confirmPrune: (removeCount: number, keep: number) =>
-      `Delete ${removeCount} oldest backup${removeCount === 1 ? "" : "s"} and keep the newest ${keep}?`,
+    confirmPruneGeneric: "Delete old backups beyond the configured limits?",
     oldBackupsDeleted: (removed: number) => `Old backups deleted: ${removed}`,
     createdColumn: "Created",
     engineColumn: "Engine",
@@ -183,6 +184,11 @@ const en = {
     databaseActionsDescription: "Import, export, backup or safely clear the configured database.",
     importSql: "Import SQL",
     exportSql: "Export SQL",
+    exportTables: "Export tables…",
+    exportTablesTitle: (name: string) => `Export tables from ${name}`,
+    exportTablesDescription: "Choose the tables to include in the exported .sql file.",
+    noTablesFound: "No tables found.",
+    exportSelectedTables: (count: number) => `Export ${count} table${count === 1 ? "" : "s"}`,
     databaseBackupCreated: "Database backup created successfully.",
     quickBackup: "Quick backup",
     clearDatabase: "Clear database",
@@ -215,6 +221,12 @@ const en = {
       "LS Panel will create a safety backup and then remove all database objects. Credentials and the configured database name will remain unchanged.",
     databaseCleared: "Database cleared successfully.",
     backupAndClear: "Backup and clear",
+    sqlConsole: "SQL console",
+    checkingDatabaseConnection: "Checking database connection…",
+    runQuery: "Run query",
+    destructiveQueryTitle: "Run this query?",
+    destructiveQueryDescription:
+      "This query will modify data. LS Panel creates an automatic backup first, but the change itself can't be undone from here.",
   },
   environmentWindow: {
     loadingEnvironment: "Loading environment…",
@@ -651,8 +663,7 @@ const en = {
     projectSnapshotImported: "Project snapshot imported",
     nothingToClean: (count: number) =>
       `Nothing to clean. ${count} snapshot${count === 1 ? "" : "s"} stored.`,
-    confirmPrune: (removeCount: number, keep: number) =>
-      `Delete the ${removeCount} oldest snapshot${removeCount === 1 ? "" : "s"} and keep the newest ${keep}?`,
+    confirmPruneGeneric: "Delete old snapshots beyond the configured limits?",
     oldSnapshotsDeleted: (removed: number) =>
       `${removed} old snapshot${removed === 1 ? "" : "s"} deleted`,
     projectSnapshots: "Project snapshots",
@@ -664,6 +675,8 @@ const en = {
     snapshotRetention: "Snapshot retention",
     snapshotRetentionHint: "Keep the newest snapshots and remove older local copies.",
     snapshotsToKeepLabel: "Snapshots to keep",
+    maxTotalSizeLabel: "Max total size (MB)",
+    noSizeLimit: "No size limit",
     cleanOld: "Clean old",
     snapshotColumn: "Snapshot",
     databaseDumpColumn: "Database dump",

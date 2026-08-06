@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Backup retention control: keep the newest N database backups and clean up older local dumps with one click, matching the existing project-snapshot retention UI.
 - The "SQL dump" field on project creation now actually imports the file into the new database instead of being silently ignored.
+- The SQL console now asks for confirmation before running a query that isn't read-only, instead of running it immediately on click.
+- Database export can now target specific tables instead of always exporting the whole database: "Export tables…" lists the database's tables with checkboxes and dumps only the selected ones.
+- Database backup and project snapshot retention can now also cap total size, alongside the existing count limit: cleanup keeps the newest items within both budgets, deleting whichever no longer fits.
 
 ### Fixed
 
@@ -31,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Every `docker`/`podman` invocation unconditionally stripped `DOCKER_HOST` and `CONTAINER_HOST`, silently ignoring a user's configured Docker context (Colima, custom sockets) — and breaking rootless Podman setups that specifically rely on `CONTAINER_HOST` for GUI-launched apps that never source a login shell profile.
 - `podman-compose` detection only checked `/usr/bin` and `/usr/local/bin`, missing Homebrew on Apple Silicon and Linux and a `pip install --user`/`pipx install` (both default to `~/.local/bin`, and that's how podman-compose is commonly installed since it isn't part of Podman itself). Separately, even when detected, the actual `PODMAN_COMPOSE_PROVIDER` path passed to Podman only ever checked `/usr/bin`, so a podman-compose install anywhere else was detected as "available" but never actually used.
 - After a project template installs into a bind-mounted directory (composer/npm/WordPress), restoring file ownership on Podman always chowned to UID/GID 0 inside the container, assuming rootless Podman's default "container UID 0 = host user" mapping. That assumption breaks under a custom subuid/subgid mapping, and is simply wrong for rootful Podman, leaving project files owned by root and inaccessible to the user. Rootless Podman now uses `podman unshare`, which translates correctly regardless of the mapping in use; rootful Podman now chowns to the host directory's actual owner, same as Docker.
+- Stopping an environment from the Containers page never cleared its sites' "enabled" flag (unlike stopping from the Sites page). Auto-heal treats any environment with an enabled site as one that should be running, so a project stopped from the Containers page could silently start itself again the next time auto-heal ran — including immediately on the next app launch, with no indication of why.
 
 ### Changed
 

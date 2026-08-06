@@ -171,7 +171,7 @@ pub fn create_safety_for_environment(
             &format!("Automatic pre-{action} snapshot"),
             running && server_database,
         )?;
-        prune(app, &site.id, 20)?;
+        prune(app, &site.id, 20, None)?;
     }
     Ok(sites.len())
 }
@@ -413,20 +413,43 @@ pub fn delete(app: &tauri::AppHandle, site_id: &str, id: &str) -> Result<(), Str
     fs::remove_dir_all(path).map_err(|error| error.to_string())
 }
 
-pub fn prune(app: &tauri::AppHandle, site_id: &str, keep: usize) -> Result<usize, String> {
+pub fn prune(
+    app: &tauri::AppHandle,
+    site_id: &str,
+    keep: usize,
+    max_total_bytes: Option<u64>,
+) -> Result<usize, String> {
     if !(1..=100).contains(&keep) {
         return Err("Keep count must be between 1 and 100".into());
     }
     let snapshots = list(app, site_id)?;
-    let obsolete = obsolete_snapshots(snapshots, keep);
+    let obsolete = obsolete_snapshots(snapshots, keep, max_total_bytes);
     for snapshot in &obsolete {
         delete(app, site_id, &snapshot.id)?;
     }
     Ok(obsolete.len())
 }
 
-fn obsolete_snapshots(snapshots: Vec<Snapshot>, keep: usize) -> Vec<Snapshot> {
-    snapshots.into_iter().skip(keep).collect()
+/// Keeps the newest snapshots within both budgets at once: at most `keep`
+/// snapshots, and (when set) a running total no larger than
+/// `max_total_bytes`. `snapshots` must already be sorted newest-first.
+fn obsolete_snapshots(
+    snapshots: Vec<Snapshot>,
+    keep: usize,
+    max_total_bytes: Option<u64>,
+) -> Vec<Snapshot> {
+    let mut kept_bytes: u64 = 0;
+    let mut obsolete = Vec::new();
+    for (index, snapshot) in snapshots.into_iter().enumerate() {
+        let within_count = index < keep;
+        let within_size = max_total_bytes.is_none_or(|max| kept_bytes + snapshot.size <= max);
+        if within_count && within_size {
+            kept_bytes += snapshot.size;
+        } else {
+            obsolete.push(snapshot);
+        }
+    }
+    obsolete
 }
 
 pub fn export(
@@ -605,7 +628,48 @@ mod tests {
                 has_database: false,
             })
             .collect();
-        let obsolete = obsolete_snapshots(snapshots, 2);
+        let obsolete = obsolete_snapshots(snapshots, 2, None);
+        assert_eq!(
+            obsolete
+                .into_iter()
+                .map(|snapshot| snapshot.id)
+                .collect::<Vec<_>>(),
+            ["snapshot-2", "snapshot-1"]
+        );
+    }
+
+    #[test]
+    fn retention_also_respects_a_total_size_budget() {
+        let snapshots = vec![
+            Snapshot {
+                id: "snapshot-3".into(),
+                site_id: "site".into(),
+                name: String::new(),
+                created_at: 3,
+                size: 10,
+                has_database: true,
+            },
+            Snapshot {
+                id: "snapshot-2".into(),
+                site_id: "site".into(),
+                name: String::new(),
+                created_at: 2,
+                size: 10,
+                has_database: true,
+            },
+            Snapshot {
+                id: "snapshot-1".into(),
+                site_id: "site".into(),
+                name: String::new(),
+                created_at: 1,
+                size: 10,
+                has_database: true,
+            },
+        ];
+        // Keep up to 3 by count, but only 15 bytes total: only the newest
+        // (10 bytes) fits, so the rest become obsolete even though the
+        // count budget still has room.
+        let obsolete = obsolete_snapshots(snapshots, 3, Some(15));
         assert_eq!(
             obsolete
                 .into_iter()

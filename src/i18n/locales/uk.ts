@@ -125,11 +125,12 @@ const uk: Dictionary = {
     backupRetention: "Збереження резервних копій",
     backupRetentionHint: "Зберігати найновіші резервні копії та видаляти старіші локальні дампи.",
     backupsToKeepLabel: "Кількість резервних копій для збереження",
+    maxTotalSizeLabel: "Максимальний розмір (МБ)",
+    noSizeLimit: "Без обмеження",
     cleanOld: "Очистити старі",
     nothingToClean: (count: number) =>
       `Нічого очищати. Збережено ${count} ${count === 1 ? "резервну копію" : "резервних копій"}.`,
-    confirmPrune: (removeCount: number, keep: number) =>
-      `Видалити ${removeCount} найстаріших резервних копій і залишити найновіші ${keep}?`,
+    confirmPruneGeneric: "Видалити старі резервні копії понад налаштовані ліміти?",
     oldBackupsDeleted: (removed: number) => `Видалено старих резервних копій: ${removed}`,
     createdColumn: "Створено",
     engineColumn: "Двигун",
@@ -187,6 +188,23 @@ const uk: Dictionary = {
       "Імпорт, експорт, резервне копіювання або безпечне очищення налаштованої бази даних.",
     importSql: "Імпорт SQL",
     exportSql: "Експорт SQL",
+    exportTables: "Експорт таблиць…",
+    exportTablesTitle: (name: string) => `Експорт таблиць з ${name}`,
+    exportTablesDescription: "Оберіть таблиці для включення у файл .sql, що експортується.",
+    noTablesFound: "Таблиць не знайдено.",
+    exportSelectedTables: (count: number) => {
+      const last = count % 10
+      const lastTwo = count % 100
+      const word =
+        lastTwo >= 11 && lastTwo <= 14
+          ? "таблиць"
+          : last === 1
+            ? "таблицю"
+            : last >= 2 && last <= 4
+              ? "таблиці"
+              : "таблиць"
+      return `Експортувати ${count} ${word}`
+    },
     databaseBackupCreated: "Резервну копію бази даних створено успішно.",
     quickBackup: "Швидка резервна копія",
     clearDatabase: "Очистити базу даних",
@@ -219,6 +237,12 @@ const uk: Dictionary = {
       "LS Panel створить резервну копію безпеки, а потім видалить усі об'єкти бази даних. Облікові дані та налаштована назва бази даних залишаться незмінними.",
     databaseCleared: "Базу даних очищено успішно.",
     backupAndClear: "Резервна копія та очищення",
+    sqlConsole: "SQL-консоль",
+    checkingDatabaseConnection: "Перевірка з'єднання з базою даних…",
+    runQuery: "Виконати запит",
+    destructiveQueryTitle: "Виконати цей запит?",
+    destructiveQueryDescription:
+      "Цей запит змінить дані. LS Panel спочатку створить автоматичну резервну копію, але саму зміну звідси скасувати не можна.",
   },
   environmentWindow: {
     loadingEnvironment: "Завантаження середовища…",
@@ -656,8 +680,7 @@ const uk: Dictionary = {
     projectSnapshotImported: "Знімок проєкту імпортовано",
     nothingToClean: (count: number) =>
       `Нічого очищати. Збережено ${count} ${count === 1 ? "знімок" : "знімків"}.`,
-    confirmPrune: (removeCount: number, keep: number) =>
-      `Видалити ${removeCount} найстаріших знімків і залишити найновіші ${keep}?`,
+    confirmPruneGeneric: "Видалити старі знімки понад налаштовані ліміти?",
     oldSnapshotsDeleted: (removed: number) => `Видалено старих знімків: ${removed}`,
     projectSnapshots: "Знімки проєкту",
     projectSnapshotsDescription:
@@ -668,6 +691,8 @@ const uk: Dictionary = {
     snapshotRetention: "Збереження знімків",
     snapshotRetentionHint: "Зберігати найновіші знімки та видаляти старіші локальні копії.",
     snapshotsToKeepLabel: "Кількість знімків для збереження",
+    maxTotalSizeLabel: "Максимальний розмір (МБ)",
+    noSizeLimit: "Без обмеження",
     cleanOld: "Очистити старі",
     snapshotColumn: "Знімок",
     databaseDumpColumn: "Дамп бази даних",

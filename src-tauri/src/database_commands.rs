@@ -24,10 +24,14 @@ pub async fn prune_database_backups(
     app: tauri::AppHandle,
     environment_id: String,
     keep: usize,
+    max_total_mb: Option<u64>,
 ) -> Result<usize, String> {
-    tauri::async_runtime::spawn_blocking(move || crate::backups::prune(&app, &environment_id, keep))
-        .await
-        .map_err(|error| error.to_string())?
+    let max_total_bytes = max_total_mb.map(|value| value.saturating_mul(1024 * 1024));
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::backups::prune(&app, &environment_id, keep, max_total_bytes)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -159,6 +163,29 @@ pub async fn export_database_file(
 ) -> Result<(), crate::app_error::AppError> {
     run_operation(app, environment_id, "database-export", move |app, id| {
         crate::backups::export_sql_file(app, id, Path::new(&path))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn list_database_tables(
+    app: tauri::AppHandle,
+    environment_id: String,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::backups::list_tables(&app, &environment_id))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn export_database_tables(
+    app: tauri::AppHandle,
+    environment_id: String,
+    path: String,
+    tables: Vec<String>,
+) -> Result<(), crate::app_error::AppError> {
+    run_operation(app, environment_id, "database-export", move |app, id| {
+        crate::backups::export_sql_file_for_tables(app, id, Path::new(&path), &tables)
     })
     .await
 }

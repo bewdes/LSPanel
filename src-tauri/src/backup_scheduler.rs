@@ -23,6 +23,7 @@ fn run_due_backups(app: &tauri::AppHandle) {
                 app,
                 &environment.id,
                 environment.backup_retention_count as usize,
+                None,
             );
         }
     }

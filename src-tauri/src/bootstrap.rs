@@ -118,6 +118,8 @@ pub fn run() {
             database_commands::delete_database,
             database_commands::import_database_file,
             database_commands::export_database_file,
+            database_commands::list_database_tables,
+            database_commands::export_database_tables,
             database_commands::clear_database,
             database_commands::clone_database,
             database_commands::rename_database,

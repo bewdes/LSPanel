@@ -726,7 +726,7 @@ export function SiteDetailsPage({
                 )}
               </CardFooter>
             </Card>
-            <DatabaseConsole environment={environment} />
+            <DatabaseConsole environment={environment} language={language} />
           </TabsContent>
         )}
         {!(isNative && site.projectType === "static") && (
