@@ -24,17 +24,27 @@ fn now() -> i64 {
         .as_millis() as i64
 }
 
+fn active_operation_kind(
+    connection: &rusqlite::Connection,
+    environment_id: &str,
+) -> Result<Option<String>, String> {
+    connection
+        .query_row(
+            "SELECT kind FROM operations WHERE environment_id=?1 AND status='running' ORDER BY started_at DESC LIMIT 1",
+            params![environment_id], |row| row.get::<_, String>(0)
+        )
+        .optional()
+        .map_err(|error| error.to_string())
+}
+
 pub fn create(
     app: &tauri::AppHandle,
     environment_id: Option<&str>,
     kind: &str,
 ) -> Result<Operation, String> {
+    let connection = crate::storage::connection(app)?;
     if let Some(environment_id) = environment_id {
-        let active = crate::storage::connection(app)?.query_row(
-            "SELECT kind FROM operations WHERE environment_id=?1 AND status='running' ORDER BY started_at DESC LIMIT 1",
-            params![environment_id], |row| row.get::<_, String>(0)
-        ).optional().map_err(|error| error.to_string())?;
-        if let Some(active) = active {
+        if let Some(active) = active_operation_kind(&connection, environment_id)? {
             return Err(format!(
                 "The environment already has an active {active} operation"
             ));
@@ -53,10 +63,25 @@ pub fn create(
         started_at,
         finished_at: None,
     };
-    crate::storage::connection(app)?.execute(
+    if let Err(error) = connection.execute(
         "INSERT INTO operations(id, environment_id, kind, status, progress, stage, started_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![operation.id, operation.environment_id, operation.kind, operation.status, operation.progress, operation.stage, operation.started_at]
-    ).map_err(|error| error.to_string())?;
+    ) {
+        // The check above has a race window between two near-simultaneous
+        // calls (e.g. a genuine UI double-click): both can see no active
+        // operation before either INSERT commits. `idx_operations_one_active`
+        // closes that at the database level, but the losing INSERT would
+        // otherwise surface a raw SQLite constraint message instead of the
+        // same friendly error the check above returns.
+        if let Some(environment_id) = environment_id {
+            if let Some(active) = active_operation_kind(&connection, environment_id)? {
+                return Err(format!(
+                    "The environment already has an active {active} operation"
+                ));
+            }
+        }
+        return Err(error.to_string());
+    }
     let _ = app.emit("operation-started", &operation);
     Ok(operation)
 }

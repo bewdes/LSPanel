@@ -100,7 +100,11 @@ pub fn ensure(
     let certificate = directory.join("local.crt");
     let key = directory.join("local.key");
     let current_names = fs::read_to_string(&names_path).unwrap_or_default();
-    if certificate.is_file() && key.is_file() && current_names == names_text {
+    if certificate.is_file()
+        && key.is_file()
+        && current_names == names_text
+        && certificate_matches_key(&certificate, &key)
+    {
         return Ok(CertificatePaths { certificate, key });
     }
 
@@ -223,6 +227,36 @@ fn certificate_end_date(path: &Path) -> Option<String> {
             .unwrap_or_default()
             .to_owned()
     })
+}
+
+fn modulus(program: &str, args: &[&str], path: &Path) -> Option<String> {
+    let output = Command::new(program)
+        .args(args)
+        .arg(path)
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+/// The certificate and key are written by two separate, non-atomic renames
+/// (see `ensure` below); a crash between them — or any other cause of the
+/// two files going out of sync — leaves a mismatched pair on disk that
+/// existence checks alone can't detect. Comparing the RSA modulus catches
+/// that case so `ensure`'s fast path regenerates instead of silently
+/// serving a certificate that TLS handshakes will reject.
+fn certificate_matches_key(certificate: &Path, key: &Path) -> bool {
+    let certificate_modulus = modulus(
+        "openssl",
+        &["x509", "-noout", "-modulus", "-in"],
+        certificate,
+    );
+    let key_modulus = modulus("openssl", &["rsa", "-noout", "-modulus", "-in"], key);
+    matches!((certificate_modulus, key_modulus), (Some(a), Some(b)) if a == b)
 }
 
 fn certificate_fingerprint(path: &Path) -> Option<String> {
@@ -542,8 +576,9 @@ fn set_private_permissions(_path: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{browser_stores_in, create_nssdb, safe_hostname};
+    use super::{browser_stores_in, certificate_matches_key, create_nssdb, safe_hostname};
     use std::fs;
+    use std::process::{Command, Stdio};
 
     #[test]
     fn certificates_accept_only_safe_localhost_names() {
@@ -599,5 +634,58 @@ mod tests {
         assert!(create_nssdb(&path));
         assert!(path.join("cert9.db").is_file());
         fs::remove_dir_all(path).unwrap();
+    }
+
+    fn generate_self_signed(directory: &std::path::Path, key: &str, certificate: &str) {
+        let status = Command::new("openssl")
+            .args([
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-sha256",
+                "-nodes",
+                "-keyout",
+                key,
+                "-out",
+                certificate,
+                "-days",
+                "1",
+                "-subj",
+                "/CN=test",
+            ])
+            .current_dir(directory)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn certificate_matches_key_accepts_a_genuine_pair_and_rejects_a_mismatched_one() {
+        // Regression test: `ensure` writes the certificate and key with two
+        // separate renames, which can leave a mismatched pair on disk if
+        // interrupted between them. The fast path must detect that instead
+        // of trusting file existence alone.
+        let directory = std::env::temp_dir().join(format!(
+            "lspanel-cert-match-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+        generate_self_signed(&directory, "a.key", "a.crt");
+        generate_self_signed(&directory, "b.key", "b.crt");
+        assert!(certificate_matches_key(
+            &directory.join("a.crt"),
+            &directory.join("a.key")
+        ));
+        assert!(!certificate_matches_key(
+            &directory.join("a.crt"),
+            &directory.join("b.key")
+        ));
+        fs::remove_dir_all(directory).unwrap();
     }
 }

@@ -217,6 +217,17 @@ pub fn restore(app: &tauri::AppHandle, site_id: &str, id: &str) -> Result<(), St
     if manifest.site.id != site_id {
         return Err("Snapshot belongs to another project".into());
     }
+    // `create` only backs up the database when the environment is currently
+    // running, but `apply` below rebuilds/starts the environment regardless
+    // of its current state and may overwrite the database. Start it first
+    // when the restore is about to touch the database, so the safety
+    // snapshot actually captures it instead of silently omitting it and
+    // leaving a failed restore with no database to roll back to.
+    if manifest.has_database
+        && crate::containers::environment_status(app, &manifest.environment.id)?.status != "running"
+    {
+        crate::containers::operate(app, &manifest.environment.id, "start")?;
+    }
     let safety = create(app, site_id, "Automatic pre-restore snapshot")?;
     let safety_directory = root(app, site_id)?.join(&safety.id);
     let safety_manifest = load_manifest(&safety_directory)?;

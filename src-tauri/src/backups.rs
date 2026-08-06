@@ -769,7 +769,19 @@ fn redact(e: &crate::containers::Environment, text: &str) -> String {
 }
 
 pub fn query_is_read_only(sql: &str) -> bool {
-    let normalized = sql.trim_start().to_ascii_lowercase();
+    // A prefix check alone is not enough: `SELECT 1; DROP TABLE users;` starts
+    // with "select" but the whole string is piped straight into the database
+    // client's stdin (see `query` below), which executes every `;`-separated
+    // statement. Reject anything but a single statement so a smuggled second
+    // statement always gets the automatic pre-query backup instead of skipping
+    // it. Splitting is quote-aware so semicolons inside string literals don't
+    // cause a false split; when in doubt (e.g. backslash-escaped quotes) this
+    // errs toward treating the query as unsafe rather than skipping the backup.
+    let statements = split_sql_statements(sql);
+    let [statement] = statements.as_slice() else {
+        return false;
+    };
+    let normalized = statement.trim_start().to_ascii_lowercase();
     ["select", "show", "describe", "desc", "explain", "pragma"]
         .iter()
         .any(|keyword| {
@@ -777,6 +789,42 @@ pub fn query_is_read_only(sql: &str) -> bool {
                 || normalized.starts_with(&format!("{keyword} "))
                 || normalized.starts_with(&format!("{keyword}\n"))
         })
+}
+
+fn split_sql_statements(sql: &str) -> Vec<&str> {
+    let mut statements = Vec::new();
+    let mut start = 0;
+    let mut quote: Option<char> = None;
+    let mut chars = sql.char_indices().peekable();
+    while let Some((i, character)) = chars.next() {
+        match quote {
+            Some(open) => {
+                if character == open {
+                    if chars.peek().map(|&(_, next)| next) == Some(open) {
+                        chars.next();
+                    } else {
+                        quote = None;
+                    }
+                }
+            }
+            None => match character {
+                '\'' | '"' | '`' => quote = Some(character),
+                ';' => {
+                    let statement = &sql[start..i];
+                    if !statement.trim().is_empty() {
+                        statements.push(statement);
+                    }
+                    start = i + character.len_utf8();
+                }
+                _ => {}
+            },
+        }
+    }
+    let tail = &sql[start..];
+    if !tail.trim().is_empty() {
+        statements.push(tail);
+    }
+    statements
 }
 
 #[cfg(test)]
@@ -839,8 +887,30 @@ mod tests {
     fn classifies_database_queries() {
         assert!(query_is_read_only(" SELECT * FROM users"));
         assert!(query_is_read_only("SHOW TABLES"));
+        assert!(query_is_read_only("SELECT * FROM users;"));
         assert!(!query_is_read_only("UPDATE users SET active=1"));
         assert!(!query_is_read_only("DROP TABLE users"));
+    }
+
+    #[test]
+    fn a_second_statement_after_a_select_is_never_treated_as_read_only() {
+        // Regression test: the query string is piped directly into the
+        // database client's stdin and executes every `;`-separated
+        // statement, so a leading SELECT must not exempt a smuggled
+        // destructive statement from the automatic pre-query backup.
+        assert!(!query_is_read_only("SELECT 1; DROP TABLE users;"));
+        assert!(!query_is_read_only("SELECT 1;DELETE FROM users"));
+        assert!(!query_is_read_only("SHOW TABLES; TRUNCATE TABLE logs;"));
+    }
+
+    #[test]
+    fn semicolons_inside_string_literals_do_not_cause_a_false_split() {
+        assert!(query_is_read_only(
+            "SELECT * FROM users WHERE note = 'a; b'"
+        ));
+        assert!(query_is_read_only(
+            "SELECT * FROM users WHERE note = 'it''s fine; really'"
+        ));
     }
 
     #[test]

@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `LS_PANEL_AUTO_CREATE_DATABASE` set to "false" was ignored — the database was always created on environment start regardless of the toggle. The selected database charset is now also applied when the database is created.
 - Node environments with run mode "start" never ran their configured build command before starting, in both the containerized and native runtimes.
+- The SQL console's automatic pre-query backup could be skipped for a destructive query: it only checked that the query *started* with a read-only keyword, so `SELECT 1; DROP TABLE users;` was piped to the database client with no safety-net backup taken first.
+- Restoring a snapshot on a stopped environment skipped the automatic pre-restore database backup entirely (it only backed up the database if the environment happened to already be running), so a restore that failed partway through had no database to roll back to even though the rollback message claimed the previous state was restored.
+- The local HTTPS certificate and its private key are written by two separate file renames; an interruption between them (or any other cause of the pair going out of sync) could leave a mismatched certificate/key pair that was silently trusted and reused, breaking every local HTTPS site with no obvious cause. The certificate is now verified against its key before being reused.
+- A genuine UI double-click (or any two near-simultaneous requests) starting an operation on the same environment could lose the race between the "is one already running" check and the insert, surfacing a raw SQLite constraint error instead of the same friendly "already has an active operation" message.
 
 ### Removed
 
