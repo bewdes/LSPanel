@@ -59,6 +59,15 @@ fn check(app: &tauri::AppHandle) {
                 idle_since.remove(&environment.id);
             }
             Some(false) => {
+                // CPU alone can't tell a genuinely idle stack from a PHP
+                // request paused at an Xdebug breakpoint — a paused debugger
+                // holds an open connection back to the IDE but uses ~0% CPU
+                // for as long as the developer is stepping through code, so
+                // treat that connection the same as active CPU.
+                if xdebug_session_active(app, environment).unwrap_or(false) {
+                    idle_since.remove(&environment.id);
+                    continue;
+                }
                 let since = *idle_since.entry(environment.id.clone()).or_insert(now);
                 if now - since >= idle_threshold_secs {
                     idle_since.remove(&environment.id);
@@ -108,6 +117,67 @@ fn cpu_is_active(app: &tauri::AppHandle, id: &str) -> Option<bool> {
     }))
 }
 
+/// `Some(true)` when the `php` service has an established connection back to
+/// its configured Xdebug client port (a debugger is attached, possibly
+/// paused at a breakpoint), `Some(false)` when it doesn't or Xdebug isn't
+/// enabled, `None` when this can't be determined.
+fn xdebug_session_active(
+    app: &tauri::AppHandle,
+    environment: &crate::containers::Environment,
+) -> Option<bool> {
+    if !environment.php_xdebug {
+        return Some(false);
+    }
+    let preferred = crate::settings::load(app).ok().flatten().map(|s| s.runtime);
+    let status = crate::containers::detect_runtime(preferred.as_deref());
+    let executable = status
+        .runtime
+        .filter(|_| status.running && status.compose_available)?;
+    let directory = crate::containers::stack_directory(app, &environment.id).ok()?;
+    if !directory.join("compose.yaml").exists() {
+        return None;
+    }
+    let output = crate::containers::runtime_command(&executable)
+        .args([
+            "compose",
+            "exec",
+            "-T",
+            "php",
+            "cat",
+            "/proc/net/tcp",
+            "/proc/net/tcp6",
+        ])
+        .current_dir(&directory)
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        // No "php" service, container not running the request, or /proc
+        // unavailable in this image — nothing to report as active.
+        return Some(false);
+    }
+    Some(has_established_connection_to_port(
+        &String::from_utf8_lossy(&output.stdout),
+        environment.php_xdebug_port,
+    ))
+}
+
+/// Parses the kernel's `/proc/net/tcp{,6}` table format and reports whether
+/// any socket is ESTABLISHED (state `01`) with the given remote port.
+fn has_established_connection_to_port(proc_net_tcp: &str, port: u16) -> bool {
+    let port_hex = format!("{port:04X}");
+    proc_net_tcp.lines().skip(1).any(|line| {
+        let fields = line.split_whitespace().collect::<Vec<_>>();
+        let (Some(remote), Some(state)) = (fields.get(2), fields.get(3)) else {
+            return false;
+        };
+        let Some((_, remote_port)) = remote.split_once(':') else {
+            return false;
+        };
+        state.eq_ignore_ascii_case("01") && remote_port.eq_ignore_ascii_case(&port_hex)
+    })
+}
+
 fn json_rows(output: &str) -> Vec<serde_json::Value> {
     serde_json::from_str(output)
         .ok()
@@ -142,7 +212,7 @@ fn now_secs() -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::json_rows;
+    use super::{has_established_connection_to_port, json_rows};
 
     #[test]
     fn parses_both_ndjson_and_json_array_stats_output() {
@@ -154,5 +224,32 @@ mod tests {
         assert_eq!(json_rows(array).len(), 1);
 
         assert!(json_rows("not json at all").is_empty());
+    }
+
+    #[test]
+    fn detects_an_established_connection_to_the_configured_xdebug_port() {
+        // Regression test: a request paused at an Xdebug breakpoint holds an
+        // ESTABLISHED connection back to the IDE's listener the whole time,
+        // even though the process is using ~0% CPU while paused.
+        let proc_net_tcp = "  sl  local_address rem_address   st tx_queue:rx_queue tr:tm->when retrnsmt   uid  timeout inode\n   0: 0100007F:9C42 0100007F:232B 01 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 20 4 30 10 -1\n";
+        assert!(has_established_connection_to_port(proc_net_tcp, 9003));
+        assert!(!has_established_connection_to_port(proc_net_tcp, 9004));
+    }
+
+    #[test]
+    fn ignores_connections_to_the_xdebug_port_that_are_not_established() {
+        // State 08 = TCP_CLOSE_WAIT: the debugger session has already
+        // disconnected, so this must not count as active.
+        let proc_net_tcp = "  sl  local_address rem_address   st tx_queue:rx_queue tr:tm->when retrnsmt   uid  timeout inode\n   0: 0100007F:9C42 0100007F:232B 08 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 20 4 30 10 -1\n";
+        assert!(!has_established_connection_to_port(proc_net_tcp, 9003));
+    }
+
+    #[test]
+    fn ignores_the_header_line_and_malformed_input() {
+        assert!(!has_established_connection_to_port("", 9003));
+        assert!(!has_established_connection_to_port(
+            "  sl  local_address rem_address   st ...\n",
+            9003
+        ));
     }
 }

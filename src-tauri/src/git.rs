@@ -1,10 +1,47 @@
 use serde::Serialize;
 use std::{
+    collections::HashSet,
     fs::{self, OpenOptions},
     io::Write,
     path::Path,
     process::{Command, Stdio},
+    sync::{LazyLock, Mutex},
 };
+
+static LOCKED_REPOSITORIES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+/// Serializes mutating Git operations (fetch/pull/push/commit/checkout) on
+/// the same repository. Without this, the unattended background
+/// status-check fetch and a user-initiated action shell out to `git`
+/// concurrently in the same `.git` directory with no coordination, which
+/// can surface a confusing lock-file error on whichever side loses the
+/// race instead of the actual problem.
+struct RepositoryLock(String);
+
+impl RepositoryLock {
+    fn acquire(directory: &str) -> Result<Self, String> {
+        let key = fs::canonicalize(directory)
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|_| directory.to_owned());
+        let mut locked = LOCKED_REPOSITORIES
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if !locked.insert(key.clone()) {
+            return Err("Another Git operation is already running for this project".into());
+        }
+        Ok(Self(key))
+    }
+}
+
+impl Drop for RepositoryLock {
+    fn drop(&mut self) {
+        let mut locked = LOCKED_REPOSITORIES
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        locked.remove(&self.0);
+    }
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,13 +111,7 @@ pub fn status(directory: &str) -> Result<GitStatus, String> {
     let text = String::from_utf8_lossy(&output.stdout);
     let mut lines = text.lines();
     let header = lines.next().unwrap_or("## HEAD");
-    let branch = header
-        .strip_prefix("## ")
-        .unwrap_or("HEAD")
-        .split("...")
-        .next()
-        .unwrap_or("HEAD")
-        .to_owned();
+    let branch = parse_branch_name(header);
     let (ahead, behind) = parse_ahead_behind(header);
     let changed_files = lines.count();
     Ok(GitStatus {
@@ -91,6 +122,20 @@ pub fn status(directory: &str) -> Result<GitStatus, String> {
         ahead,
         behind,
     })
+}
+
+/// A repository with no commits yet reports its branch header as
+/// `## No commits yet on <branch>` (or, on older Git versions,
+/// `## Initial commit on <branch>`) rather than the usual `## <branch>...`,
+/// so the plain `## ` prefix strip alone would take the whole sentence as
+/// the branch name right after "Initialize Git" on an empty project.
+fn parse_branch_name(branch_header: &str) -> String {
+    let after_prefix = branch_header.strip_prefix("## ").unwrap_or("HEAD");
+    let name = after_prefix
+        .strip_prefix("No commits yet on ")
+        .or_else(|| after_prefix.strip_prefix("Initial commit on "))
+        .unwrap_or(after_prefix);
+    name.split("...").next().unwrap_or("HEAD").to_owned()
 }
 
 fn parse_ahead_behind(branch_header: &str) -> (usize, usize) {
@@ -113,6 +158,7 @@ fn parse_ahead_behind(branch_header: &str) -> (usize, usize) {
 }
 
 pub fn action(directory: &str, action: &str, message: &str) -> Result<GitStatus, String> {
+    let _lock = RepositoryLock::acquire(directory)?;
     let path = Path::new(directory);
     if !path.join(".git").is_dir() {
         return Err("This project is not a Git repository".into());
@@ -368,6 +414,7 @@ fn gitignore_template(project_type: &str) -> &'static str {
 }
 
 pub fn checkout(directory: &str, branch: &str, create: bool) -> Result<GitStatus, String> {
+    let _lock = RepositoryLock::acquire(directory)?;
     let path = Path::new(directory);
     if !path.join(".git").is_dir() {
         return Err("This project is not a Git repository".into());
@@ -387,7 +434,60 @@ pub fn checkout(directory: &str, branch: &str, create: bool) -> Result<GitStatus
 
 #[cfg(test)]
 mod tests {
-    use super::{browser_url, gitignore_template, parse_ahead_behind};
+    use super::{
+        browser_url, gitignore_template, parse_ahead_behind, parse_branch_name, RepositoryLock,
+    };
+
+    #[test]
+    fn branch_name_survives_a_freshly_initialized_repository_with_no_commits() {
+        // Regression test: right after "Initialize Git" on an empty project,
+        // `git status --branch`'s header reads "## No commits yet on main"
+        // instead of the usual "## main...", so a plain "## " prefix strip
+        // took the whole sentence as the branch name.
+        assert_eq!(parse_branch_name("## No commits yet on main"), "main");
+        assert_eq!(parse_branch_name("## Initial commit on master"), "master");
+    }
+
+    #[test]
+    fn branch_name_parses_normally_once_the_branch_has_commits() {
+        assert_eq!(parse_branch_name("## main"), "main");
+        assert_eq!(parse_branch_name("## main...origin/main [ahead 1]"), "main");
+    }
+
+    #[test]
+    fn a_second_lock_on_the_same_repository_is_rejected_until_the_first_is_released() {
+        // Regression test: the background status-check fetch and a
+        // user-initiated Git action both shell out to `git` in the same
+        // directory with no coordination otherwise.
+        let directory =
+            std::env::temp_dir().join(format!("lspanel-git-lock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.to_str().unwrap();
+
+        let first = RepositoryLock::acquire(path).unwrap();
+        assert!(RepositoryLock::acquire(path).is_err());
+        drop(first);
+        assert!(RepositoryLock::acquire(path).is_ok());
+
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn locks_on_different_repositories_do_not_interfere() {
+        let a = std::env::temp_dir().join(format!("lspanel-git-lock-a-{}", std::process::id()));
+        let b = std::env::temp_dir().join(format!("lspanel-git-lock-b-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&a);
+        let _ = std::fs::remove_dir_all(&b);
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+
+        let _first = RepositoryLock::acquire(a.to_str().unwrap()).unwrap();
+        assert!(RepositoryLock::acquire(b.to_str().unwrap()).is_ok());
+
+        std::fs::remove_dir_all(a).unwrap();
+        std::fs::remove_dir_all(b).unwrap();
+    }
 
     #[test]
     fn templates_ignore_secrets_and_runtime_dependencies() {

@@ -51,22 +51,50 @@ fn check(app: &tauri::AppHandle) {
         if problem_services.is_empty() || !should_notify(&environment.id) {
             continue;
         }
-        // Docker/Podman's own restart policy already relaunches crashed
-        // containers for "always" / "unless-stopped" / "on-failure". Only
-        // "no" leaves a crashed container down forever, so that's the one
-        // case where LS Panel needs to step in itself.
-        if environment.restart_policy == "no" {
-            let _ = crate::containers::operate(app, &environment.id, "start");
+        if let Some(action) = heal_action(&problem_services, &environment.restart_policy) {
+            let _ = crate::containers::operate(app, &environment.id, action);
         }
-        notify(app, &settings, &environment.name, &problem_services);
+        let names = problem_services
+            .iter()
+            .map(|service| service.name.clone())
+            .collect::<Vec<_>>();
+        notify(app, &settings, &environment.name, &names);
     }
 }
 
-/// Returns the names of services that are down or reporting unhealthy, or
-/// `None` when the stack's state could not be read at all (runtime
-/// unavailable, not yet provisioned) — callers should treat `None` as "can't
-/// tell" rather than "healthy".
-fn unhealthy_services(app: &tauri::AppHandle, id: &str) -> Option<Vec<String>> {
+struct ProblemService {
+    name: String,
+    /// `true` when the service has exited or died; `false` when it is still
+    /// running but reporting an unhealthy healthcheck. The two need
+    /// different remediation (see `heal_action` below).
+    crashed: bool,
+}
+
+/// Picks the `containers::operate` action (if any) that should run for a
+/// stack with these problem services, or `None` if LS Panel should just
+/// notify without acting.
+fn heal_action(problem_services: &[ProblemService], restart_policy: &str) -> Option<&'static str> {
+    // A service reporting "unhealthy" is still running, so Docker/Podman's
+    // restart policy (which only governs what happens after a container
+    // *exits*) never kicks in for it — the only way to make the container
+    // re-run its entrypoint and healthcheck is an explicit restart,
+    // regardless of restart_policy. A genuinely crashed ("exited"/"dead")
+    // service, on the other hand, only needs LS Panel to step in when
+    // restart_policy is "no"; anything else already relaunches it on its own.
+    if problem_services.iter().any(|service| !service.crashed) {
+        Some("restart")
+    } else if restart_policy == "no" {
+        Some("start")
+    } else {
+        None
+    }
+}
+
+/// Returns the services that are down or reporting unhealthy, or `None` when
+/// the stack's state could not be read at all (runtime unavailable, not yet
+/// provisioned) — callers should treat `None` as "can't tell" rather than
+/// "healthy".
+fn unhealthy_services(app: &tauri::AppHandle, id: &str) -> Option<Vec<ProblemService>> {
     let preferred = crate::settings::load(app).ok().flatten().map(|s| s.runtime);
     let status = crate::containers::detect_runtime(preferred.as_deref());
     let executable = status
@@ -93,10 +121,13 @@ fn unhealthy_services(app: &tauri::AppHandle, id: &str) -> Option<Vec<String>> {
     Some(
         services
             .into_iter()
-            .filter(|service| {
-                matches!(service.state.as_str(), "exited" | "dead") || service.health == "unhealthy"
+            .filter_map(|service| {
+                let crashed = matches!(service.state.as_str(), "exited" | "dead");
+                (crashed || service.health == "unhealthy").then_some(ProblemService {
+                    name: service.name,
+                    crashed,
+                })
             })
-            .map(|service| service.name)
             .collect(),
     )
 }
@@ -134,4 +165,48 @@ fn now_secs() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{heal_action, ProblemService};
+
+    fn crashed(name: &str) -> ProblemService {
+        ProblemService {
+            name: name.into(),
+            crashed: true,
+        }
+    }
+
+    fn unhealthy(name: &str) -> ProblemService {
+        ProblemService {
+            name: name.into(),
+            crashed: false,
+        }
+    }
+
+    #[test]
+    fn a_running_but_unhealthy_service_is_restarted_regardless_of_restart_policy() {
+        // Regression test: Docker's restart policy only governs what happens
+        // after a container exits, so it can never bring a running-but-
+        // unhealthy service back to health. Only an explicit restart does.
+        for policy in ["no", "always", "unless-stopped", "on-failure"] {
+            assert_eq!(heal_action(&[unhealthy("web")], policy), Some("restart"));
+        }
+    }
+
+    #[test]
+    fn a_crashed_service_is_started_only_when_the_restart_policy_is_no() {
+        assert_eq!(heal_action(&[crashed("web")], "no"), Some("start"));
+        assert_eq!(heal_action(&[crashed("web")], "always"), None);
+        assert_eq!(heal_action(&[crashed("web")], "unless-stopped"), None);
+    }
+
+    #[test]
+    fn a_mix_of_crashed_and_unhealthy_services_restarts_the_whole_stack() {
+        assert_eq!(
+            heal_action(&[crashed("db"), unhealthy("web")], "always"),
+            Some("restart")
+        );
+    }
 }
