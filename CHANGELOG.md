@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-stop's idle detection was CPU-only, so a PHP request paused at an Xdebug breakpoint (~0% CPU for as long as the developer is stepping through code, but with a live connection back to the IDE) looked identical to a genuinely idle stack and could be silently stopped mid-debugging-session. An established connection to the configured Xdebug port now counts as activity.
 - The background Git status monitor's unattended `fetch --prune` and a user-initiated Git action (pull, push, commit, checkout) could run concurrently on the same repository with no coordination, occasionally surfacing a raw Git lock-file error with no clear explanation. Mutating Git operations on the same project now serialize against each other.
 - The branch name shown right after "Initialize Git" on a brand-new project was the literal text "No commits yet on main" instead of "main" — a repository with no commits yet reports its branch in `git status` differently than one with history, and only the normal case was parsed.
+- Project name uniqueness was checked case-sensitively, so creating "MyProject" when "myproject" already existed passed validation but silently aliased the same directory on case-insensitive filesystems (macOS, Windows, exFAT, some Linux setups). Project names also had no length limit, even though they become a DNS label (`{name}.localhost`) capped at 63 characters.
 
 ### Changed
 

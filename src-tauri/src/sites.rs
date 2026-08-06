@@ -44,12 +44,19 @@ fn default_enabled() -> bool {
 }
 
 pub(crate) fn validate_project_name(name: &str) -> Result<(), String> {
+    // 63 is the DNS label limit: the wizard suggests "{name}.localhost" as
+    // the site's domain by default, and a name longer than that would
+    // already be an invalid hostname label even before hitting any
+    // filesystem path-length limit.
     if name.is_empty()
+        || name.len() > 63
         || !name
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
-        return Err("Site name may contain only letters, digits, - and _".into());
+        return Err(
+            "Site name may contain only letters, digits, - and _, up to 63 characters".into(),
+        );
     }
     Ok(())
 }
@@ -371,10 +378,14 @@ pub fn create(app: &tauri::AppHandle, mut site: Site) -> Result<Vec<Site>, Strin
     if sites.iter().any(|item| item.id == site.id) {
         return Err("A site with this identifier already exists".into());
     }
-    if sites
-        .iter()
-        .any(|item| item.name == site.name || std::path::Path::new(&item.directory) == directory)
-    {
+    if sites.iter().any(|item| {
+        // Case-insensitive: many filesystems (macOS, Windows, exFAT, some
+        // Linux setups) treat "MyProject" and "myproject" as the same
+        // directory entry, so an exact-case check alone would let a new
+        // project silently alias an existing one's directory on disk.
+        item.name.eq_ignore_ascii_case(&site.name)
+            || std::path::Path::new(&item.directory) == directory
+    }) {
         return Err("A project with this name or directory already exists".into());
     }
     if requested.iter().any(|domain| {
@@ -645,19 +656,12 @@ pub fn update(
         .trim_start_matches("https://")
         .trim_end_matches('/')
         .to_owned();
-    if updated.name.is_empty()
-        || !updated
-            .name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
-    {
-        return Err("Site name may contain only letters, digits, - and _".into());
-    }
+    validate_project_name(&updated.name)?;
     validate_local_domain(&updated.domain)?;
-    if sites
-        .iter()
-        .any(|site| site.id != id && (site.name == updated.name || site.domain == updated.domain))
-    {
+    if sites.iter().any(|site| {
+        site.id != id
+            && (site.name.eq_ignore_ascii_case(&updated.name) || site.domain == updated.domain)
+    }) {
         return Err("Another project already uses this name or domain".into());
     }
     updated.pinned = pinned;
@@ -868,6 +872,14 @@ mod tests {
         assert!(validate_project_name("../outside").is_err());
         assert!(validate_project_name("nested/project").is_err());
         assert!(validate_project_name("").is_err());
+    }
+
+    #[test]
+    fn project_names_cannot_exceed_the_dns_label_limit() {
+        // The wizard suggests "{name}.localhost" as the default domain, and
+        // DNS labels cap out at 63 characters.
+        assert!(validate_project_name(&"a".repeat(63)).is_ok());
+        assert!(validate_project_name(&"a".repeat(64)).is_err());
     }
 
     #[test]
