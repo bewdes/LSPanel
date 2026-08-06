@@ -205,6 +205,24 @@ const uk: Dictionary = {
               : "таблиць"
       return `Експортувати ${count} ${word}`
     },
+    importTables: "Імпорт таблиць…",
+    importTablesTitle: (name: string) => `Імпорт таблиць у ${name}`,
+    importTablesDescription:
+      "Оберіть, які таблиці з обраного файлу .sql імпортувати. Інші інструкції з файлу все одно застосовуються.",
+    noTablesFoundInFile: "У цьому файлі не знайдено таблиць.",
+    importSelectedTables: (count: number) => {
+      const last = count % 10
+      const lastTwo = count % 100
+      const word =
+        lastTwo >= 11 && lastTwo <= 14
+          ? "таблиць"
+          : last === 1
+            ? "таблицю"
+            : last >= 2 && last <= 4
+              ? "таблиці"
+              : "таблиць"
+      return `Імпортувати ${count} ${word}`
+    },
     databaseBackupCreated: "Резервну копію бази даних створено успішно.",
     quickBackup: "Швидка резервна копія",
     clearDatabase: "Очистити базу даних",

@@ -189,6 +189,12 @@ const en = {
     exportTablesDescription: "Choose the tables to include in the exported .sql file.",
     noTablesFound: "No tables found.",
     exportSelectedTables: (count: number) => `Export ${count} table${count === 1 ? "" : "s"}`,
+    importTables: "Import tables…",
+    importTablesTitle: (name: string) => `Import tables into ${name}`,
+    importTablesDescription:
+      "Choose which tables from the selected .sql file to import. Other statements in the file are still applied.",
+    noTablesFoundInFile: "No tables found in this file.",
+    importSelectedTables: (count: number) => `Import ${count} table${count === 1 ? "" : "s"}`,
     databaseBackupCreated: "Database backup created successfully.",
     quickBackup: "Quick backup",
     clearDatabase: "Clear database",

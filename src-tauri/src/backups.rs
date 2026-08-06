@@ -621,6 +621,158 @@ pub fn import_sql_file(
     restore_file(app, environment_id, path)
 }
 
+/// Lists the tables present in a `.sql` dump file, in the order they appear,
+/// by scanning for the standard per-table comment markers `mysqldump`/
+/// `mariadb-dump` and `pg_dump` always emit. A dump with no recognizable
+/// markers (e.g. a hand-written file, or one from an unsupported tool)
+/// simply reports no tables - the plain "Import SQL" button still handles
+/// that case by running the whole file unfiltered.
+pub fn list_dump_tables(path: &std::path::Path) -> Result<Vec<String>, String> {
+    if path.extension().and_then(|value| value.to_str()) != Some("sql") {
+        return Err("Choose a .sql database dump".into());
+    }
+    let metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() || metadata.len() == 0 {
+        return Err("SQL import must be a non-empty regular file".into());
+    }
+    let text =
+        fs::read_to_string(path).map_err(|error| format!("Failed to read SQL dump: {error}"))?;
+    let mut tables = Vec::new();
+    for (table, _) in split_dump_by_table(&text) {
+        if let Some(table) = table {
+            if !tables.contains(&table) {
+                tables.push(table);
+            }
+        }
+    }
+    Ok(tables)
+}
+
+/// Imports only the given tables from a `.sql` dump file, rather than the
+/// whole thing. Boilerplate that isn't associated with any specific table
+/// (charset/session settings, transaction wrappers, lock statements) is
+/// always kept, since it's typically required for the table statements
+/// themselves to apply cleanly.
+pub fn import_sql_file_for_tables(
+    app: &tauri::AppHandle,
+    environment_id: &str,
+    path: &std::path::Path,
+    tables: &[String],
+) -> Result<(), String> {
+    if path.extension().and_then(|value| value.to_str()) != Some("sql") {
+        return Err("Choose a .sql database dump".into());
+    }
+    let metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() || metadata.len() == 0 {
+        return Err("SQL import must be a non-empty regular file".into());
+    }
+    if tables.is_empty() {
+        return Err("Select at least one table to import".into());
+    }
+    let tables = tables
+        .iter()
+        .map(|table| valid_table_name(table).map(str::to_owned))
+        .collect::<Result<Vec<_>, _>>()?;
+    let text =
+        fs::read_to_string(path).map_err(|error| format!("Failed to read SQL dump: {error}"))?;
+    let filtered = filter_dump_by_tables(&text, &tables);
+    if filtered.trim().is_empty() {
+        return Err("None of the selected tables were found in this dump".into());
+    }
+    let environment = environment(app, environment_id)?;
+    let (runtime, stack) = context(app, environment_id)?;
+    let mut child = crate::containers::runtime_command(&runtime)
+        .args(restore_args(&environment))
+        .current_dir(stack)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    child
+        .stdin
+        .take()
+        .ok_or("Database stdin is unavailable")?
+        .write_all(filtered.as_bytes())
+        .map_err(|error| error.to_string())?;
+    let output =
+        crate::process::child_output(child, crate::process::DATABASE_TIMEOUT, "table import")?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(redact(
+            &environment,
+            &String::from_utf8_lossy(&output.stderr),
+        ))
+    }
+}
+
+/// Splits a dump file's text into `(table, block)` pairs by scanning for
+/// per-table comment markers, without needing a full SQL statement parser
+/// (statement boundaries are hard to find reliably - semicolons can appear
+/// inside string literals - but these marker comments are plain, distinct
+/// lines that dump tools always emit verbatim). Each block runs from its
+/// marker (inclusive) up to just before the next marker; `table` is `None`
+/// for content before the first recognized marker.
+fn split_dump_by_table(sql: &str) -> Vec<(Option<String>, String)> {
+    let mut blocks: Vec<(Option<String>, String)> = Vec::new();
+    let mut current_table: Option<String> = None;
+    let mut current_text = String::new();
+    for line in sql.split_inclusive('\n') {
+        if let Some(name) = mysql_table_marker(line).or_else(|| postgres_table_marker(line)) {
+            if !current_text.is_empty() {
+                blocks.push((current_table.take(), std::mem::take(&mut current_text)));
+            }
+            current_table = Some(name);
+        }
+        current_text.push_str(line);
+    }
+    if !current_text.is_empty() {
+        blocks.push((current_table, current_text));
+    }
+    blocks
+}
+
+fn filter_dump_by_tables(sql: &str, tables: &[String]) -> String {
+    split_dump_by_table(sql)
+        .into_iter()
+        .filter(|(table, _)| match table {
+            None => true,
+            Some(name) => tables.iter().any(|selected| selected == name),
+        })
+        .map(|(_, text)| text)
+        .collect()
+}
+
+/// Matches `mysqldump`/`mariadb-dump`'s `-- Table structure for table
+/// \`name\`` and `-- Dumping data for table \`name\`` marker lines.
+fn mysql_table_marker(line: &str) -> Option<String> {
+    let trimmed = line.trim_end_matches(['\n', '\r']);
+    for prefix in [
+        "-- Table structure for table `",
+        "-- Dumping data for table `",
+    ] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            if let Some(name) = rest.strip_suffix('`') {
+                return Some(name.to_owned());
+            }
+        }
+    }
+    None
+}
+
+/// Matches `pg_dump`'s `-- Name: name; Type: TABLE; ...` (structure) and
+/// `-- Name: name; Type: TABLE DATA; ...` (data / COPY) marker lines.
+fn postgres_table_marker(line: &str) -> Option<String> {
+    let trimmed = line.trim_end_matches(['\n', '\r']);
+    let rest = trimmed.strip_prefix("-- Name: ")?;
+    if !rest.contains("; Type: TABLE") {
+        return None;
+    }
+    let name = rest.split(';').next()?.trim();
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
 pub fn export_sql_file(
     app: &tauri::AppHandle,
     environment_id: &str,
@@ -980,8 +1132,9 @@ fn split_sql_statements(sql: &str) -> Vec<&str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        copy_backup_file, obsolete_backups, query_is_read_only, safe_resource_id, valid_backup_id,
-        valid_database_name, valid_table_name, DatabaseBackup,
+        copy_backup_file, filter_dump_by_tables, mysql_table_marker, obsolete_backups,
+        postgres_table_marker, query_is_read_only, safe_resource_id, split_dump_by_table,
+        valid_backup_id, valid_database_name, valid_table_name, DatabaseBackup,
     };
     use std::fs;
     #[test]
@@ -1116,5 +1269,73 @@ mod tests {
         assert!(valid_table_name("--all-databases").is_err());
         assert!(valid_table_name("2fa_codes").is_err());
         assert!(valid_table_name("").is_err());
+    }
+
+    #[test]
+    fn mysql_markers_extract_backtick_quoted_table_names() {
+        assert_eq!(
+            mysql_table_marker("-- Table structure for table `users`"),
+            Some("users".into())
+        );
+        assert_eq!(
+            mysql_table_marker("-- Dumping data for table `orders`"),
+            Some("orders".into())
+        );
+        assert_eq!(mysql_table_marker("-- MySQL dump 10.13"), None);
+    }
+
+    #[test]
+    fn postgres_markers_extract_table_names_from_structure_and_data_sections() {
+        assert_eq!(
+            postgres_table_marker("-- Name: users; Type: TABLE; Schema: public; Owner: app"),
+            Some("users".into())
+        );
+        assert_eq!(
+            postgres_table_marker("-- Name: users; Type: TABLE DATA; Schema: public; Owner: app"),
+            Some("users".into())
+        );
+        // A sequence, index, or other non-table object must not be mistaken
+        // for a table.
+        assert_eq!(
+            postgres_table_marker("-- Name: users_id_seq; Type: SEQUENCE; Schema: public"),
+            None
+        );
+    }
+
+    #[test]
+    fn splits_a_mysqldump_style_dump_into_per_table_blocks() {
+        let dump = "-- MySQL dump 10.13\nSET NAMES utf8mb4;\n\
+-- Table structure for table `users`\nCREATE TABLE users (id int);\n\
+-- Dumping data for table `users`\nINSERT INTO users VALUES (1);\n\
+-- Table structure for table `orders`\nCREATE TABLE orders (id int);\n";
+        let blocks = split_dump_by_table(dump);
+        let tables: Vec<Option<String>> = blocks.iter().map(|(table, _)| table.clone()).collect();
+        assert_eq!(
+            tables,
+            vec![
+                None,
+                Some("users".into()),
+                Some("users".into()),
+                Some("orders".into()),
+            ]
+        );
+        assert!(blocks[0].1.contains("SET NAMES"));
+        assert!(blocks[1].1.contains("CREATE TABLE users"));
+        assert!(blocks[2].1.contains("INSERT INTO users"));
+        assert!(blocks[3].1.contains("CREATE TABLE orders"));
+    }
+
+    #[test]
+    fn filtering_a_dump_by_table_keeps_preamble_and_only_the_selected_table() {
+        let dump = "SET NAMES utf8mb4;\n\
+-- Table structure for table `users`\nCREATE TABLE users (id int);\n\
+-- Dumping data for table `users`\nINSERT INTO users VALUES (1);\n\
+-- Table structure for table `orders`\nCREATE TABLE orders (id int);\n\
+-- Dumping data for table `orders`\nINSERT INTO orders VALUES (1);\n";
+        let filtered = filter_dump_by_tables(dump, &["orders".to_string()]);
+        assert!(filtered.contains("SET NAMES"));
+        assert!(filtered.contains("CREATE TABLE orders"));
+        assert!(filtered.contains("INSERT INTO orders"));
+        assert!(!filtered.contains("users"));
     }
 }

@@ -258,6 +258,11 @@ function DatabaseDetails({
   const [availableTables, setAvailableTables] = React.useState<string[]>([])
   const [selectedTables, setSelectedTables] = React.useState<Set<string>>(new Set())
   const [tablesLoading, setTablesLoading] = React.useState(false)
+  const [tableImportOpen, setTableImportOpen] = React.useState(false)
+  const [importPath, setImportPath] = React.useState("")
+  const [importTables, setImportTables] = React.useState<string[]>([])
+  const [selectedImportTables, setSelectedImportTables] = React.useState<Set<string>>(new Set())
+  const [importTablesLoading, setImportTablesLoading] = React.useState(false)
 
   const load = React.useCallback(async () => {
     setBusy(true)
@@ -377,6 +382,53 @@ function DatabaseDetails({
     }
   }
 
+  const openTableImport = async () => {
+    const path = await openDialog({
+      title: text.importSqlInto(environment.name),
+      multiple: false,
+      directory: false,
+      filters: [{ name: "SQL dump", extensions: ["sql"] }],
+    })
+    if (!path) return
+    setImportPath(path)
+    setTableImportOpen(true)
+    setImportTablesLoading(true)
+    setSelectedImportTables(new Set())
+    try {
+      const tables = await invoke<string[]>("list_dump_file_tables", { path })
+      setImportTables(tables)
+    } catch (value) {
+      setMessage(errorMessage(value))
+      setMessageOk(false)
+      setTableImportOpen(false)
+    } finally {
+      setImportTablesLoading(false)
+    }
+  }
+
+  const toggleImportTable = (name: string) => {
+    setSelectedImportTables((current) => {
+      const next = new Set(current)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  const importSelectedTables = async () => {
+    if (!selectedImportTables.size) return
+    try {
+      await action(
+        "import_database_tables",
+        { path: importPath, tables: Array.from(selectedImportTables) },
+        text.databaseImported,
+      )
+      setTableImportOpen(false)
+    } catch {
+      // action already exposes the backend error in the page alert.
+    }
+  }
+
   const clone = async () => {
     if (!cloneSource || !cloneTarget.trim()) return
     try {
@@ -476,6 +528,9 @@ function DatabaseDetails({
           </Button>
           <Button variant="outline" disabled={busy} onClick={() => void openTableExport()}>
             <Download /> {text.exportTables}
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={() => void openTableImport()}>
+            <Upload /> {text.importTables}
           </Button>
           <Button
             variant="outline"
@@ -692,6 +747,51 @@ function DatabaseDetails({
               onClick={() => void exportSelectedTables()}
             >
               <Download /> {text.exportSelectedTables(selectedTables.size)}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={tableImportOpen}
+        onOpenChange={(open) => {
+          if (!open && !busy) setTableImportOpen(false)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{text.importTablesTitle(environment.name)}</DialogTitle>
+            <DialogDescription>{text.importTablesDescription}</DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-72 gap-1 overflow-y-auto">
+            {importTablesLoading && (
+              <p className="text-sm text-muted-foreground">{text.checkingEllipsis}</p>
+            )}
+            {!importTablesLoading && !importTables.length && (
+              <p className="text-sm text-muted-foreground">{text.noTablesFoundInFile}</p>
+            )}
+            {importTables.map((table) => (
+              <label
+                key={table}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
+              >
+                <Checkbox
+                  checked={selectedImportTables.has(table)}
+                  onCheckedChange={() => toggleImportTable(table)}
+                />
+                {table}
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={busy} onClick={() => setTableImportOpen(false)}>
+              {text.cancel}
+            </Button>
+            <Button
+              disabled={busy || !selectedImportTables.size}
+              onClick={() => void importSelectedTables()}
+            >
+              <Upload /> {text.importSelectedTables(selectedImportTables.size)}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Database import can now target specific tables instead of always importing the whole dump: "Import tables…" reads the tables present in the selected `.sql` file (via the standard `mysqldump`/`pg_dump` per-table comment markers) and lets you choose which ones to apply.
+
 ## [0.4.0-beta] - 2026-08-06
 
 ### Added

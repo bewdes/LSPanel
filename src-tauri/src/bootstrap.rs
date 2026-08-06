@@ -117,6 +117,8 @@ pub fn run() {
             database_commands::create_database,
             database_commands::delete_database,
             database_commands::import_database_file,
+            database_commands::list_dump_file_tables,
+            database_commands::import_database_tables,
             database_commands::export_database_file,
             database_commands::list_database_tables,
             database_commands::export_database_tables,

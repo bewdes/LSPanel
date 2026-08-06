@@ -156,6 +156,34 @@ pub async fn import_database_file(
 }
 
 #[tauri::command]
+pub async fn list_dump_file_tables(path: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::backups::list_dump_tables(Path::new(&path)))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn import_database_tables(
+    app: tauri::AppHandle,
+    environment_id: String,
+    path: String,
+    tables: Vec<String>,
+) -> Result<(), crate::app_error::AppError> {
+    run_operation(app, environment_id, "database-import", move |app, id| {
+        crate::operations::progress_for_environment(
+            app,
+            id,
+            5,
+            "Creating automatic pre-import backup",
+        )?;
+        crate::backups::create(app, id)?;
+        crate::operations::progress_for_environment(app, id, 35, "Importing selected tables")?;
+        crate::backups::import_sql_file_for_tables(app, id, Path::new(&path), &tables)
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn export_database_file(
     app: tauri::AppHandle,
     environment_id: String,
