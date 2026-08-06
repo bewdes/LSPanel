@@ -7,7 +7,7 @@
   </p>
 -->
 
-**LS Panel** is a desktop local development environment manager for PHP/web projects — a self-hosted alternative to tools like Local by Flywheel or Laravel Herd. It runs as a native app (Tauri + React) and drives Docker/Podman containers, local databases, TLS certificates, mail capture, backups, and more through a single UI.
+**LS Panel** is a desktop local development environment manager for PHP/web projects. It runs as a native app (Tauri + React) and drives Docker/Podman containers, local databases, TLS certificates, mail capture, backups, and more through a single UI.
 
 > 🇺🇦 Українська версія цього документа: [README.uk.md](README.uk.md)
 
