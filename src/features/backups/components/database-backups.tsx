@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { errorMessage } from "@/lib/errors"
 import { pickLanguage } from "@/i18n"
-import { databaseBackupsText } from "@/i18n/database-backups"
 import {
   Card,
   CardAction,
@@ -39,14 +38,14 @@ import type { DatabaseBackup } from "@/features/backups/types"
 
 export function DatabaseBackups({
   environment,
-  uk,
+  language,
   onChanged,
 }: {
   environment: Environment
-  uk: boolean
+  language: string
   onChanged?: () => void
 }) {
-  const text = pickLanguage(databaseBackupsText, uk)
+  const text = pickLanguage(language).databaseBackups
   const [items, setItems] = React.useState<DatabaseBackup[]>([])
   const [busy, setBusy] = React.useState(false)
   const [message, setMessage] = React.useState("")

@@ -158,7 +158,7 @@ function App() {
       </div>
     )
 
-  const uk = settings.language === "uk"
+  const language = settings.language
   const running = Object.values(states).filter((status) => status === "running").length
 
   async function operate(
@@ -222,7 +222,7 @@ function App() {
           onOpenSearch={() => setPaletteOpen(true)}
         />
         <SidebarInset className="min-h-0 overflow-hidden">
-          <SiteHeader uk={uk} />
+          <SiteHeader language={language} />
           <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-background">
             {error && (
               <Alert variant="destructive" className="m-4">
@@ -234,7 +234,7 @@ function App() {
                 <ProjectWizard
                   environments={environments}
                   sites={sites}
-                  uk={uk}
+                  language={language}
                   initialProjectType={createProjectType}
                   onCancel={() => {
                     setCreateOpen(false)
@@ -253,7 +253,7 @@ function App() {
               <>
                 {view === "dashboard" && sites.length === 0 && (
                   <FirstRunHome
-                    uk={uk}
+                    language={language}
                     onCreate={() => setCreateOpen(true)}
                     onImport={() => {
                       setCreateProjectType("import")
@@ -263,7 +263,7 @@ function App() {
                 )}
                 {view === "dashboard" && sites.length > 0 && (
                   <Dashboard
-                    uk={uk}
+                    language={language}
                     sites={sites}
                     environments={environments}
                     states={states}
@@ -276,7 +276,7 @@ function App() {
                 )}
                 {view === "sites" && selectedSite === null && (
                   <SitesPage
-                    uk={uk}
+                    language={language}
                     sites={sites}
                     environments={environments}
                     states={states}
@@ -291,7 +291,7 @@ function App() {
                 )}
                 {view === "sites" && selectedSite !== null && (
                   <SiteDetailsPage
-                    uk={uk}
+                    language={language}
                     site={sites.find((item) => item.id === selectedSite)}
                     environment={environments.find(
                       (item) =>
@@ -314,7 +314,7 @@ function App() {
                 )}
                 {view === "containers" && environmentPage === null && (
                   <ContainersPage
-                    uk={uk}
+                    language={language}
                     environments={environments}
                     states={states}
                     onOperate={operate}
@@ -327,7 +327,7 @@ function App() {
                   <React.Suspense fallback={<PageLoader label="Loading environment editor…" />}>
                     <EnvironmentWindow
                       environmentId={environmentPage}
-                      uk={uk}
+                      language={language}
                       onBack={() => setEnvironmentPage(null)}
                       onSaved={async (id) => {
                         setEnvironmentPage(id)
@@ -337,22 +337,24 @@ function App() {
                   </React.Suspense>
                 )}
                 {view === "database" && (
-                  <DatabasePage environments={environments} sites={sites} uk={uk} />
+                  <DatabasePage environments={environments} sites={sites} language={language} />
                 )}
                 {view === "files" && (
-                  <FilesPage sites={sites} environments={environments} uk={uk} />
+                  <FilesPage sites={sites} environments={environments} language={language} />
                 )}
-                {view === "logs" && <LogsPage sites={sites} environments={environments} uk={uk} />}
-                {view === "mail" && <MailPage environments={environments} uk={uk} />}
+                {view === "logs" && (
+                  <LogsPage sites={sites} environments={environments} language={language} />
+                )}
+                {view === "mail" && <MailPage environments={environments} language={language} />}
                 {view === "backups" && (
-                  <BackupsPage sites={sites} environments={environments} uk={uk} />
+                  <BackupsPage sites={sites} environments={environments} language={language} />
                 )}
-                {view === "certificates" && <CertificatesPage uk={uk} />}
+                {view === "certificates" && <CertificatesPage language={language} />}
                 {view === "settings" && <SettingsPage settings={settings} onChange={setSettings} />}
                 {(view === "cloud" || view === "apps" || view === "help") && (
                   <UtilityPage
                     view={view}
-                    uk={uk}
+                    language={language}
                     runtime={runtime}
                     sites={sites}
                     settings={settings}

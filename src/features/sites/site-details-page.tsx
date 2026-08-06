@@ -72,7 +72,6 @@ import { ProjectEnvironmentEditor } from "@/features/environment-files/component
 import { ProjectSnapshots } from "@/features/snapshots/components/project-snapshots"
 import { DatabaseBackups } from "@/features/backups/components/database-backups"
 import { pickLanguage } from "@/i18n"
-import { siteDetailsText } from "@/i18n/site-details"
 import { serviceHostname } from "@/lib/format"
 import type { Environment, Site } from "@/types"
 import type { GitDetails, GitStatus, HealthReport } from "@/features/sites/types"
@@ -84,7 +83,7 @@ const ContainerTerminal = React.lazy(() =>
 )
 
 export function SiteDetailsPage({
-  uk,
+  language,
   site,
   environment,
   state,
@@ -92,7 +91,7 @@ export function SiteDetailsPage({
   onChanged,
   onOperated,
 }: {
-  uk: boolean
+  language: string
   site?: Site
   environment?: Environment
   state?: string
@@ -125,7 +124,7 @@ export function SiteDetailsPage({
   const [duplicateOpen, setDuplicateOpen] = React.useState(false)
   const [duplicateName, setDuplicateName] = React.useState("")
   const [duplicateDomain, setDuplicateDomain] = React.useState("")
-  const text = pickLanguage(siteDetailsText, uk)
+  const text = pickLanguage(language).siteDetails
   React.useEffect(() => {
     setEditName(site?.name ?? "")
     setEditDomain(site?.domain ?? "")
@@ -750,8 +749,8 @@ export function SiteDetailsPage({
         </TabsContent>
         <TabsContent value="backups" className="pt-4">
           <div className="grid gap-4">
-            <ProjectSnapshots site={site} uk={uk} />
-            {!isNative && <DatabaseBackups environment={environment} uk={uk} />}
+            <ProjectSnapshots site={site} language={language} />
+            {!isNative && <DatabaseBackups environment={environment} language={language} />}
           </div>
         </TabsContent>
         <TabsContent value="tools" className="grid gap-4 pt-4">

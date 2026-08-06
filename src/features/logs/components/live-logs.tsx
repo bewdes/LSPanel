@@ -27,20 +27,19 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { pickLanguage } from "@/i18n"
-import { liveLogsText } from "@/i18n/live-logs"
 import type { Environment } from "@/types"
 import type { LogLine } from "@/features/logs/types"
 
 export function LiveLogs({
   environment,
   initialService = "all",
-  uk,
+  language,
 }: {
   environment: Environment
   initialService?: string
-  uk: boolean
+  language: string
 }) {
-  const text = pickLanguage(liveLogsText, uk)
+  const text = pickLanguage(language).liveLogs
   const [service, setService] = React.useState(initialService)
   const [lines, setLines] = React.useState<LogEntry[]>([])
   const [search, setSearch] = React.useState("")

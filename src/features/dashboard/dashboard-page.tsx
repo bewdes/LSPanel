@@ -5,7 +5,6 @@ import { Blocks, Plus, Server } from "lucide-react"
 import type { PanelView } from "@/components/app-sidebar"
 import { PageHeading } from "@/components/page-heading"
 import { pickLanguage } from "@/i18n"
-import { dashboardText } from "@/i18n/dashboard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,7 +21,7 @@ import type { Environment, Runtime, Site } from "@/types"
 import type { ServiceResource } from "@/features/dashboard/types"
 
 export function Dashboard({
-  uk,
+  language,
   sites,
   environments,
   states,
@@ -32,7 +31,7 @@ export function Dashboard({
   onSelectSite,
   onCreate,
 }: {
-  uk: boolean
+  language: string
   sites: Site[]
   environments: Environment[]
   states: Record<string, string>
@@ -43,7 +42,7 @@ export function Dashboard({
   onCreate: () => void
 }) {
   const [resources, setResources] = React.useState<Record<string, ServiceResource[]>>({})
-  const text = pickLanguage(dashboardText, uk)
+  const text = pickLanguage(language).dashboard
   React.useEffect(() => {
     let disposed = false
     let loading = false

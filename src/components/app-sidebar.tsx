@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/sidebar"
 import { OperationCenter } from "@/components/operation-center"
 import { pickLanguage } from "@/i18n"
-import { appSidebarText } from "@/i18n/app-sidebar"
 
 export type PanelView =
   | "dashboard"
@@ -58,8 +57,7 @@ export function AppSidebar({
   onNavigate: (view: PanelView) => void
   onOpenSearch: () => void
 }) {
-  const uk = language === "uk"
-  const text = pickLanguage(appSidebarText, uk)
+  const text = pickLanguage(language).appSidebar
   const primary = [
     { id: "dashboard" as const, label: text.dashboard, icon: LayoutDashboard },
     { id: "sites" as const, label: text.sites, icon: Server },
@@ -165,7 +163,7 @@ export function AppSidebar({
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
-          <OperationCenter uk={uk} />
+          <OperationCenter language={language} />
           <SidebarMenuItem>
             <SidebarMenuButton
               isActive={active === "settings"}

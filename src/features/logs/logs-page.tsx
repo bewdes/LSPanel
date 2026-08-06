@@ -3,7 +3,6 @@ import { ArrowLeft, Container, FileText, Folder } from "lucide-react"
 
 import { PageHeading } from "@/components/page-heading"
 import { pickLanguage } from "@/i18n"
-import { logsText } from "@/i18n/logs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -21,14 +20,14 @@ type Selection = {
 export function LogsPage({
   sites,
   environments,
-  uk,
+  language,
 }: {
   sites: Site[]
   environments: Environment[]
-  uk: boolean
+  language: string
 }) {
   const [selected, setSelected] = React.useState<Selection | null>(null)
-  const text = pickLanguage(logsText, uk)
+  const text = pickLanguage(language).logs
   const environmentById = React.useMemo(
     () => new Map(environments.map((environment) => [environment.id, environment])),
     [environments],
@@ -62,7 +61,7 @@ export function LogsPage({
             key={selected.key}
             environment={selected.environment}
             initialService={selected.service}
-            uk={uk}
+            language={language}
           />
         ) : (
           <Tabs defaultValue="projects">

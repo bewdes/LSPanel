@@ -4,8 +4,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { Folder, Save } from "lucide-react"
 
 import { PageHeading } from "@/components/page-heading"
-import { pickLanguage } from "@/i18n"
-import { settingsText } from "@/i18n/settings"
+import { localeNames, locales, pickLanguage } from "@/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -33,7 +32,7 @@ export function SettingsPage({
 }) {
   const [draft, setDraft] = React.useState(settings)
   const [status, setStatus] = React.useState("")
-  const text = pickLanguage(settingsText, draft.language === "uk")
+  const text = pickLanguage(draft.language).settings
   async function chooseDirectory() {
     const path = await openDialog({
       directory: true,
@@ -57,7 +56,7 @@ export function SettingsPage({
       })
       onChange(saved)
       applyTheme(saved.theme)
-      setStatus(pickLanguage(settingsText, saved.language === "uk").settingsSaved)
+      setStatus(pickLanguage(saved.language).settings.settingsSaved)
     } catch (error) {
       setStatus(String(error))
     }
@@ -91,8 +90,11 @@ export function SettingsPage({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="uk">Українська</SelectItem>
-                      <SelectItem value="en">English</SelectItem>
+                      {locales.map((code) => (
+                        <SelectItem key={code} value={code}>
+                          {localeNames[code]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </Field>

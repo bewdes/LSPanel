@@ -11,7 +11,6 @@ import {
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { pickLanguage } from "@/i18n"
-import { systemHealthText } from "@/i18n/system-health"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,7 +61,7 @@ type DiskUsageCategory = {
   reclaimable: string
 }
 
-export function SystemHealthPage({ uk }: { uk: boolean }) {
+export function SystemHealthPage({ language }: { language: string }) {
   const [report, setReport] = React.useState<HealthReport | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState("")
@@ -71,7 +70,7 @@ export function SystemHealthPage({ uk }: { uk: boolean }) {
   const [pruneBusy, setPruneBusy] = React.useState(false)
   const [pruneResult, setPruneResult] = React.useState("")
   const [confirmPrune, setConfirmPrune] = React.useState<"buildCache" | "images" | null>(null)
-  const text = pickLanguage(systemHealthText, uk)
+  const text = pickLanguage(language).systemHealth
   const refresh = React.useCallback(async () => {
     setLoading(true)
     setError("")

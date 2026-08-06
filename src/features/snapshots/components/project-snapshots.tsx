@@ -19,7 +19,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { pickLanguage } from "@/i18n"
-import { projectSnapshotsText } from "@/i18n/project-snapshots"
 import {
   Dialog,
   DialogContent,
@@ -41,14 +40,14 @@ import type { ProjectSnapshot, SnapshotComparison } from "@/features/snapshots/t
 
 export function ProjectSnapshots({
   site,
-  uk,
+  language,
   onChanged,
 }: {
   site: Site
-  uk: boolean
+  language: string
   onChanged?: () => void
 }) {
-  const text = pickLanguage(projectSnapshotsText, uk)
+  const text = pickLanguage(language).projectSnapshots
   const [items, setItems] = React.useState<ProjectSnapshot[]>([])
   const [name, setName] = React.useState("")
   const [keep, setKeep] = React.useState(10)
@@ -363,15 +362,15 @@ export function ProjectSnapshots({
               {text.comparedWithCurrent(comparison?.snapshot.name || text.snapshotFallback)}
             </DialogDescription>
           </DialogHeader>
-          {comparison && <ComparisonResult result={comparison.result} uk={uk} />}
+          {comparison && <ComparisonResult result={comparison.result} language={language} />}
         </DialogContent>
       </Dialog>
     </Card>
   )
 }
 
-function ComparisonResult({ result, uk }: { result: SnapshotComparison; uk: boolean }) {
-  const text = pickLanguage(projectSnapshotsText, uk)
+function ComparisonResult({ result, language }: { result: SnapshotComparison; language: string }) {
+  const text = pickLanguage(language).projectSnapshots
   const groups = [
     { title: text.configFieldsChanged, values: result.configurationChanges },
     { title: text.envKeysAdded, values: result.envAdded },

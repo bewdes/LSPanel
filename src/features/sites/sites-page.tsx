@@ -22,7 +22,6 @@ import {
 
 import { PageHeading } from "@/components/page-heading"
 import { pickLanguage } from "@/i18n"
-import { sitesText } from "@/i18n/sites"
 import { errorMessage } from "@/lib/errors"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -67,7 +66,7 @@ type GitStatus = { branch: string }
 type HealthReport = { checks: Array<{ code: string; status: string }> }
 
 export function SitesPage({
-  uk,
+  language,
   sites,
   environments,
   states,
@@ -76,7 +75,7 @@ export function SitesPage({
   onOperate,
   onImported,
 }: {
-  uk: boolean
+  language: string
   sites: Site[]
   environments: Environment[]
   states: Record<string, string>
@@ -97,7 +96,7 @@ export function SitesPage({
   const [importDomain, setImportDomain] = React.useState("")
   const [importBusy, setImportBusy] = React.useState(false)
   const [importError, setImportError] = React.useState("")
-  const text = pickLanguage(sitesText, uk)
+  const text = pickLanguage(language).sites
   const chooseImportBundle = async () => {
     const selected = await openDialog({ directory: true, multiple: false })
     if (typeof selected !== "string") return

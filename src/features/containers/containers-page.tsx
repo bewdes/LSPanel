@@ -15,7 +15,6 @@ import {
 
 import { PageHeading } from "@/components/page-heading"
 import { pickLanguage } from "@/i18n"
-import { containersText } from "@/i18n/containers"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -46,7 +45,7 @@ import type { Environment } from "@/types"
 import type { Diagnosis } from "@/features/containers/types"
 
 export function ContainersPage({
-  uk,
+  language,
   environments,
   states,
   onOperate,
@@ -54,7 +53,7 @@ export function ContainersPage({
   onEdit,
   onCreate,
 }: {
-  uk: boolean
+  language: string
   environments: Environment[]
   states: Record<string, string>
   onOperate: (
@@ -67,7 +66,7 @@ export function ContainersPage({
   onCreate: () => void
 }) {
   const createEnvironment = onCreate
-  const text = pickLanguage(containersText, uk)
+  const text = pickLanguage(language).containers
   const [diagnosis, setDiagnosis] = React.useState<{
     environment: Environment
     result?: Diagnosis

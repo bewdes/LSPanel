@@ -15,7 +15,6 @@ import {
 
 import { PageHeading } from "@/components/page-heading"
 import { pickLanguage } from "@/i18n"
-import { filesText } from "@/i18n/files"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -28,11 +27,11 @@ import type { Environment, Site } from "@/types"
 export function FilesPage({
   sites,
   environments,
-  uk,
+  language,
 }: {
   sites: Site[]
   environments: Environment[]
-  uk: boolean
+  language: string
 }) {
   const [siteId, setSiteId] = React.useState("")
   const [managed, setManaged] = React.useState<{
@@ -42,7 +41,7 @@ export function FilesPage({
   } | null>(null)
   const [overview, setOverview] = React.useState<Overview | null>(null)
   const [overviewBusy, setOverviewBusy] = React.useState(false)
-  const text = pickLanguage(filesText, uk)
+  const text = pickLanguage(language).files
   const selectedSite = sites.find((site) => site.id === siteId)
   const loadOverview = React.useCallback(async () => {
     setOverviewBusy(true)
@@ -95,11 +94,11 @@ export function FilesPage({
             key={`${managed.scope}-${managed.resourceId}`}
             scope={managed.scope}
             resourceId={managed.resourceId}
-            uk={uk}
+            language={language}
           />
         ) : (
           <div className="grid gap-4">
-            <FileStatistics overview={overview} loading={overviewBusy} uk={uk} />
+            <FileStatistics overview={overview} loading={overviewBusy} language={language} />
             <Tabs defaultValue="sites">
               <TabsList>
                 <TabsTrigger value="sites">
@@ -118,7 +117,7 @@ export function FilesPage({
 
               <TabsContent value="sites" className="pt-4">
                 <FolderList
-                  uk={uk}
+                  language={language}
                   empty={text.noSitesYet}
                   items={sites.map((site) => ({
                     id: site.id,
@@ -135,7 +134,7 @@ export function FilesPage({
 
               <TabsContent value="containers" className="pt-4">
                 <FolderList
-                  uk={uk}
+                  language={language}
                   empty={text.noContainersYet}
                   items={environments.map((environment) => ({
                     id: environment.id,
@@ -157,7 +156,7 @@ export function FilesPage({
 
               <TabsContent value="backups" className="pt-4">
                 <FolderList
-                  uk={uk}
+                  language={language}
                   empty={text.noBackupDirectories}
                   items={[
                     ...sites.map((site) => ({
@@ -207,11 +206,11 @@ type Overview = { sites: Usage; containers: Usage; backups: Usage }
 function FileStatistics({
   overview,
   loading,
-  uk,
+  language,
 }: {
   overview: Overview | null
   loading: boolean
-  uk: boolean
+  language: string
 }) {
   const totalFiles = overview
     ? overview.sites.files + overview.containers.files + overview.backups.files
@@ -219,7 +218,7 @@ function FileStatistics({
   const totalBytes = overview
     ? overview.sites.bytes + overview.containers.bytes + overview.backups.bytes
     : 0
-  const text = pickLanguage(filesText, uk)
+  const text = pickLanguage(language).files
   const cards = [
     {
       label: text.sites,
@@ -276,13 +275,13 @@ type ManagedEntry = {
 function ManagedFileBrowser({
   scope,
   resourceId,
-  uk,
+  language,
 }: {
   scope: "container" | "database-backup" | "snapshot"
   resourceId: string
-  uk: boolean
+  language: string
 }) {
-  const text = pickLanguage(filesText, uk)
+  const text = pickLanguage(language).files
   const [directory, setDirectory] = React.useState("")
   const [entries, setEntries] = React.useState<ManagedEntry[]>([])
   const [file, setFile] = React.useState<{ path: string; text: string } | null>(null)
@@ -400,7 +399,7 @@ function ManagedFileBrowser({
 function FolderList({
   items,
   empty,
-  uk,
+  language,
 }: {
   items: Array<{
     id: string
@@ -413,9 +412,9 @@ function FolderList({
     onOpen?: () => void
   }>
   empty: string
-  uk: boolean
+  language: string
 }) {
-  const text = pickLanguage(filesText, uk)
+  const text = pickLanguage(language).files
   const [details, setDetails] = React.useState<
     Record<string, { bytes: number; files: number; directories: number; permissions?: string }>
   >({})

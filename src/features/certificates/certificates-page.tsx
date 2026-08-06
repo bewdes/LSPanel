@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { pickLanguage } from "@/i18n"
-import { certificatesText } from "@/i18n/certificates"
 
 type CertificateStatus = {
   caExists: boolean
@@ -34,13 +33,13 @@ type CertificateStatus = {
   certificatePath: string
 }
 
-export function CertificatesPage({ uk }: { uk: boolean }) {
+export function CertificatesPage({ language }: { language: string }) {
   const [status, setStatus] = React.useState<CertificateStatus | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
   const [copied, setCopied] = React.useState("")
   const [deleteTarget, setDeleteTarget] = React.useState<"https" | "ca" | null>(null)
-  const text = pickLanguage(certificatesText, uk)
+  const text = pickLanguage(language).certificates
 
   const refresh = React.useCallback(async () => {
     setError("")

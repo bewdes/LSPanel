@@ -15,7 +15,6 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { pickLanguage } from "@/i18n"
-import { notificationCenterText } from "@/i18n/notification-center"
 
 type AppNotification = {
   id: string
@@ -26,8 +25,8 @@ type AppNotification = {
   read: boolean
 }
 
-export function NotificationCenter({ uk }: { uk: boolean }) {
-  const text = pickLanguage(notificationCenterText, uk)
+export function NotificationCenter({ language }: { language: string }) {
+  const text = pickLanguage(language).notificationCenter
   const [notifications, setNotifications] = React.useState<AppNotification[]>([])
   const [open, setOpen] = React.useState(false)
 

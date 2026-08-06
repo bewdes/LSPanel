@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The local HTTPS certificate and its private key are written by two separate file renames; an interruption between them (or any other cause of the pair going out of sync) could leave a mismatched certificate/key pair that was silently trusted and reused, breaking every local HTTPS site with no obvious cause. The certificate is now verified against its key before being reused.
 - A genuine UI double-click (or any two near-simultaneous requests) starting an operation on the same environment could lose the race between the "is one already running" check and the insert, surfacing a raw SQLite constraint error instead of the same friendly "already has an active operation" message.
 
+### Changed
+
+- Rewrote the i18n system: translations now live in one file per language (`src/i18n/locales/en.ts`, `uk.ts`, ...) instead of scattered across ~25 per-feature files. Adding a language is now just adding one new locale file with the same keys as `en.ts` (TypeScript enforces the keys match at compile time). The LiveLink page's translations, previously inline `uk ? "..." : "..."` ternaries that bypassed the shared system entirely, are now part of it too. The two-language `uk`/`en` toggle threaded through the whole component tree as a boolean is now a plain locale-code string, since a boolean can't represent a third language.
+
 ### Removed
 
 - Unused, unwired systemd service wrapper (`service.rs`) and demo data table component that were never reachable from the app.

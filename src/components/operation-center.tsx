@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/sheet"
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { pickLanguage } from "@/i18n"
-import { operationCenterText } from "@/i18n/operation-center"
 
 type Operation = {
   id: string
@@ -38,8 +37,8 @@ const operationEvents = [
   "operation-failed",
 ] as const
 
-export function OperationCenter({ uk }: { uk: boolean }) {
-  const text = pickLanguage(operationCenterText, uk)
+export function OperationCenter({ language }: { language: string }) {
+  const text = pickLanguage(language).operationCenter
   const [operations, setOperations] = React.useState<Operation[]>([])
   const refresh = React.useCallback(
     () =>

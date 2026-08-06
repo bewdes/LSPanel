@@ -64,7 +64,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
 import { pickLanguage } from "@/i18n"
-import { environmentWindowText } from "@/i18n/environment-window"
 import { applyTheme } from "@/theme"
 import type { AppSettings } from "@/welcome-screen"
 import {
@@ -249,16 +248,16 @@ const services = [
 
 export function EnvironmentWindow({
   environmentId,
-  uk,
+  language,
   onBack,
   onSaved,
 }: {
   environmentId: string
-  uk: boolean
+  language: string
   onBack: () => void
   onSaved: (id: string) => void
 }) {
-  const text = pickLanguage(environmentWindowText, uk)
+  const text = pickLanguage(language).environmentWindow
   const id = environmentId
   const [draft, setDraft] = React.useState<Environment | null>(null)
   const [variables, setVariables] = React.useState("")
@@ -798,7 +797,7 @@ export function EnvironmentWindow({
                     />
                     <p className="text-xs text-muted-foreground">{text.environmentVariablesHint}</p>
                   </div>
-                  {id && <NativeProcessLogs environmentId={id} uk={uk} />}
+                  {id && <NativeProcessLogs environmentId={id} language={language} />}
                 </div>
               ) : (
                 <Tabs defaultValue="general">
@@ -1186,14 +1185,14 @@ export function EnvironmentWindow({
                       <Field label={text.passwordLabel}>
                         <SecretInput
                           value={draft.databasePassword}
-                          uk={uk}
+                          language={language}
                           onChange={(value) => update("databasePassword", value)}
                         />
                       </Field>
                       <Field label={text.rootPasswordLabel}>
                         <SecretInput
                           value={draft.databaseRootPassword}
-                          uk={uk}
+                          language={language}
                           onChange={(value) => update("databaseRootPassword", value)}
                         />
                       </Field>
@@ -1762,8 +1761,14 @@ export function EnvironmentWindow({
   )
 }
 
-function NativeProcessLogs({ environmentId, uk }: { environmentId: string; uk: boolean }) {
-  const text = pickLanguage(environmentWindowText, uk)
+function NativeProcessLogs({
+  environmentId,
+  language,
+}: {
+  environmentId: string
+  language: string
+}) {
+  const text = pickLanguage(language).environmentWindow
   const [lines, setLines] = React.useState<string[]>([])
   const [paused, setPaused] = React.useState(false)
   const pausedRef = React.useRef(false)
@@ -1850,14 +1855,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function SecretInput({
   value,
-  uk,
+  language,
   onChange,
 }: {
   value: string
-  uk: boolean
+  language: string
   onChange: (value: string) => void
 }) {
-  const text = pickLanguage(environmentWindowText, uk)
+  const text = pickLanguage(language).environmentWindow
   const [visible, setVisible] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
   return (

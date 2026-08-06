@@ -30,8 +30,7 @@ import {
 } from "@/components/ui/select"
 import { applyTheme } from "@/theme"
 import { homeDir, join } from "@tauri-apps/api/path"
-import { pickLanguage } from "@/i18n"
-import { welcomeScreenText } from "@/i18n/welcome-screen"
+import { localeNames, locales, pickLanguage, type Dictionary } from "@/i18n"
 import { formatMetricBytes } from "@/lib/format"
 import { errorMessage } from "@/lib/errors"
 import { dependencyInstallPlan, type DependencyInstallPlan } from "@/lib/install"
@@ -145,8 +144,7 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
   const [pendingInstall, setPendingInstall] = React.useState<DependencyInstallPlan | null>(null)
   const [cloudflareAuthBusy, setCloudflareAuthBusy] = React.useState(false)
   const [cloudflareLoginUrl, setCloudflareLoginUrl] = React.useState("")
-  const uk = settings.language in welcomeScreenText ? settings.language === "uk" : false
-  const text = pickLanguage(welcomeScreenText, uk)
+  const text = pickLanguage(settings.language).welcomeScreen
 
   React.useEffect(() => {
     applyTheme(settings.theme)
@@ -356,7 +354,7 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
   )
 }
 
-type WelcomeText = (typeof welcomeScreenText)["en"]
+type WelcomeText = Dictionary["welcomeScreen"]
 
 function WelcomeStep({ text, onStart }: { text: WelcomeText; onStart: () => void }) {
   return (
@@ -398,10 +396,7 @@ function AppearanceStep({
             value={settings.language}
             onChange={(language) => onChange({ ...settings, language })}
             label={text.appearance.language}
-            options={[
-              ["uk", "Українська"],
-              ["en", "English"],
-            ]}
+            options={locales.map((code) => [code, localeNames[code]])}
           />
         </OnboardingRow>
         <OnboardingRow icon={Moon} title={text.appearance.theme}>
@@ -806,7 +801,10 @@ function ReadyStep({
         ? text.appearance.light
         : text.appearance.system
   const rows = [
-    { label: text.ready.language, value: settings.language === "uk" ? "Українська" : "English" },
+    {
+      label: text.ready.language,
+      value: localeNames[settings.language as keyof typeof localeNames] ?? localeNames.en,
+    },
     { label: text.ready.theme, value: themeLabel },
     { label: text.ready.projects, value: settings.sitesDirectory },
     { label: text.ready.docker, value: dockerReady ? text.ready.ready : text.ready.notReady },

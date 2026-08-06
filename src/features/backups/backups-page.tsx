@@ -4,7 +4,6 @@ import { ArchiveRestore, Database, FolderClock, HardDrive, RefreshCw } from "luc
 
 import { PageHeading } from "@/components/page-heading"
 import { pickLanguage } from "@/i18n"
-import { backupsText } from "@/i18n/backups"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -33,17 +32,17 @@ type Overview = {
 export function BackupsPage({
   sites,
   environments,
-  uk,
+  language,
 }: {
   sites: Site[]
   environments: Environment[]
-  uk: boolean
+  language: string
 }) {
   const [siteId, setSiteId] = React.useState(sites[0]?.id ?? "")
   const [overview, setOverview] = React.useState<Overview | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
-  const text = pickLanguage(backupsText, uk)
+  const text = pickLanguage(language).backups
   const site = sites.find((item) => item.id === siteId)
   const environment = environments.find((item) => item.id === site?.environmentId)
 
@@ -181,13 +180,17 @@ export function BackupsPage({
                 <TabsTrigger value="database">{text.databaseBackupsTab}</TabsTrigger>
               </TabsList>
               <TabsContent value="snapshots" className="pt-4">
-                <ProjectSnapshots site={site} uk={uk} onChanged={() => void refresh()} />
+                <ProjectSnapshots
+                  site={site}
+                  language={language}
+                  onChanged={() => void refresh()}
+                />
               </TabsContent>
               <TabsContent value="database" className="pt-4">
                 {environment ? (
                   <DatabaseBackups
                     environment={environment}
-                    uk={uk}
+                    language={language}
                     onChanged={() => void refresh()}
                   />
                 ) : (

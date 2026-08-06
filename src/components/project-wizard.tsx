@@ -36,7 +36,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { pickLanguage } from "@/i18n"
-import { projectWizardText } from "@/i18n/project-wizard"
 import {
   DATABASE_VERSIONS,
   PHP_EXTENSIONS,
@@ -72,19 +71,19 @@ type Settings = {
 export function ProjectWizard({
   environments,
   sites,
-  uk,
+  language,
   initialProjectType,
   onCancel,
   onCreated,
 }: {
   environments: Environment[]
   sites: Site[]
-  uk: boolean
+  language: string
   initialProjectType?: string
   onCancel: () => void
   onCreated: (id: string) => void
 }) {
-  const text = pickLanguage(projectWizardText, uk)
+  const text = pickLanguage(language).projectWizard
   const steps = text.steps
   const occupiedEnvironmentIds = new Set(sites.map((site) => site.environmentId))
   const availableEnvironments = environments.filter((item) => !occupiedEnvironmentIds.has(item.id))
@@ -1213,7 +1212,7 @@ export function ProjectWizard({
             </Card>
           )}
           {step === 3 && environmentMode === "existing" && (
-            <ExistingEnvironmentNotice environment={environment} uk={uk} />
+            <ExistingEnvironmentNotice environment={environment} language={language} />
           )}
           {step === 4 && environmentMode === "new" && (
             <Card>
@@ -1278,7 +1277,7 @@ export function ProjectWizard({
             </Card>
           )}
           {step === 4 && environmentMode === "existing" && (
-            <ExistingEnvironmentNotice environment={environment} uk={uk} />
+            <ExistingEnvironmentNotice environment={environment} language={language} />
           )}
           {step === 5 && environmentMode === "new" && (
             <Card>
@@ -1310,7 +1309,7 @@ export function ProjectWizard({
             </Card>
           )}
           {step === 5 && environmentMode === "existing" && (
-            <ExistingEnvironmentNotice environment={environment} uk={uk} />
+            <ExistingEnvironmentNotice environment={environment} language={language} />
           )}
           {step === 6 && (
             <Card>
@@ -1585,12 +1584,12 @@ function Summary({ label, value }: { label: string; value: string }) {
 }
 function ExistingEnvironmentNotice({
   environment,
-  uk,
+  language,
 }: {
   environment?: Environment
-  uk: boolean
+  language: string
 }) {
-  const text = pickLanguage(projectWizardText, uk)
+  const text = pickLanguage(language).projectWizard
   return (
     <Card>
       <CardHeader>

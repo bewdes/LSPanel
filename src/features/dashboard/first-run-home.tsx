@@ -2,20 +2,19 @@ import { invoke } from "@tauri-apps/api/core"
 import { ExternalLink, FolderInput, Plus, Server } from "lucide-react"
 
 import { pickLanguage } from "@/i18n"
-import { firstRunHomeText } from "@/i18n/first-run-home"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export function FirstRunHome({
-  uk,
+  language,
   onCreate,
   onImport,
 }: {
-  uk: boolean
+  language: string
   onCreate: () => void
   onImport: () => void
 }) {
-  const text = pickLanguage(firstRunHomeText, uk)
+  const text = pickLanguage(language).firstRunHome
   function openExternal(url: string) {
     void invoke("open_url", { url })
   }

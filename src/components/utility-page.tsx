@@ -4,7 +4,6 @@ import { invoke } from "@tauri-apps/api/core"
 import { PageHeading } from "@/components/page-heading"
 import { PageLoader } from "@/components/page-loader"
 import { pickLanguage } from "@/i18n"
-import { utilityPageText } from "@/i18n/utility-page"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,25 +19,25 @@ const SystemHealthPage = React.lazy(() =>
 
 export function UtilityPage({
   view,
-  uk,
+  language,
   runtime: _runtime,
   sites,
   settings,
   onSettingsChange,
 }: {
   view: "cloud" | "apps" | "help"
-  uk: boolean
+  language: string
   runtime: Runtime | null
   sites: Site[]
   settings: AppSettings | null | undefined
   onSettingsChange: (settings: AppSettings) => void
 }) {
-  const text = pickLanguage(utilityPageText, uk)
+  const text = pickLanguage(language).utilityPage
   const [status, setStatus] = React.useState("")
   if (view === "help")
     return (
       <React.Suspense fallback={<PageLoader label={text.systemChecksLoading} />}>
-        <SystemHealthPage uk={uk} />
+        <SystemHealthPage language={language} />
       </React.Suspense>
     )
   if (view === "apps") {
@@ -121,5 +120,5 @@ export function UtilityPage({
       </div>
     )
   }
-  return <LiveLinkPage sites={sites} uk={uk} />
+  return <LiveLinkPage sites={sites} language={language} />
 }

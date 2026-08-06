@@ -20,7 +20,6 @@ import { Credential } from "@/components/credential"
 import { PageHeading } from "@/components/page-heading"
 import { errorMessage } from "@/lib/errors"
 import { pickLanguage } from "@/i18n"
-import { databaseText } from "@/i18n/database"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -70,13 +69,13 @@ type Overview = { size: string; connections: number; connected: boolean }
 export function DatabasePage({
   environments,
   sites,
-  uk,
+  language,
 }: {
   environments: Environment[]
   sites: Site[]
-  uk: boolean
+  language: string
 }) {
-  const text = pickLanguage(databaseText, uk)
+  const text = pickLanguage(language).database
   const [selectedId, setSelectedId] = React.useState("")
   const [overview, setOverview] = React.useState<Record<string, Overview>>({})
 
@@ -116,7 +115,7 @@ export function DatabasePage({
         siteNames={sites
           .filter((site) => site.environmentId === selected.id)
           .map((site) => site.name)}
-        uk={uk}
+        language={language}
         onBack={() => {
           setSelectedId("")
           void refreshOverview()
@@ -234,15 +233,15 @@ export function DatabasePage({
 function DatabaseDetails({
   environment,
   siteNames,
-  uk,
+  language,
   onBack,
 }: {
   environment: Environment
   siteNames: string[]
-  uk: boolean
+  language: string
   onBack: () => void
 }) {
-  const text = pickLanguage(databaseText, uk)
+  const text = pickLanguage(language).database
   const [databases, setDatabases] = React.useState<DatabaseEntry[]>([])
   const [name, setName] = React.useState("")
   const [busy, setBusy] = React.useState(false)
@@ -531,7 +530,7 @@ function DatabaseDetails({
       </Card>
 
       <DatabaseConsole environment={environment} />
-      <DatabaseBackups environment={environment} uk={uk} />
+      <DatabaseBackups environment={environment} language={language} />
 
       <Dialog
         open={Boolean(cloneSource)}

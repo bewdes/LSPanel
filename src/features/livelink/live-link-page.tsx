@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table"
 import { errorMessage } from "@/lib/errors"
 import { dependencyInstallPlan, type DependencyInstallPlan } from "@/lib/install"
+import { pickLanguage } from "@/i18n"
 import type { Site } from "@/types"
 
 type TunnelProvider = "tailscale" | "ngrok" | "cloudflare"
@@ -68,7 +69,8 @@ function providerName(id: string) {
   return PROVIDER_OPTIONS.find((option) => option.id === id)?.name ?? id
 }
 
-export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
+export function LiveLinkPage({ sites, language }: { sites: Site[]; language: string }) {
+  const text = pickLanguage(language).liveLink
   const [status, setStatus] = React.useState<LiveLinkStatus | null>(null)
   const [siteId, setSiteId] = React.useState(sites[0]?.id ?? "")
   const [provider, setProvider] = React.useState<TunnelProvider>("tailscale")
@@ -115,27 +117,11 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
   }
 
   async function handleInstalled() {
-    setInstallHint(uk ? "Пакет успішно встановлено." : "The package was installed successfully.")
+    setInstallHint(text.installedHint)
     await refresh()
   }
 
-  const installerText = {
-    warningTitle: uk ? "Підтвердження встановлення" : "Confirm installation",
-    warningDescription: uk
-      ? "Перевірте команди перед запуском. Вони змінять пакети системи."
-      : "Review the commands before running them. They will modify system packages.",
-    adminWarning: uk
-      ? "Система попросить підтвердити права адміністратора через PolicyKit."
-      : "The system will request administrator authorization through PolicyKit.",
-    detectedPlatform: uk ? "Визначена система" : "Detected system",
-    commands: uk ? "Буде виконано такі команди" : "The following commands will be executed",
-    cancel: uk ? "Скасувати" : "Cancel",
-    confirm: uk ? "Запустити встановлення" : "Start installation",
-    progressTitle: uk ? "Встановлення" : "Installing",
-    successTitle: uk ? "Встановлення завершено" : "Installation completed",
-    failedTitle: uk ? "Не вдалося встановити пакет" : "Package installation failed",
-    close: uk ? "Закрити" : "Close",
-  }
+  const installerText = text.installer
 
   async function saveNgrokToken() {
     setNgrokTokenBusy(true)
@@ -143,7 +129,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
     try {
       await invoke("set_ngrok_authtoken", { token: ngrokToken })
       setNgrokToken("")
-      setNgrokTokenStatus(uk ? "Authtoken збережено." : "Authtoken saved.")
+      setNgrokTokenStatus(text.ngrokTokenSaved)
       setNgrokTokenEditing(false)
       await refresh()
     } catch (value) {
@@ -162,7 +148,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
     )
     try {
       await invoke("cloudflare_tunnel_login")
-      setInstallHint(uk ? "Cloudflare успішно авторизовано." : "Cloudflare authenticated.")
+      setInstallHint(text.cloudflareAuthenticated)
       await refresh()
     } catch (value) {
       setError(errorMessage(value))
@@ -178,7 +164,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
     setError("")
     try {
       await invoke("cloudflare_tunnel_reset")
-      setInstallHint(uk ? "Авторизацію Cloudflare скинуто." : "Cloudflare authorization was reset.")
+      setInstallHint(text.cloudflareAuthReset)
       await refresh()
     } catch (value) {
       setError(errorMessage(value))
@@ -284,29 +270,20 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
           : providerInstalled(provider)
 
   const startBlockedReason = (() => {
-    if (!siteId) return uk ? "Немає доступних сайтів." : "No sites available."
+    if (!siteId) return text.noSitesAvailable
     if (provider === "tailscale") {
-      if (!status?.installed)
-        return uk ? "Tailscale не встановлено." : "Tailscale is not installed."
-      if (!status?.connected) return uk ? "Tailscale не підключено." : "Tailscale is not connected."
-      if (!status.serveEnabled)
-        return uk
-          ? "Tailscale Serve ще не активовано для цього пристрою."
-          : "Tailscale Serve is not enabled for this device yet."
+      if (!status?.installed) return text.tailscaleNotInstalled
+      if (!status?.connected) return text.tailscaleNotConnected
+      if (!status.serveEnabled) return text.tailscaleServeNotEnabled
     } else if (provider === "ngrok") {
-      if (!providerInstalled("ngrok"))
-        return uk ? "ngrok не встановлено." : "ngrok is not installed."
+      if (!providerInstalled("ngrok")) return text.ngrokNotInstalled
       if (!status?.providers.find((item) => item.id === "ngrok")?.authenticated)
-        return uk
-          ? "ngrok не авторизовано — введіть authtoken."
-          : "ngrok is not authenticated — enter the authtoken."
+        return text.ngrokNotAuthenticated
     } else if (provider === "cloudflare") {
-      if (!providerInstalled("cloudflare"))
-        return uk ? "Cloudflare Tunnel не встановлено." : "Cloudflare Tunnel is not installed."
+      if (!providerInstalled("cloudflare")) return text.cloudflareNotInstalled
       if (!status?.providers.find((item) => item.id === "cloudflare")?.authenticated)
-        return uk ? "Cloudflare не авторизовано." : "Cloudflare is not authenticated."
-      if (!cloudflareHostname.trim())
-        return uk ? "Вкажіть домен Cloudflare." : "Enter the Cloudflare hostname."
+        return text.cloudflareNotAuthenticated
+      if (!cloudflareHostname.trim()) return text.cloudflareHostnameRequired
     }
     return ""
   })()
@@ -329,27 +306,19 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
     <div>
       <PageHeading
         title="Live Link"
-        description={
-          uk
-            ? "Безпечно відкривайте локальний сайт через Tailscale, ngrok або Cloudflare Tunnel."
-            : "Securely expose a local site through Tailscale, ngrok, or Cloudflare Tunnel."
-        }
+        description={text.pageDescription}
         action={
           <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
             <RefreshCw className={busy ? "animate-spin" : ""} />
-            {uk ? "Оновити" : "Refresh"}
+            {text.refresh}
           </Button>
         }
       />
       <div className="grid gap-4 px-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)] lg:px-6">
         <Card>
           <CardHeader>
-            <CardTitle>{uk ? "Публікація сайту" : "Share a site"}</CardTitle>
-            <CardDescription>
-              {uk
-                ? "Додавайте кілька проєктів — кожен отримає власний порт."
-                : "Add multiple projects, each with its own port."}
-            </CardDescription>
+            <CardTitle>{text.shareSite}</CardTitle>
+            <CardDescription>{text.shareSiteDescription}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             {error && (
@@ -358,7 +327,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
               </Alert>
             )}
             <div className="space-y-2">
-              <label className="text-sm font-medium">{uk ? "Провайдер" : "Provider"}</label>
+              <label className="text-sm font-medium">{text.provider}</label>
               <div className="grid gap-3 sm:grid-cols-3">
                 {PROVIDER_OPTIONS.map((option) => {
                   const info = status?.providers.find((item) => item.id === option.id)
@@ -372,17 +341,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                     >
                       <div className="font-medium">{option.name}</div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        {!info
-                          ? uk
-                            ? "Перевірка…"
-                            : "Checking…"
-                          : info.installed
-                            ? uk
-                              ? "Встановлено"
-                              : "Installed"
-                            : uk
-                              ? "Не знайдено"
-                              : "Not found"}
+                        {!info ? text.checking : info.installed ? text.installed : text.notFound}
                       </div>
                     </button>
                   )
@@ -390,7 +349,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{uk ? "Сайт" : "Site"}</label>
+              <label className="text-sm font-medium">{text.site}</label>
               <NativeSelect
                 value={siteId}
                 disabled={busy || sites.length === 0}
@@ -406,34 +365,22 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
             {provider === "cloudflare" &&
               status?.providers.find((item) => item.id === "cloudflare")?.authenticated && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    {uk ? "Базовий домен Cloudflare" : "Cloudflare base domain"}
-                  </label>
+                  <label className="text-sm font-medium">{text.cloudflareBaseDomain}</label>
                   <Input
                     value={cloudflareBaseDomain}
                     onChange={(event) => setCloudflareBaseDomain(event.target.value)}
                     placeholder="bewdes.studio"
                     spellCheck={false}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    {uk
-                      ? "Домен з вашого акаунту Cloudflare. Піддомен генерується автоматично з назви сайту."
-                      : "A domain from your Cloudflare account. The subdomain is generated automatically from the site name."}
-                  </p>
-                  <label className="text-sm font-medium">
-                    {uk ? "Домен Cloudflare для цього сайту" : "Cloudflare hostname for this site"}
-                  </label>
+                  <p className="text-xs text-muted-foreground">{text.cloudflareBaseDomainHint}</p>
+                  <label className="text-sm font-medium">{text.cloudflareHostnameLabel}</label>
                   <Input
                     value={cloudflareHostname}
                     onChange={(event) => setCloudflareHostname(event.target.value)}
                     placeholder="fce.bewdes.studio"
                     spellCheck={false}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    {uk
-                      ? "Автоматично: назва сайту + базовий домен. Можна змінити вручну. LSPanel створить іменований тунель, DNS-запис і локальний config.yml."
-                      : "Auto-filled as site name + base domain. Editable if needed. LSPanel will create a named tunnel, DNS record, and local config.yml."}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{text.cloudflareHostnameHint}</p>
                 </div>
               )}
             {provider === "tailscale" && (
@@ -444,10 +391,8 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                   onClick={() => setMode("serve")}
                 >
                   <LockKeyhole className="mb-3 size-5" />
-                  <div className="font-medium">{uk ? "Приватний Serve" : "Private Serve"}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    {uk ? "Лише користувачі вашого tailnet." : "Only users in your tailnet."}
-                  </div>
+                  <div className="font-medium">{text.privateServe}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">{text.privateServeHint}</div>
                 </button>
                 <button
                   type="button"
@@ -455,36 +400,20 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                   onClick={() => setMode("funnel")}
                 >
                   <Globe2 className="mb-3 size-5" />
-                  <div className="font-medium">{uk ? "Публічний Funnel" : "Public Funnel"}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    {uk ? "Доступний усім в інтернеті." : "Accessible to anyone on the internet."}
-                  </div>
+                  <div className="font-medium">{text.publicFunnel}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">{text.publicFunnelHint}</div>
                 </button>
               </div>
             )}
             {provider === "tailscale" && mode === "funnel" && (
               <Alert>
-                <AlertDescription>
-                  {uk
-                    ? "Увага: Funnel робить поточну версію сайту загальнодоступною."
-                    : "Warning: Funnel makes the current site publicly accessible."}
-                </AlertDescription>
+                <AlertDescription>{text.funnelWarning}</AlertDescription>
               </Alert>
             )}
             <div className="flex flex-wrap gap-2">
               <Button disabled={busy || !siteId || !providerReady} onClick={() => void start()}>
                 <Globe2 className={busy ? "animate-pulse" : ""} />
-                {busy
-                  ? uk
-                    ? "Налаштування LiveLink…"
-                    : "Configuring LiveLink…"
-                  : status?.active
-                    ? uk
-                      ? "Додати проєкт"
-                      : "Add project"
-                    : uk
-                      ? "Запустити"
-                      : "Start"}
+                {busy ? text.configuringLiveLink : status?.active ? text.addProject : text.start}
               </Button>
               {!busy && startBlockedReason && (
                 <p className="w-full text-xs text-muted-foreground">{startBlockedReason}</p>
@@ -492,7 +421,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
               {status?.active && (
                 <Button variant="outline" disabled={busy} onClick={() => void stop()}>
                   <Unplug />
-                  {uk ? "Зупинити" : "Stop"}
+                  {text.stop}
                 </Button>
               )}
             </div>
@@ -508,23 +437,13 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium">Tailscale</span>
                   <Badge variant={status?.connected ? "default" : "secondary"}>
-                    {status?.connected
-                      ? uk
-                        ? "Підключено"
-                        : "Connected"
-                      : uk
-                        ? "Не підключено"
-                        : "Disconnected"}
+                    {status?.connected ? text.connected : text.disconnected}
                   </Badge>
                 </div>
                 {status?.version && (
                   <p className="text-xs text-muted-foreground">Tailscale {status.version}</p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  {uk
-                    ? "Авторизація відбувається повністю через системний Tailscale (tailscale up), поза LSPanel — LSPanel лише читає стан. Serve/Funnel можуть один раз запросити operator-доступ (pkexec) і активацію Serve у вашому tailnet."
-                    : "Authentication happens entirely through the system Tailscale (tailscale up), outside LSPanel — LSPanel only reads the state. Serve/Funnel may once require operator access (pkexec) and enabling Serve in your tailnet."}
-                </p>
+                <p className="text-xs text-muted-foreground">{text.tailscaleAuthNote}</p>
                 {!status?.installed && (
                   <Button
                     variant="outline"
@@ -532,13 +451,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                     disabled={Boolean(installingTool)}
                     onClick={() => void handleInstall("tailscale", PROVIDER_OPTIONS[0].installUrl)}
                   >
-                    {installingTool === "tailscale"
-                      ? uk
-                        ? "Встановлення…"
-                        : "Installing…"
-                      : uk
-                        ? "Встановити Tailscale"
-                        : "Install Tailscale"}
+                    {installingTool === "tailscale" ? text.installing : text.installTailscale}
                   </Button>
                 )}
                 {status?.connected && !status.serveEnabled && status.enableUrl && (
@@ -548,7 +461,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                     onClick={() => void invoke("open_url", { url: status.enableUrl })}
                   >
                     <ExternalLink />
-                    {uk ? "Активувати Tailscale Serve" : "Enable Tailscale Serve"}
+                    {text.enableTailscaleServe}
                   </Button>
                 )}
               </div>
@@ -562,22 +475,12 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                   <Badge variant={providerInstalled("ngrok") ? "default" : "secondary"}>
                     {providerInstalled("ngrok")
                       ? status?.providers.find((item) => item.id === "ngrok")?.authenticated
-                        ? uk
-                          ? "Авторизовано"
-                          : "Authenticated"
-                        : uk
-                          ? "Не авторизовано"
-                          : "Not authenticated"
-                      : uk
-                        ? "Не знайдено"
-                        : "Not found"}
+                        ? text.authenticated
+                        : text.notAuthenticated
+                      : text.notFound}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {uk
-                    ? "Токен зберігається локально самим ngrok (~/.config/ngrok/ngrok.yml) — LSPanel лише його встановлює. На безкоштовному плані адреса завжди випадкова (напр. panama-starship-pants.ngrok-free.dev): кастомний домен вимагає платного плану ngrok."
-                    : "The token is stored locally by ngrok itself (~/.config/ngrok/ngrok.yml) — LSPanel only sets it. On the free plan the address is always random (e.g. panama-starship-pants.ngrok-free.dev): a custom domain requires a paid ngrok plan."}
-                </p>
+                <p className="text-xs text-muted-foreground">{text.ngrokTokenNote}</p>
                 {!providerInstalled("ngrok") && (
                   <Button
                     variant="outline"
@@ -585,13 +488,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                     disabled={Boolean(installingTool)}
                     onClick={() => void handleInstall("ngrok", PROVIDER_OPTIONS[1].installUrl)}
                   >
-                    {installingTool === "ngrok"
-                      ? uk
-                        ? "Встановлення…"
-                        : "Installing…"
-                      : uk
-                        ? "Встановити ngrok"
-                        : "Install ngrok"}
+                    {installingTool === "ngrok" ? text.installing : text.installNgrok}
                   </Button>
                 )}
                 {providerInstalled("ngrok") &&
@@ -610,7 +507,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                           disabled={ngrokTokenBusy || !ngrokToken.trim()}
                           onClick={() => void saveNgrokToken()}
                         >
-                          {uk ? "Зберегти" : "Save"}
+                          {text.save}
                         </Button>
                       </div>
                       <div className="flex items-center justify-between gap-2">
@@ -625,7 +522,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                           }
                         >
                           <ExternalLink />
-                          {uk ? "Отримати authtoken" : "Get your authtoken"}
+                          {text.getAuthtoken}
                         </Button>
                         {ngrokTokenStatus && (
                           <span className="text-xs text-muted-foreground">{ngrokTokenStatus}</span>
@@ -636,7 +533,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs text-muted-foreground">
-                          {uk ? "Кастомний домен (опційно)" : "Custom domain (optional)"}
+                          {text.customDomainOptional}
                         </span>
                         <Button
                           variant="link"
@@ -644,7 +541,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                           className="h-auto p-0"
                           onClick={() => setNgrokTokenEditing(true)}
                         >
-                          {uk ? "Змінити authtoken" : "Change authtoken"}
+                          {text.changeAuthtoken}
                         </Button>
                       </div>
                       <Input
@@ -662,7 +559,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                         }
                       >
                         <ExternalLink />
-                        {uk ? "Зарезервувати домен" : "Reserve a domain"}
+                        {text.reserveDomain}
                       </Button>
                     </div>
                   ))}
@@ -677,32 +574,14 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                   <Badge variant={providerInstalled("cloudflare") ? "default" : "secondary"}>
                     {providerInstalled("cloudflare")
                       ? status?.providers.find((item) => item.id === "cloudflare")?.authenticated
-                        ? uk
-                          ? "Авторизовано"
-                          : "Authenticated"
-                        : uk
-                          ? "Не авторизовано"
-                          : "Not authenticated"
-                      : uk
-                        ? "Не знайдено"
-                        : "Not found"}
+                        ? text.authenticated
+                        : text.notAuthenticated
+                      : text.notFound}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {uk
-                    ? "Потрібен власний домен, підключений до вашого акаунту Cloudflare (DNS керується там). Авторизація відкриває браузер для вибору домену; після цього кастомні домени безкоштовні й без обмежень плану."
-                    : "Requires your own domain connected to a Cloudflare account (DNS is managed there). Authenticating opens a browser to pick a domain; after that, custom domains are free with no plan restrictions."}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {uk
-                    ? "Важливо: домен має бути делеговано на Cloudflare (NS-записи в реєстратора змінені на ті, що видає Cloudflare для цієї зони). Якщо домен лише додано в Cloudflare, а NS вказують на іншого провайдера (напр. реєстратора чи хостинг), створені записи існують тільки всередині Cloudflare й публічно не резолвляться — сайт буде недоступний, хоча тунель працює."
-                    : "Important: the domain must be delegated to Cloudflare (its registrar's NS records changed to the ones Cloudflare issues for that zone). If the domain is only added in Cloudflare while NS still points elsewhere (e.g. the registrar or another host), the records it creates only exist inside Cloudflare and never resolve publicly — the site stays unreachable even though the tunnel itself is running."}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {uk
-                    ? "Одна авторизація діє лише для однієї зони (домену), обраної в браузері під час входу. Щоб публікувати сайти на іншому домені, скиньте авторизацію нижче й увійдіть знову, обравши потрібний домен."
-                    : "One authorization covers only the single zone (domain) picked in the browser at login time. To publish sites on a different domain, reset the authorization below and log in again, picking that domain."}
-                </p>
+                <p className="text-xs text-muted-foreground">{text.cloudflareTokenNote}</p>
+                <p className="text-xs text-muted-foreground">{text.cloudflareDelegationNote}</p>
+                <p className="text-xs text-muted-foreground">{text.cloudflareZoneNote}</p>
                 {!providerInstalled("cloudflare") && (
                   <Button
                     variant="outline"
@@ -710,13 +589,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                     disabled={Boolean(installingTool)}
                     onClick={() => void handleInstall("cloudflare", PROVIDER_OPTIONS[2].installUrl)}
                   >
-                    {installingTool === "cloudflare"
-                      ? uk
-                        ? "Встановлення…"
-                        : "Installing…"
-                      : uk
-                        ? "Встановити Cloudflare Tunnel"
-                        : "Install Cloudflare Tunnel"}
+                    {installingTool === "cloudflare" ? text.installing : text.installCloudflare}
                   </Button>
                 )}
                 {providerInstalled("cloudflare") &&
@@ -727,22 +600,12 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                       disabled={cloudflareAuthBusy}
                       onClick={() => void authenticateCloudflare()}
                     >
-                      {cloudflareAuthBusy
-                        ? uk
-                          ? "Очікування авторизації…"
-                          : "Waiting for authentication…"
-                        : uk
-                          ? "Авторизувати Cloudflare"
-                          : "Authenticate Cloudflare"}
+                      {cloudflareAuthBusy ? text.waitingForAuth : text.authenticateCloudflare}
                     </Button>
                   )}
                 {cloudflareAuthBusy && (
                   <div className="space-y-2 rounded-lg border border-dashed p-3">
-                    <p className="text-xs text-muted-foreground">
-                      {uk
-                        ? "Має відкритися вкладка браузера — увійдіть у Cloudflare й оберіть домен для авторизації. Якщо вкладка не відкрилась сама, скористайтесь посиланням нижче."
-                        : "A browser tab should open — sign in to Cloudflare and pick a domain to authorize. If it didn't open on its own, use the link below."}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{text.cloudflareAuthTabNote}</p>
                     {cloudflareLoginUrl ? (
                       <Button
                         variant="outline"
@@ -750,12 +613,10 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                         onClick={() => void invoke("open_url", { url: cloudflareLoginUrl })}
                       >
                         <ExternalLink />
-                        {uk ? "Відкрити сторінку авторизації" : "Open the authorization page"}
+                        {text.openAuthPage}
                       </Button>
                     ) : (
-                      <p className="text-xs text-muted-foreground">
-                        {uk ? "Отримання посилання…" : "Fetching the link…"}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{text.fetchingLink}</p>
                     )}
                   </div>
                 )}
@@ -767,7 +628,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                       disabled={cloudflareAuthBusy}
                       onClick={() => void resetCloudflareAuth()}
                     >
-                      {uk ? "Скинути авторизацію" : "Reset authorization"}
+                      {text.resetAuthorization}
                     </Button>
                   )}
               </div>
@@ -776,19 +637,13 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
         </Card>
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>{uk ? "Запущені проєкти" : "Running projects"}</CardTitle>
-            <CardDescription>
-              {uk
-                ? "Сайти, доступні через активні тунелі."
-                : "Sites available through active tunnels."}
-            </CardDescription>
+            <CardTitle>{text.runningProjects}</CardTitle>
+            <CardDescription>{text.runningProjectsDescription}</CardDescription>
           </CardHeader>
           <CardContent>
             {status && activeLinks.length === 0 && (
               <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                {uk
-                  ? "Ще немає проєктів, запущених через LiveLink."
-                  : "No projects are currently running through LiveLink."}
+                {text.noRunningProjects}
               </div>
             )}
             {activeLinks.length > 0 && (
@@ -796,12 +651,12 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>{uk ? "Сайт" : "Site"}</TableHead>
-                      <TableHead>{uk ? "Провайдер" : "Provider"}</TableHead>
-                      <TableHead>{uk ? "Режим" : "Mode"}</TableHead>
-                      <TableHead>{uk ? "Стан" : "Status"}</TableHead>
+                      <TableHead>{text.site}</TableHead>
+                      <TableHead>{text.provider}</TableHead>
+                      <TableHead>{text.modeColumn}</TableHead>
+                      <TableHead>{text.statusColumn}</TableHead>
                       <TableHead>URL</TableHead>
-                      <TableHead className="text-right">{uk ? "Дії" : "Actions"}</TableHead>
+                      <TableHead className="text-right">{text.actionsColumn}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -825,9 +680,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                                 ? "Public Funnel"
                                 : link.mode === "serve"
                                   ? "Private Serve"
-                                  : uk
-                                    ? "Тунель"
-                                    : "Tunnel"}
+                                  : text.tunnelMode}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -844,7 +697,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                             </div>
                           </TableCell>
                           <TableCell className="max-w-64 truncate text-xs text-muted-foreground">
-                            {url ?? (uk ? "Встановлюється…" : "Establishing…")}
+                            {url ?? text.establishing}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -854,7 +707,7 @@ export function LiveLinkPage({ sites, uk }: { sites: Site[]; uk: boolean }) {
                               onClick={() => url && void invoke("open_url", { url })}
                             >
                               <ExternalLink />
-                              {uk ? "Відкрити" : "Open"}
+                              {text.open}
                             </Button>
                           </TableCell>
                         </TableRow>

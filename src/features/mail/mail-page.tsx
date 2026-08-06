@@ -18,8 +18,7 @@ import {
 } from "lucide-react"
 
 import { PageHeading } from "@/components/page-heading"
-import { pickLanguage } from "@/i18n"
-import { mailText } from "@/i18n/mail"
+import { pickLanguage, type Dictionary } from "@/i18n"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -61,10 +60,16 @@ type MailDetail = MailSummary & {
     spamError: string
   }
 }
-type MailText = typeof mailText.en
+type MailText = Dictionary["mail"]
 
-export function MailPage({ environments, uk }: { environments: Environment[]; uk: boolean }) {
-  const text = pickLanguage(mailText, uk)
+export function MailPage({
+  environments,
+  language,
+}: {
+  environments: Environment[]
+  language: string
+}) {
+  const text = pickLanguage(language).mail
   const available = React.useMemo(
     () => environments.filter((environment) => environment.extraServices?.includes("mailpit")),
     [environments],
