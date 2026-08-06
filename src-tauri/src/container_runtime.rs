@@ -1,8 +1,27 @@
 use serde::Serialize;
 use std::{
-    path::Path,
+    path::PathBuf,
     process::{Command, Stdio},
 };
+
+/// Every location `podman-compose` (a separate Python package, not something
+/// Podman itself ships) is commonly installed to: the system package
+/// manager's paths, Homebrew on both Apple Silicon and Linux, and a
+/// per-user `pip install --user` / `pipx install` (pipx's default target is
+/// `~/.local/bin`, and that's also where a plain `pip install --user` puts
+/// console scripts).
+fn podman_compose_candidates() -> Vec<PathBuf> {
+    let mut candidates = vec![
+        PathBuf::from("/usr/bin/podman-compose"),
+        PathBuf::from("/usr/local/bin/podman-compose"),
+        PathBuf::from("/opt/homebrew/bin/podman-compose"),
+        PathBuf::from("/home/linuxbrew/.linuxbrew/bin/podman-compose"),
+    ];
+    if let Some(home) = std::env::var_os("HOME") {
+        candidates.push(PathBuf::from(home).join(".local/bin/podman-compose"));
+    }
+    candidates
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -118,9 +137,9 @@ fn inspect(runtime: &str) -> Option<RuntimeStatus> {
     )
     .is_ok_and(|output| output.status.success());
     let external_compose = runtime == "podman"
-        && ["/usr/bin/podman-compose", "/usr/local/bin/podman-compose"]
+        && podman_compose_candidates()
             .iter()
-            .any(|provider| Path::new(provider).is_file());
+            .any(|provider| provider.is_file());
     let compose_available = integrated_compose || external_compose;
 
     Some(RuntimeStatus {
@@ -191,15 +210,20 @@ pub(crate) fn command(runtime: &str) -> Command {
     command
         .env_remove("LD_LIBRARY_PATH")
         .env_remove("LD_PRELOAD");
-    if runtime.ends_with("podman") && Path::new("/usr/bin/podman-compose").is_file() {
-        command.env("PODMAN_COMPOSE_PROVIDER", "/usr/bin/podman-compose");
+    if runtime.ends_with("podman") {
+        if let Some(provider) = podman_compose_candidates()
+            .into_iter()
+            .find(|path| path.is_file())
+        {
+            command.env("PODMAN_COMPOSE_PROVIDER", provider);
+        }
     }
     command
 }
 
 #[cfg(test)]
 mod tests {
-    use super::client_version;
+    use super::{client_version, podman_compose_candidates};
 
     #[test]
     fn parses_client_only_runtime_versions() {
@@ -211,5 +235,27 @@ mod tests {
             client_version("podman", "podman version 5.4.2\n").as_deref(),
             Some("5.4.2")
         );
+    }
+
+    #[test]
+    fn podman_compose_candidates_cover_homebrew_and_per_user_installs() {
+        // Regression test: detection originally only checked /usr/bin and
+        // /usr/local/bin, missing Apple Silicon/Linuxbrew Homebrew and a
+        // `pip install --user` / `pipx install` (both default to
+        // ~/.local/bin), which is how podman-compose is very commonly
+        // installed since it isn't part of Podman itself.
+        let candidates = podman_compose_candidates()
+            .into_iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>();
+        assert!(candidates.contains(&"/usr/bin/podman-compose".to_owned()));
+        assert!(candidates.contains(&"/usr/local/bin/podman-compose".to_owned()));
+        assert!(candidates.contains(&"/opt/homebrew/bin/podman-compose".to_owned()));
+        assert!(candidates.contains(&"/home/linuxbrew/.linuxbrew/bin/podman-compose".to_owned()));
+        if std::env::var_os("HOME").is_some() {
+            assert!(candidates
+                .iter()
+                .any(|path| path.ends_with(".local/bin/podman-compose")));
+        }
     }
 }

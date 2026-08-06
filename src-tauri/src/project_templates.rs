@@ -626,11 +626,31 @@ fn restore_ownership(
             .output()
             .ok()
             .is_some_and(|output| String::from_utf8_lossy(&output.stdout).contains("podman"));
-    let (uid, gid) = if runtime == "podman" || docker_uses_podman {
-        (0, 0)
-    } else {
-        (metadata.uid(), metadata.gid())
-    };
+    let (uid, gid) = (metadata.uid(), metadata.gid());
+    if (runtime == "podman" || docker_uses_podman) && podman_is_rootless() {
+        // Rootless Podman remaps the container's UID/GID namespace, so a
+        // `chown` run *inside* the container can't reliably land on the
+        // host's actual UID/GID - that depends on the current subuid/subgid
+        // mapping, which isn't necessarily "container UID 0 = host user"
+        // (a custom --uidmap, or a non-default subuid range, breaks that
+        // assumption). `podman unshare` runs in the same user namespace as
+        // rootless containers and translates correctly regardless of the
+        // mapping actually in use.
+        let app_directory = Path::new(&site.directory).join("app");
+        let output = Command::new("podman")
+            .args(["unshare", "chown", "-R", &format!("{uid}:{gid}")])
+            .arg(&app_directory)
+            .output()
+            .map_err(|error| error.to_string())?;
+        return if output.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).trim().to_owned())
+        };
+    }
+    // Rootful Podman and Docker both see the same UID/GID namespace as the
+    // host, so a plain in-container chown to the host directory's owner
+    // works directly.
     let service = if is_node_project(&site.project_type) {
         "node"
     } else if environment.web_server == "Nginx" {
@@ -641,6 +661,16 @@ fn restore_ownership(
     let command = format!("chown -R {uid}:{gid} .");
     run_in_service(app, site, environment, service, &command)
         .or_else(|_| run_in_temporary_service(app, site, environment, service, &command))
+}
+
+fn podman_is_rootless() -> bool {
+    Command::new("podman")
+        .args(["info", "--format", "{{.Host.Security.Rootless}}"])
+        .output()
+        .ok()
+        .is_some_and(|output| {
+            output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "true"
+        })
 }
 
 fn php_string(value: &str) -> String {
