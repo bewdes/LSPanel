@@ -12,7 +12,7 @@
 > 🇺🇦 Українська версія цього документа: [README.uk.md](README.uk.md)
 
 [![CI](https://github.com/bewdes/LSPanel/actions/workflows/ci.yml/badge.svg)](https://github.com/bewdes/LSPanel/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-0.3.0--beta-orange)
+![Version](https://img.shields.io/badge/version-0.3.1--beta-orange)
 ![Rust](https://img.shields.io/badge/backend-Rust-b7410e)
 ![React](https://img.shields.io/badge/frontend-React_19-61dafb)
 ![Tauri](https://img.shields.io/badge/shell-Tauri_2-24c8db)
