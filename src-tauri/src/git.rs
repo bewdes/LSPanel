@@ -43,7 +43,7 @@ impl Drop for RepositoryLock {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitStatus {
     pub repository: bool,
@@ -413,29 +413,55 @@ fn gitignore_template(project_type: &str) -> &'static str {
     }
 }
 
-pub fn checkout(directory: &str, branch: &str, create: bool) -> Result<GitStatus, String> {
+pub fn checkout(
+    directory: &str,
+    branch: &str,
+    create: bool,
+    stash: bool,
+    force: bool,
+) -> Result<GitStatus, String> {
     let _lock = RepositoryLock::acquire(directory)?;
     let path = Path::new(directory);
     if !path.join(".git").is_dir() {
         return Err("This project is not a Git repository".into());
+    }
+    if stash && force {
+        return Err("Choose either stashing or discarding changes, not both".into());
     }
     let branch = branch.trim();
     if branch.is_empty() || branch.starts_with('-') || branch.len() > 200 {
         return Err("Enter a valid branch name".into());
     }
     run(path, &["check-ref-format", "--branch", branch])?;
-    if create {
-        run(path, &["switch", "-c", branch])?
-    } else {
-        run(path, &["switch", branch])?
+    if stash {
+        run(
+            path,
+            &[
+                "stash",
+                "push",
+                "--include-untracked",
+                "-m",
+                &format!("LS Panel: before switching to {branch}"),
+            ],
+        )?;
     }
+    let mut args = vec!["switch"];
+    if create {
+        args.push("-c");
+    }
+    if force {
+        args.push("--discard-changes");
+    }
+    args.push(branch);
+    run(path, &args)?;
     status(directory)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        browser_url, gitignore_template, parse_ahead_behind, parse_branch_name, RepositoryLock,
+        browser_url, checkout, gitignore_template, parse_ahead_behind, parse_branch_name,
+        RepositoryLock,
     };
 
     #[test]
@@ -528,5 +554,103 @@ mod tests {
         );
         assert_eq!(parse_ahead_behind("## main...origin/main"), (0, 0));
         assert_eq!(parse_ahead_behind("## main"), (0, 0));
+    }
+
+    fn git_repo_fixture(name: &str) -> std::path::PathBuf {
+        let directory =
+            std::env::temp_dir().join(format!("lspanel-git-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        directory
+    }
+
+    fn run_git(directory: &std::path::Path, args: &[&str]) {
+        let output = std::process::Command::new("git")
+            .args(args)
+            .current_dir(directory)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn checkout_rejects_combining_stash_and_force() {
+        let directory = git_repo_fixture("stash-force-conflict");
+        run_git(&directory, &["init", "-q"]);
+
+        let error = checkout(directory.to_str().unwrap(), "main", false, true, true).unwrap_err();
+        assert!(error.contains("not both"));
+
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn stashing_before_switch_preserves_uncommitted_changes_across_branches() {
+        // Regression test: a plain `git switch` refuses to move to a branch
+        // when doing so would overwrite uncommitted local changes. The
+        // "stash" option should shelve those changes first so the switch
+        // can proceed instead of just failing.
+        let directory = git_repo_fixture("stash");
+        run_git(&directory, &["init", "-q", "-b", "main"]);
+        run_git(&directory, &["config", "user.email", "test@example.test"]);
+        run_git(&directory, &["config", "user.name", "Test"]);
+        let file = directory.join("file.txt");
+        std::fs::write(&file, "main-content\n").unwrap();
+        run_git(&directory, &["add", "-A"]);
+        run_git(&directory, &["commit", "-q", "-m", "main commit"]);
+        run_git(&directory, &["switch", "-q", "-c", "feature"]);
+        std::fs::write(&file, "feature-content\n").unwrap();
+        run_git(&directory, &["add", "-A"]);
+        run_git(&directory, &["commit", "-q", "-m", "feature commit"]);
+        run_git(&directory, &["switch", "-q", "main"]);
+        std::fs::write(&file, "dirty-content\n").unwrap();
+
+        let path = directory.to_str().unwrap();
+        // Without stashing, git refuses since the dirty file would be
+        // overwritten by the branch switch.
+        assert!(checkout(path, "feature", false, false, false).is_err());
+
+        let status = checkout(path, "feature", false, true, false).unwrap();
+        assert_eq!(status.branch, "feature");
+        assert!(!status.dirty);
+        let stash_list = std::process::Command::new("git")
+            .args(["stash", "list"])
+            .current_dir(&directory)
+            .output()
+            .unwrap();
+        assert!(!String::from_utf8_lossy(&stash_list.stdout)
+            .trim()
+            .is_empty());
+
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn force_switch_discards_conflicting_uncommitted_changes() {
+        let directory = git_repo_fixture("force");
+        run_git(&directory, &["init", "-q", "-b", "main"]);
+        run_git(&directory, &["config", "user.email", "test@example.test"]);
+        run_git(&directory, &["config", "user.name", "Test"]);
+        let file = directory.join("file.txt");
+        std::fs::write(&file, "main-content\n").unwrap();
+        run_git(&directory, &["add", "-A"]);
+        run_git(&directory, &["commit", "-q", "-m", "main commit"]);
+        run_git(&directory, &["switch", "-q", "-c", "feature"]);
+        std::fs::write(&file, "feature-content\n").unwrap();
+        run_git(&directory, &["add", "-A"]);
+        run_git(&directory, &["commit", "-q", "-m", "feature commit"]);
+        run_git(&directory, &["switch", "-q", "main"]);
+        std::fs::write(&file, "dirty-content\n").unwrap();
+
+        let path = directory.to_str().unwrap();
+        let status = checkout(path, "feature", false, false, true).unwrap();
+        assert_eq!(status.branch, "feature");
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "feature-content\n");
+
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

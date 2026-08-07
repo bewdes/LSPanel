@@ -1053,6 +1053,13 @@ const uk: Dictionary = {
     gitInitSuccessMessage: "Git-репозиторій успішно ініціалізовано з проєктним .gitignore.",
     createdAndSwitchedTo: (branch: string) => `Створено та перемкнуто на ${branch}`,
     switchedTo: (branch: string) => `Перемкнуто на ${branch}`,
+    stashedAndSwitchedTo: (branch: string) =>
+      `Незакомічені зміни заховано, перемкнуто на ${branch}`,
+    uncommittedChangesTitle: "У вас є незакомічені зміни",
+    uncommittedChangesDescription: (branch: string) =>
+      `Перемикання на ${branch} перезапише незакомічені зміни в робочій директорії. Заховайте їх (stash), щоб перемкнутись безпечно, або відкиньте їх, щоб перемкнутись попри все.`,
+    stashAndSwitch: "Заховати та перемкнутись",
+    discardAndSwitch: "Відкинути та перемкнутись",
     domainAliases: "Домен-псевдоніми",
     domainAliasesDescription:
       "Додаткові імена .localhost або wildcard-псевдоніми, спрямовані на цей проєкт.",

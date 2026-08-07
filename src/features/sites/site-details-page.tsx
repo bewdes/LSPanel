@@ -107,6 +107,10 @@ export function SiteDetailsPage({
   const [gitStatus, setGitStatus] = React.useState<GitStatus | null>(null)
   const [gitDetails, setGitDetails] = React.useState<GitDetails | null>(null)
   const [newBranch, setNewBranch] = React.useState("")
+  const [pendingCheckout, setPendingCheckout] = React.useState<{
+    branch: string
+    create: boolean
+  } | null>(null)
   const [quickOutput, setQuickOutput] = React.useState("")
   const [customCommand, setCustomCommand] = React.useState("")
   const [wpCliCommand, setWpCliCommand] = React.useState("")
@@ -301,7 +305,11 @@ export function SiteDetailsPage({
       setBusy(false)
     }
   }
-  async function checkoutBranch(branch: string, create = false) {
+  async function checkoutBranch(
+    branch: string,
+    create = false,
+    options?: { stash?: boolean; force?: boolean },
+  ) {
     if (!branch) return
     setBusy(true)
     setMessage("")
@@ -310,14 +318,28 @@ export function SiteDetailsPage({
         directory: `${currentSite.directory}/app`,
         branch,
         create,
+        stash: options?.stash ?? false,
+        force: options?.force ?? false,
       })
       setNewBranch("")
+      setPendingCheckout(null)
       await refreshGit()
-      setMessage(create ? text.createdAndSwitchedTo(branch) : text.switchedTo(branch))
+      setMessage(
+        options?.stash
+          ? text.stashedAndSwitchedTo(branch)
+          : create
+            ? text.createdAndSwitchedTo(branch)
+            : text.switchedTo(branch),
+      )
       setMessageOk(true)
     } catch (error) {
-      setMessage(errorMessage(error))
-      setMessageOk(false)
+      const description = errorMessage(error)
+      if (!options?.stash && !options?.force && isDirtyCheckoutConflict(description)) {
+        setPendingCheckout({ branch, create })
+      } else {
+        setMessage(description)
+        setMessageOk(false)
+      }
     } finally {
       setBusy(false)
     }
@@ -1210,6 +1232,47 @@ export function SiteDetailsPage({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog
+        open={Boolean(pendingCheckout)}
+        onOpenChange={(open) => !open && setPendingCheckout(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{text.uncommittedChangesTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingCheckout && text.uncommittedChangesDescription(pendingCheckout.branch)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>{text.cancel}</AlertDialogCancel>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                pendingCheckout &&
+                void checkoutBranch(pendingCheckout.branch, pendingCheckout.create, {
+                  stash: true,
+                })
+              }
+            >
+              {text.stashAndSwitch}
+            </Button>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={busy}
+              onClick={(event) => {
+                event.preventDefault()
+                if (pendingCheckout)
+                  void checkoutBranch(pendingCheckout.branch, pendingCheckout.create, {
+                    force: true,
+                  })
+              }}
+            >
+              {text.discardAndSwitch}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -1270,4 +1333,10 @@ function splitCommandLine(value: string) {
   if (current) result.push(current)
   if (!result.length) throw new Error("Enter a command")
   return result
+}
+
+function isDirtyCheckoutConflict(error: string) {
+  return /would be overwritten by checkout|please commit your changes or stash them|please move or remove them before you switch branches/i.test(
+    error,
+  )
 }

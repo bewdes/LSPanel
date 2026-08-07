@@ -1028,6 +1028,12 @@ const en = {
     gitInitSuccessMessage: "Git repository initialized successfully with a project .gitignore.",
     createdAndSwitchedTo: (branch: string) => `Created and switched to ${branch}`,
     switchedTo: (branch: string) => `Switched to ${branch}`,
+    stashedAndSwitchedTo: (branch: string) => `Uncommitted changes stashed, switched to ${branch}`,
+    uncommittedChangesTitle: "You have uncommitted changes",
+    uncommittedChangesDescription: (branch: string) =>
+      `Switching to ${branch} would overwrite uncommitted changes in the working tree. Stash them to switch safely, or discard them to switch anyway.`,
+    stashAndSwitch: "Stash and switch",
+    discardAndSwitch: "Discard and switch",
     domainAliases: "Domain aliases",
     domainAliasesDescription:
       "Additional .localhost names or wildcard aliases routed to this project.",

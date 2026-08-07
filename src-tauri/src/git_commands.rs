@@ -80,10 +80,12 @@ pub async fn site_git_checkout(
     directory: String,
     branch: String,
     create: bool,
+    stash: bool,
+    force: bool,
 ) -> Result<crate::git::GitStatus, String> {
     let notify_branch = branch.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        crate::git::checkout(&directory, &branch, create)
+        crate::git::checkout(&directory, &branch, create, stash, force)
     })
     .await
     .map_err(|error| error.to_string())??;
