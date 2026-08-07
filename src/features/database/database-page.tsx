@@ -258,10 +258,12 @@ function DatabaseDetails({
   const [availableTables, setAvailableTables] = React.useState<string[]>([])
   const [selectedTables, setSelectedTables] = React.useState<Set<string>>(new Set())
   const [tablesLoading, setTablesLoading] = React.useState(false)
+  const [tableExportError, setTableExportError] = React.useState("")
   const [tableImportOpen, setTableImportOpen] = React.useState(false)
   const [importPath, setImportPath] = React.useState("")
   const [importTables, setImportTables] = React.useState<string[]>([])
   const [selectedImportTables, setSelectedImportTables] = React.useState<Set<string>>(new Set())
+  const [tableImportError, setTableImportError] = React.useState("")
   const [importTablesLoading, setImportTablesLoading] = React.useState(false)
 
   const load = React.useCallback(async () => {
@@ -339,15 +341,14 @@ function DatabaseDetails({
     setTableExportOpen(true)
     setTablesLoading(true)
     setSelectedTables(new Set())
+    setTableExportError("")
     try {
       const tables = await invoke<string[]>("list_database_tables", {
         environmentId: environment.id,
       })
       setAvailableTables(tables)
     } catch (value) {
-      setMessage(errorMessage(value))
-      setMessageOk(false)
-      setTableExportOpen(false)
+      setTableExportError(errorMessage(value))
     } finally {
       setTablesLoading(false)
     }
@@ -370,6 +371,7 @@ function DatabaseDetails({
       filters: [{ name: "SQL dump", extensions: ["sql"] }],
     })
     if (!path) return
+    setTableExportError("")
     try {
       await action(
         "export_database_tables",
@@ -377,8 +379,8 @@ function DatabaseDetails({
         text.databaseExported,
       )
       setTableExportOpen(false)
-    } catch {
-      // action already exposes the backend error in the page alert.
+    } catch (value) {
+      setTableExportError(errorMessage(value))
     }
   }
 
@@ -394,13 +396,12 @@ function DatabaseDetails({
     setTableImportOpen(true)
     setImportTablesLoading(true)
     setSelectedImportTables(new Set())
+    setTableImportError("")
     try {
       const tables = await invoke<string[]>("list_dump_file_tables", { path })
       setImportTables(tables)
     } catch (value) {
-      setMessage(errorMessage(value))
-      setMessageOk(false)
-      setTableImportOpen(false)
+      setTableImportError(errorMessage(value))
     } finally {
       setImportTablesLoading(false)
     }
@@ -417,6 +418,7 @@ function DatabaseDetails({
 
   const importSelectedTables = async () => {
     if (!selectedImportTables.size) return
+    setTableImportError("")
     try {
       await action(
         "import_database_tables",
@@ -424,8 +426,8 @@ function DatabaseDetails({
         text.databaseImported,
       )
       setTableImportOpen(false)
-    } catch {
-      // action already exposes the backend error in the page alert.
+    } catch (value) {
+      setTableImportError(errorMessage(value))
     }
   }
 
@@ -710,7 +712,10 @@ function DatabaseDetails({
       <Dialog
         open={tableExportOpen}
         onOpenChange={(open) => {
-          if (!open && !busy) setTableExportOpen(false)
+          if (!open && !busy) {
+            setTableExportOpen(false)
+            setTableExportError("")
+          }
         }}
       >
         <DialogContent>
@@ -718,11 +723,16 @@ function DatabaseDetails({
             <DialogTitle>{text.exportTablesTitle(environment.name)}</DialogTitle>
             <DialogDescription>{text.exportTablesDescription}</DialogDescription>
           </DialogHeader>
+          {tableExportError && (
+            <Alert variant="destructive">
+              <AlertDescription>{tableExportError}</AlertDescription>
+            </Alert>
+          )}
           <div className="grid max-h-72 gap-1 overflow-y-auto">
             {tablesLoading && (
               <p className="text-sm text-muted-foreground">{text.checkingEllipsis}</p>
             )}
-            {!tablesLoading && !availableTables.length && (
+            {!tablesLoading && !tableExportError && !availableTables.length && (
               <p className="text-sm text-muted-foreground">{text.noTablesFound}</p>
             )}
             {availableTables.map((table) => (
@@ -739,7 +749,14 @@ function DatabaseDetails({
             ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" disabled={busy} onClick={() => setTableExportOpen(false)}>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setTableExportOpen(false)
+                setTableExportError("")
+              }}
+            >
               {text.cancel}
             </Button>
             <Button
@@ -755,7 +772,10 @@ function DatabaseDetails({
       <Dialog
         open={tableImportOpen}
         onOpenChange={(open) => {
-          if (!open && !busy) setTableImportOpen(false)
+          if (!open && !busy) {
+            setTableImportOpen(false)
+            setTableImportError("")
+          }
         }}
       >
         <DialogContent>
@@ -763,11 +783,16 @@ function DatabaseDetails({
             <DialogTitle>{text.importTablesTitle(environment.name)}</DialogTitle>
             <DialogDescription>{text.importTablesDescription}</DialogDescription>
           </DialogHeader>
+          {tableImportError && (
+            <Alert variant="destructive">
+              <AlertDescription>{tableImportError}</AlertDescription>
+            </Alert>
+          )}
           <div className="grid max-h-72 gap-1 overflow-y-auto">
             {importTablesLoading && (
               <p className="text-sm text-muted-foreground">{text.checkingEllipsis}</p>
             )}
-            {!importTablesLoading && !importTables.length && (
+            {!importTablesLoading && !tableImportError && !importTables.length && (
               <p className="text-sm text-muted-foreground">{text.noTablesFoundInFile}</p>
             )}
             {importTables.map((table) => (
@@ -784,7 +809,14 @@ function DatabaseDetails({
             ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" disabled={busy} onClick={() => setTableImportOpen(false)}>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setTableImportOpen(false)
+                setTableImportError("")
+              }}
+            >
               {text.cancel}
             </Button>
             <Button
