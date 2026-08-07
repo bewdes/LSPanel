@@ -1050,6 +1050,13 @@ const en = {
     wordpressAdmin: "WordPress admin",
     wordpressPassword: "WordPress password",
     loadingTerminal: "Loading terminal…",
+    generatedFiles: "Generated configuration files",
+    generatedFilesDescription:
+      "Read-only preview of the nginx/Apache, PHP and Docker configuration LS Panel generated for this environment. Regenerated automatically on every save — edit environment settings instead of these files directly.",
+    noGeneratedFilesYet: "No generated files found. Save the environment to generate them.",
+    refreshFiles: "Refresh",
+    copyContents: "Copy contents",
+    copied: "Copied",
     developerTools: "Developer tools",
     projectActions: "Project actions",
     terminalLabel: "Terminal",

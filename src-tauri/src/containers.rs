@@ -1972,6 +1972,49 @@ pub(crate) fn stack_directory(app: &tauri::AppHandle, id: &str) -> Result<PathBu
         .join(id))
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneratedFile {
+    pub name: String,
+    pub content: String,
+}
+
+/// The stack-directory files `prepare` may write out for a container-backed
+/// environment. Not every file exists for every environment (e.g.
+/// `000-default.conf` only exists for Apache, `mailpit.ini` only when the
+/// Mailpit extra service is enabled) - only files that actually exist are
+/// returned.
+const GENERATED_FILE_NAMES: &[&str] = &[
+    "compose.yaml",
+    "Dockerfile.php",
+    "default.conf",
+    "000-default.conf",
+    "php-overrides.ini",
+    "php-fpm-overrides.conf",
+    "mailpit.ini",
+    "msmtprc",
+    "lspanel-cron",
+];
+
+pub fn generated_files(app: &tauri::AppHandle, id: &str) -> Result<Vec<GeneratedFile>, String> {
+    read_generated_files(&stack_directory(app, id)?)
+}
+
+fn read_generated_files(directory: &Path) -> Result<Vec<GeneratedFile>, String> {
+    GENERATED_FILE_NAMES
+        .iter()
+        .filter(|name| directory.join(name).is_file())
+        .map(|name| {
+            let content =
+                fs::read_to_string(directory.join(name)).map_err(|error| error.to_string())?;
+            Ok(GeneratedFile {
+                name: (*name).to_owned(),
+                content,
+            })
+        })
+        .collect()
+}
+
 /// Raw MySQL/PostgreSQL data files always live in LS Panel's own app-data
 /// storage, never inside a project folder: they're internal engine state
 /// (permission-sensitive, not portable, thousands of files), not something a
@@ -3066,6 +3109,38 @@ mod tests {
             "<VirtualHost *:80>\nDocumentRoot /var/www/sites\n</VirtualHost>\n",
         )
         .unwrap();
+    }
+
+    #[test]
+    fn generated_files_only_returns_known_files_that_actually_exist() {
+        let directory =
+            std::env::temp_dir().join(format!("lspanel-generated-files-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+        write_smoke_stack(&directory, &test_environment());
+        // A file that isn't in the known list must never be exposed through
+        // this read-only viewer, even though it lives in the same directory.
+        fs::write(directory.join("secret.env"), "SHOULD_NOT_APPEAR=1\n").unwrap();
+
+        let files = read_generated_files(&directory).unwrap();
+        let names: Vec<&str> = files.iter().map(|file| file.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "compose.yaml",
+                "Dockerfile.php",
+                "000-default.conf",
+                "php-overrides.ini"
+            ]
+        );
+        assert!(files
+            .iter()
+            .find(|file| file.name == "php-overrides.ini")
+            .unwrap()
+            .content
+            .contains("memory_limit=128M"));
+
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

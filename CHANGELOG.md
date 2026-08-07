@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Operations and Notifications panels now have a search box to filter a long history down to what you're looking for.
 - Mail now refreshes its inbox list automatically in the background, and no longer re-runs the SpamAssassin/HTML compatibility checks every time you reopen a message you've already checked in this session.
 - Switching Git branches with uncommitted changes that would be overwritten no longer just fails: LS Panel now offers to stash those changes before switching, or discard them and switch anyway.
+- The Environment tab now shows a read-only preview of the nginx/Apache, PHP, and Docker configuration LS Panel generated for that environment (compose.yaml, Dockerfile.php, php-overrides.ini, and related files).
 
 ## [0.4.0-beta] - 2026-08-06
 

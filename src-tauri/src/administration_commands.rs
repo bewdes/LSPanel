@@ -52,6 +52,14 @@ pub fn list_environments(
 }
 
 #[tauri::command]
+pub fn list_generated_files(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<Vec<crate::containers::GeneratedFile>, String> {
+    crate::containers::generated_files(&app, &id)
+}
+
+#[tauri::command]
 pub fn save_environment(
     app: tauri::AppHandle,
     environment: crate::containers::Environment,

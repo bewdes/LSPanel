@@ -52,6 +52,7 @@ pub fn run() {
             administration_commands::dependency_install_plan,
             administration_commands::install_dependency,
             administration_commands::list_environments,
+            administration_commands::list_generated_files,
             administration_commands::save_environment,
             administration_commands::delete_environment,
             administration_commands::operate_environment,

@@ -68,6 +68,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Credential } from "@/components/credential"
 import { DatabaseConsole } from "@/features/database/components/database-console"
+import { GeneratedFilesViewer } from "@/features/environment-files/components/generated-files"
 import { ProjectEnvironmentEditor } from "@/features/environment-files/components/project-environment-editor"
 import { ProjectSnapshots } from "@/features/snapshots/components/project-snapshots"
 import { DatabaseBackups } from "@/features/backups/components/database-backups"
@@ -752,8 +753,11 @@ export function SiteDetailsPage({
           </TabsContent>
         )}
         {!(isNative && site.projectType === "static") && (
-          <TabsContent value="environment" className="pt-4">
+          <TabsContent value="environment" className="grid gap-4 pt-4">
             <ProjectEnvironmentEditor siteId={site.id} />
+            {!isNative && (
+              <GeneratedFilesViewer environmentId={currentEnvironment.id} language={language} />
+            )}
           </TabsContent>
         )}
         <TabsContent value="terminal" className="pt-4">

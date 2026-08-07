@@ -1076,6 +1076,14 @@ const uk: Dictionary = {
     wordpressAdmin: "Адміністратор WordPress",
     wordpressPassword: "Пароль WordPress",
     loadingTerminal: "Завантаження терміналу…",
+    generatedFiles: "Згенеровані конфігураційні файли",
+    generatedFilesDescription:
+      "Перегляд лише для читання конфігурації nginx/Apache, PHP та Docker, згенерованої LS Panel для цього середовища. Перегенеровується автоматично при кожному збереженні — редагуйте налаштування середовища, а не ці файли напряму.",
+    noGeneratedFilesYet:
+      "Згенерованих файлів не знайдено. Збережіть середовище, щоб їх згенерувати.",
+    refreshFiles: "Оновити",
+    copyContents: "Скопіювати вміст",
+    copied: "Скопійовано",
     developerTools: "Інструменти розробника",
     projectActions: "Дії проєкту",
     terminalLabel: "Термінал",
