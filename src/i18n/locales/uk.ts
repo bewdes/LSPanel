@@ -669,6 +669,8 @@ const uk: Dictionary = {
     empty: "Сповіщень поки немає",
     clearAll: "Очистити все",
     delete: "Видалити",
+    searchPlaceholder: "Фільтр сповіщень…",
+    noMatches: "Немає відповідних сповіщень",
     categoryOperation: "Операція",
     categoryDiskSpace: "Диск",
     categoryAutoStop: "Автозупинка",
@@ -687,6 +689,12 @@ const uk: Dictionary = {
   },
   operationCenter: {
     operations: "Операції",
+    operationsDescription: "Активність контейнерів та останні результати.",
+    noOperationsYet: "Операцій поки немає",
+    clearAll: "Очистити все",
+    remove: "Видалити",
+    searchPlaceholder: "Фільтр за назвою…",
+    noMatches: "Немає відповідних операцій",
   },
   projectSnapshots: {
     projectSnapshotCreated: "Знімок проєкту створено",

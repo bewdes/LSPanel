@@ -1,10 +1,11 @@
 import * as React from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
-import { Activity, CheckCircle2, CircleAlert, LoaderCircle, Trash2 } from "lucide-react"
+import { Activity, CheckCircle2, CircleAlert, LoaderCircle, Search, Trash2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import {
   Sheet,
@@ -40,6 +41,7 @@ const operationEvents = [
 export function OperationCenter({ language }: { language: string }) {
   const text = pickLanguage(language).operationCenter
   const [operations, setOperations] = React.useState<Operation[]>([])
+  const [query, setQuery] = React.useState("")
   const refresh = React.useCallback(
     () =>
       invoke<Operation[]>("list_operations")
@@ -69,6 +71,14 @@ export function OperationCenter({ language }: { language: string }) {
     (operation) => operation.status === "failed" || operation.status === "interrupted",
   )
   const clearable = operations.some((operation) => operation.status !== "running")
+  const normalizedQuery = query.trim().toLowerCase()
+  const visible = normalizedQuery
+    ? operations.filter((operation) =>
+        `${operation.kind} ${operation.environmentId ?? ""}`
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
+    : operations
 
   const remove = (id: string) => {
     void invoke<Operation[]>("delete_operation", { id })
@@ -94,19 +104,41 @@ export function OperationCenter({ language }: { language: string }) {
         <SheetContent className="w-full min-w-0 overflow-x-hidden sm:max-w-md">
           <SheetHeader className="flex-row items-start gap-2">
             <div className="min-w-0 flex-1">
-              <SheetTitle>Operations</SheetTitle>
-              <SheetDescription>Container activity and recent results.</SheetDescription>
+              <SheetTitle>{text.operations}</SheetTitle>
+              <SheetDescription>{text.operationsDescription}</SheetDescription>
             </div>
           </SheetHeader>
+          {operations.length > 0 && (
+            <div className="relative px-4">
+              <Search className="pointer-events-none absolute left-6.5 top-2.5 size-4 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={text.searchPlaceholder}
+                className="pl-8"
+              />
+            </div>
+          )}
           <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-4">
             <div className="grid min-w-0 gap-3">
-              {operations.map((operation) => (
-                <OperationItem key={operation.id} operation={operation} onRemove={remove} />
+              {visible.map((operation) => (
+                <OperationItem
+                  key={operation.id}
+                  operation={operation}
+                  onRemove={remove}
+                  removeLabel={text.remove}
+                />
               ))}
               {!operations.length && (
                 <div className="grid place-items-center gap-2 rounded-lg border border-dashed py-16 text-center text-muted-foreground">
                   <Activity className="size-7" />
-                  <p className="text-sm">No operations yet</p>
+                  <p className="text-sm">{text.noOperationsYet}</p>
+                </div>
+              )}
+              {operations.length > 0 && !visible.length && (
+                <div className="grid place-items-center gap-2 rounded-lg border border-dashed py-16 text-center text-muted-foreground">
+                  <Search className="size-7" />
+                  <p className="text-sm">{text.noMatches}</p>
                 </div>
               )}
             </div>
@@ -120,7 +152,7 @@ export function OperationCenter({ language }: { language: string }) {
               onClick={clearAll}
             >
               <Trash2 />
-              Clear all
+              {text.clearAll}
             </Button>
           </SheetFooter>
         </SheetContent>
@@ -132,9 +164,11 @@ export function OperationCenter({ language }: { language: string }) {
 function OperationItem({
   operation,
   onRemove,
+  removeLabel,
 }: {
   operation: Operation
   onRemove: (id: string) => void
+  removeLabel: string
 }) {
   const running = operation.status === "running"
   const failed = operation.status === "failed" || operation.status === "interrupted"
@@ -159,7 +193,7 @@ function OperationItem({
               variant="ghost"
               size="icon-sm"
               disabled={running}
-              title="Remove"
+              title={removeLabel}
               onClick={() => onRemove(operation.id)}
             >
               <Trash2 />

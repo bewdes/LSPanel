@@ -640,6 +640,8 @@ const en = {
     empty: "No notifications yet",
     clearAll: "Clear all",
     delete: "Delete",
+    searchPlaceholder: "Filter notifications…",
+    noMatches: "No matching notifications",
     categoryOperation: "Operation",
     categoryDiskSpace: "Disk",
     categoryAutoStop: "Auto-stop",
@@ -658,6 +660,12 @@ const en = {
   },
   operationCenter: {
     operations: "Operations",
+    operationsDescription: "Container activity and recent results.",
+    noOperationsYet: "No operations yet",
+    clearAll: "Clear all",
+    remove: "Remove",
+    searchPlaceholder: "Filter by name…",
+    noMatches: "No matching operations",
   },
   projectSnapshots: {
     projectSnapshotCreated: "Project snapshot created",

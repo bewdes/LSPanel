@@ -1,10 +1,11 @@
 import * as React from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
-import { Bell, Trash2 } from "lucide-react"
+import { Bell, Search, Trash2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Sheet,
   SheetContent,
@@ -29,6 +30,7 @@ export function NotificationCenter({ language }: { language: string }) {
   const text = pickLanguage(language).notificationCenter
   const [notifications, setNotifications] = React.useState<AppNotification[]>([])
   const [open, setOpen] = React.useState(false)
+  const [query, setQuery] = React.useState("")
 
   const categoryLabels: Record<string, string> = {
     operation: text.categoryOperation,
@@ -67,6 +69,14 @@ export function NotificationCenter({ language }: { language: string }) {
   }, [refresh])
 
   const unread = notifications.filter((notification) => !notification.read).length
+  const normalizedQuery = query.trim().toLowerCase()
+  const visible = normalizedQuery
+    ? notifications.filter((notification) =>
+        `${categoryLabels[notification.category] ?? notification.category} ${notification.title} ${notification.body}`
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
+    : notifications
 
   const handleOpenChange = (value: boolean) => {
     setOpen(value)
@@ -111,9 +121,20 @@ export function NotificationCenter({ language }: { language: string }) {
           <SheetTitle>{text.notifications}</SheetTitle>
           <SheetDescription>{text.notificationsDescription}</SheetDescription>
         </SheetHeader>
+        {notifications.length > 0 && (
+          <div className="relative px-4">
+            <Search className="pointer-events-none absolute left-6.5 top-2.5 size-4 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={text.searchPlaceholder}
+              className="pl-8"
+            />
+          </div>
+        )}
         <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-4">
           <div className="grid min-w-0 gap-3">
-            {notifications.map((notification) => (
+            {visible.map((notification) => (
               <div key={notification.id} className="grid min-w-0 gap-1 rounded-lg border p-3">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">
@@ -143,6 +164,12 @@ export function NotificationCenter({ language }: { language: string }) {
               <div className="grid place-items-center gap-2 rounded-lg border border-dashed py-16 text-center text-muted-foreground">
                 <Bell className="size-7" />
                 <p className="text-sm">{text.empty}</p>
+              </div>
+            )}
+            {notifications.length > 0 && !visible.length && (
+              <div className="grid place-items-center gap-2 rounded-lg border border-dashed py-16 text-center text-muted-foreground">
+                <Search className="size-7" />
+                <p className="text-sm">{text.noMatches}</p>
               </div>
             )}
           </div>
