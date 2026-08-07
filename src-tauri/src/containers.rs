@@ -1195,6 +1195,25 @@ fn ensure_network(executable: &str) -> Result<(), String> {
     }
 }
 
+/// Builds the gateway's fallback ("no project matched this host") server
+/// blocks for plain HTTP and HTTPS. Every `https_proxy_block()` listens on
+/// 443 without a `default_server` marker, so without an explicit one here,
+/// nginx would fall back to whichever real site's block happens to be first
+/// in the generated file for any request whose Host/SNI doesn't match a
+/// known project - silently proxying it there instead of returning a clean
+/// 404 (and making the "Local HTTPS" health check, which probes with an
+/// unrecognized hostname, look unhealthy even though the gateway is fine).
+fn gateway_not_found_blocks(not_found_body: &str) -> (String, String) {
+    (
+        format!(
+            "server {{ listen 80 default_server; server_name _; default_type text/html; return 404 '{not_found_body}'; }}"
+        ),
+        format!(
+            "server {{ listen 443 ssl default_server; server_name _; ssl_certificate /etc/nginx/tls/local.crt; ssl_certificate_key /etc/nginx/tls/local.key; ssl_protocols TLSv1.2 TLSv1.3; default_type text/html; return 404 '{not_found_body}'; }}"
+        ),
+    )
+}
+
 fn ensure_gateway(app: &tauri::AppHandle, executable: &str) -> Result<(), String> {
     let directory = app
         .path()
@@ -1287,8 +1306,11 @@ fn ensure_gateway(app: &tauri::AppHandle, executable: &str) -> Result<(), String
             ))
         })
         .collect::<Vec<_>>();
+    let (http_not_found, https_fallback) = gateway_not_found_blocks(
+        "<!doctype html><title>LS Panel</title><style>body{font-family:system-ui;background:#111;color:#eee;display:grid;place-items:center;height:100vh;margin:0}main{text-align:center}p{color:#999}</style><main><h1>Local site not found</h1><p>Check the domain and start its environment in LS Panel.</p></main>",
+    );
     let fallback = if live_blocks.is_empty() {
-        "server { listen 80 default_server; server_name _; default_type text/html; return 404 '<!doctype html><title>LS Panel</title><style>body{font-family:system-ui;background:#111;color:#eee;display:grid;place-items:center;height:100vh;margin:0}main{text-align:center}p{color:#999}</style><main><h1>Local site not found</h1><p>Check the domain and start its environment in LS Panel.</p></main>'; }".into()
+        http_not_found
     } else {
         live_blocks.join("\n")
     };
@@ -1297,7 +1319,14 @@ fn ensure_gateway(app: &tauri::AppHandle, executable: &str) -> Result<(), String
         hostnames.join(" ")
     );
     let gzip = "gzip on;\ngzip_vary on;\ngzip_comp_level 5;\ngzip_min_length 256;\ngzip_proxied any;\ngzip_types text/plain text/css text/javascript application/javascript application/json application/xml application/xml+rss image/svg+xml font/woff2 font/woff;\nclient_max_body_size 1024m;\n";
-    let blocks = format!("{}{}\n{}\n{}", gzip, fallback, redirect, blocks.join("\n"));
+    let blocks = format!(
+        "{}{}\n{}\n{}\n{}",
+        gzip,
+        fallback,
+        https_fallback,
+        redirect,
+        blocks.join("\n")
+    );
     fs::write(directory.join("default.conf"), blocks).map_err(|error| error.to_string())?;
     let mut published_ports = vec![
         "\"127.0.0.1:80:80\"".to_owned(),
@@ -3300,6 +3329,23 @@ mod tests {
         ));
         assert!(is_transient_recreate_error("address already in use"));
         assert!(!is_transient_recreate_error("no such file or directory"));
+    }
+
+    #[test]
+    fn both_gateway_fallback_blocks_declare_default_server() {
+        // Regression test: the HTTPS fallback lacked a `default_server`
+        // marker, so nginx silently proxied any unrecognized Host/SNI to
+        // whichever real site's block happened to be listed first instead
+        // of returning the intended 404, which also made the "Local HTTPS"
+        // health check (which probes with an unrecognized hostname) report
+        // unhealthy even when the gateway was working correctly.
+        let (http, https) = gateway_not_found_blocks("body");
+        assert!(http.contains("listen 80 default_server"));
+        assert!(https.contains("listen 443 ssl default_server"));
+        assert!(https.contains("ssl_certificate /etc/nginx/tls/local.crt"));
+        assert!(https.contains("ssl_certificate_key /etc/nginx/tls/local.key"));
+        assert!(http.contains("return 404 'body'"));
+        assert!(https.contains("return 404 'body'"));
     }
 
     #[test]
