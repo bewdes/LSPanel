@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mail now refreshes its inbox list automatically in the background, and no longer re-runs the SpamAssassin/HTML compatibility checks every time you reopen a message you've already checked in this session.
 - Switching Git branches with uncommitted changes that would be overwritten no longer just fails: LS Panel now offers to stash those changes before switching, or discard them and switch anyway.
 - The Environment tab now shows a read-only preview of the nginx/Apache, PHP, and Docker configuration LS Panel generated for that environment (compose.yaml, Dockerfile.php, php-overrides.ini, and related files).
+- Settings: default terminal and default browser preferences (used everywhere LS Panel opens a terminal or a local site/tool link), a Docker BuildKit toggle, and a configurable stats refresh interval for the dashboard and sites list.
+
+### Changed
+
+- Rewrote the Settings page: instead of four tabs, settings are now grouped into General, Workspace, Docker, Projects, Monitoring, Interface, and Performance behind a sidebar nav, so related settings (like the six different background monitors) aren't all crammed into one "System" tab.
+
+### Fixed
+
+- Saving Settings with PHP 8.5 selected as the default project PHP version was rejected ("Unsupported default project stack") even though 8.5 is a valid, selectable option in the same form — the server-side validation list hadn't been updated when 8.5 support was added.
 
 ## [0.4.0-beta] - 2026-08-06
 

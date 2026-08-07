@@ -70,6 +70,7 @@ export function SitesPage({
   sites,
   environments,
   states,
+  statsRefreshIntervalSeconds,
   onCreate,
   onSelect,
   onOperate,
@@ -79,6 +80,7 @@ export function SitesPage({
   sites: Site[]
   environments: Environment[]
   states: Record<string, string>
+  statsRefreshIntervalSeconds: number
   onCreate: () => void
   onSelect: (id: string) => void
   onOperate: (id: string, action: "start" | "stop") => void
@@ -163,12 +165,12 @@ export function SitesPage({
       }
     }
     void load()
-    const timer = window.setInterval(() => void load(), 10000)
+    const timer = window.setInterval(() => void load(), statsRefreshIntervalSeconds * 1000)
     return () => {
       disposed = true
       window.clearInterval(timer)
     }
-  }, [environments, sites])
+  }, [environments, sites, statsRefreshIntervalSeconds])
   const byId = new Map(environments.map((item) => [item.id, item]))
   const groups = [
     ...new Set(

@@ -66,6 +66,12 @@ export type AppSettings = {
   tlsExpiryNotifyEnabled: boolean
   tlsExpiryWarningDays: number
   webhookUrl: string
+  preferredTerminal: string
+  customTerminalCommand: string
+  preferredBrowser: string
+  customBrowserCommand: string
+  dockerBuildkitEnabled: boolean
+  statsRefreshIntervalSeconds: number
 }
 
 type LiveLinkStatus = {
@@ -131,6 +137,12 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
     tlsExpiryNotifyEnabled: true,
     tlsExpiryWarningDays: 14,
     webhookUrl: "",
+    preferredTerminal: "auto",
+    customTerminalCommand: "",
+    preferredBrowser: "system",
+    customBrowserCommand: "",
+    dockerBuildkitEnabled: true,
+    statsRefreshIntervalSeconds: 10,
   })
   const [freeSpace, setFreeSpace] = React.useState<number | null | undefined>(undefined)
   const [runtimeStatus, setRuntimeStatus] = React.useState<Runtime | null>(null)

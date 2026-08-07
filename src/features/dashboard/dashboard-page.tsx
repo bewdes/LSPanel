@@ -27,6 +27,7 @@ export function Dashboard({
   states,
   running,
   runtime,
+  statsRefreshIntervalSeconds,
   onNavigate,
   onSelectSite,
   onCreate,
@@ -37,6 +38,7 @@ export function Dashboard({
   states: Record<string, string>
   running: number
   runtime: Runtime | null
+  statsRefreshIntervalSeconds: number
   onNavigate: (view: PanelView) => void
   onSelectSite: (id: string) => void
   onCreate: () => void
@@ -64,12 +66,12 @@ export function Dashboard({
       loading = false
     }
     void load()
-    const timer = window.setInterval(() => void load(), 10000)
+    const timer = window.setInterval(() => void load(), statsRefreshIntervalSeconds * 1000)
     return () => {
       disposed = true
       window.clearInterval(timer)
     }
-  }, [environments])
+  }, [environments, statsRefreshIntervalSeconds])
   const allResources = Object.values(resources).flat()
   const cpu = allResources.reduce((total, item) => total + (Number.parseFloat(item.cpu) || 0), 0)
   const memory = allResources.reduce(

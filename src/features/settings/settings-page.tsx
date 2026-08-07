@@ -1,7 +1,17 @@
 import * as React from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
-import { Folder, Save } from "lucide-react"
+import {
+  BellRing,
+  Container,
+  FolderCog,
+  Folder,
+  Gauge,
+  LayoutPanelLeft,
+  Layers,
+  Save,
+  SlidersHorizontal,
+} from "lucide-react"
 
 import { PageHeading } from "@/components/page-heading"
 import { localeNames, locales, pickLanguage } from "@/i18n"
@@ -18,10 +28,12 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { AppSettings } from "@/welcome-screen"
 import { applyTheme } from "@/theme"
 import { DATABASE_VERSIONS, PHP_VERSIONS, defaultDatabaseVersion } from "@/lib/version-catalog"
+
+type Section =
+  "general" | "workspace" | "docker" | "projects" | "monitoring" | "interface" | "performance"
 
 export function SettingsPage({
   settings,
@@ -32,7 +44,19 @@ export function SettingsPage({
 }) {
   const [draft, setDraft] = React.useState(settings)
   const [status, setStatus] = React.useState("")
+  const [section, setSection] = React.useState<Section>("general")
   const text = pickLanguage(draft.language).settings
+
+  const sections: { id: Section; label: string; icon: typeof SlidersHorizontal }[] = [
+    { id: "general", label: text.navGeneral, icon: SlidersHorizontal },
+    { id: "workspace", label: text.navWorkspace, icon: FolderCog },
+    { id: "docker", label: text.navDocker, icon: Container },
+    { id: "projects", label: text.navProjects, icon: Layers },
+    { id: "monitoring", label: text.navMonitoring, icon: BellRing },
+    { id: "interface", label: text.navInterface, icon: LayoutPanelLeft },
+    { id: "performance", label: text.navPerformance, icon: Gauge },
+  ]
+
   async function chooseDirectory() {
     const path = await openDialog({
       directory: true,
@@ -41,13 +65,9 @@ export function SettingsPage({
     })
     if (typeof path === "string") setDraft((current) => ({ ...current, sitesDirectory: path }))
   }
-  async function chooseEditorExecutable() {
-    const path = await openDialog({
-      directory: false,
-      multiple: false,
-      title: text.customEditorCommandLabel,
-    })
-    if (typeof path === "string") setDraft((current) => ({ ...current, customEditorCommand: path }))
+  async function chooseExecutable(title: string, apply: (path: string) => void) {
+    const path = await openDialog({ directory: false, multiple: false, title })
+    if (typeof path === "string") apply(path)
   }
   async function save() {
     try {
@@ -61,21 +81,41 @@ export function SettingsPage({
       setStatus(String(error))
     }
   }
+
   return (
     <div>
-      <PageHeading title={text.settings} description={text.settingsDescription} />
-      <div className="px-4 lg:px-6">
-        <Tabs defaultValue="general" className="max-w-3xl">
-          <TabsList>
-            <TabsTrigger value="general">{text.tabGeneral}</TabsTrigger>
-            <TabsTrigger value="system">{text.tabSystem}</TabsTrigger>
-            <TabsTrigger value="appearance">{text.tabAppearance}</TabsTrigger>
-            <TabsTrigger value="projects">{text.tabProjects}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="general" className="pt-4">
+      <PageHeading
+        title={text.settings}
+        description={text.settingsDescription}
+        action={
+          <div className="flex items-center gap-3">
+            {status && <span className="text-sm text-muted-foreground">{status}</span>}
+            <Button onClick={() => void save()}>
+              <Save />
+              {text.saveChanges}
+            </Button>
+          </div>
+        }
+      />
+      <div className="grid gap-6 px-4 lg:grid-cols-[220px_1fr] lg:px-6">
+        <nav className="grid gap-1 self-start">
+          {sections.map((item) => (
+            <Button
+              key={item.id}
+              variant={section === item.id ? "secondary" : "ghost"}
+              className="justify-start gap-2"
+              onClick={() => setSection(item.id)}
+            >
+              <item.icon className="size-4" />
+              {item.label}
+            </Button>
+          ))}
+        </nav>
+        <div className="grid gap-4">
+          {section === "general" && (
             <Card>
               <CardHeader>
-                <CardTitle>{text.tabGeneral}</CardTitle>
+                <CardTitle>{text.navGeneral}</CardTitle>
                 <CardDescription>{text.generalCardDescription}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-5">
@@ -98,6 +138,21 @@ export function SettingsPage({
                     </SelectContent>
                   </Select>
                 </Field>
+                <Field label={text.themeLabel}>
+                  <Select
+                    value={draft.theme}
+                    onValueChange={(value) => value && setDraft({ ...draft, theme: String(value) })}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="dark">{text.darkOption}</SelectItem>
+                      <SelectItem value="light">{text.lightOption}</SelectItem>
+                      <SelectItem value="system">{text.systemOption}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
                 <Separator />
                 <SettingToggle
                   title={text.confirmDestructiveTitle}
@@ -107,12 +162,13 @@ export function SettingsPage({
                 />
               </CardContent>
             </Card>
-          </TabsContent>
-          <TabsContent value="system" className="pt-4">
+          )}
+
+          {section === "workspace" && (
             <Card>
               <CardHeader>
-                <CardTitle>{text.tabSystem}</CardTitle>
-                <CardDescription>{text.systemCardDescription}</CardDescription>
+                <CardTitle>{text.navWorkspace}</CardTitle>
+                <CardDescription>{text.workspaceCardDescription}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-5">
                 <Field label={text.sitesDirectoryLabel}>
@@ -124,23 +180,7 @@ export function SettingsPage({
                     </Button>
                   </div>
                 </Field>
-                <Field label={text.containerRuntimeLabel}>
-                  <Select
-                    value={draft.runtime}
-                    onValueChange={(value) =>
-                      value && setDraft({ ...draft, runtime: String(value) })
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">{text.autoOption}</SelectItem>
-                      <SelectItem value="docker">Docker</SelectItem>
-                      <SelectItem value="podman">Podman</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
+                <Separator />
                 <Field label={text.editorLabel}>
                   <Select
                     value={draft.preferredEditor}
@@ -170,7 +210,14 @@ export function SettingsPage({
                           setDraft({ ...draft, customEditorCommand: event.target.value })
                         }
                       />
-                      <Button variant="outline" onClick={chooseEditorExecutable}>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          void chooseExecutable(text.customEditorCommandLabel, (path) =>
+                            setDraft((current) => ({ ...current, customEditorCommand: path })),
+                          )
+                        }
+                      >
                         <Folder />
                         {text.browseExecutable}
                       </Button>
@@ -178,6 +225,252 @@ export function SettingsPage({
                   </Field>
                 )}
                 <Separator />
+                <Field label={text.terminalLabel}>
+                  <Select
+                    value={draft.preferredTerminal}
+                    onValueChange={(value) =>
+                      value && setDraft({ ...draft, preferredTerminal: String(value) })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">{text.autoDetectOption}</SelectItem>
+                      <SelectItem value="gnome-terminal">{text.gnomeTerminalOption}</SelectItem>
+                      <SelectItem value="konsole">{text.konsoleOption}</SelectItem>
+                      <SelectItem value="xfce4-terminal">{text.xfceTerminalOption}</SelectItem>
+                      <SelectItem value="custom">{text.customOption}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {draft.preferredTerminal === "custom" && (
+                  <Field label={text.customTerminalCommandLabel}>
+                    <div className="flex gap-2">
+                      <Input
+                        value={draft.customTerminalCommand}
+                        onChange={(event) =>
+                          setDraft({ ...draft, customTerminalCommand: event.target.value })
+                        }
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          void chooseExecutable(text.customTerminalCommandLabel, (path) =>
+                            setDraft((current) => ({ ...current, customTerminalCommand: path })),
+                          )
+                        }
+                      >
+                        <Folder />
+                        {text.browseExecutable}
+                      </Button>
+                    </div>
+                  </Field>
+                )}
+                <Separator />
+                <Field label={text.browserLabel}>
+                  <Select
+                    value={draft.preferredBrowser}
+                    onValueChange={(value) =>
+                      value && setDraft({ ...draft, preferredBrowser: String(value) })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="system">{text.systemBrowserOption}</SelectItem>
+                      <SelectItem value="firefox">{text.firefoxOption}</SelectItem>
+                      <SelectItem value="chrome">{text.chromeOption}</SelectItem>
+                      <SelectItem value="chromium">{text.chromiumOption}</SelectItem>
+                      <SelectItem value="custom">{text.customOption}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {draft.preferredBrowser === "custom" && (
+                  <Field label={text.customBrowserCommandLabel}>
+                    <div className="flex gap-2">
+                      <Input
+                        value={draft.customBrowserCommand}
+                        onChange={(event) =>
+                          setDraft({ ...draft, customBrowserCommand: event.target.value })
+                        }
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          void chooseExecutable(text.customBrowserCommandLabel, (path) =>
+                            setDraft((current) => ({ ...current, customBrowserCommand: path })),
+                          )
+                        }
+                      >
+                        <Folder />
+                        {text.browseExecutable}
+                      </Button>
+                    </div>
+                  </Field>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {section === "docker" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{text.navDocker}</CardTitle>
+                <CardDescription>{text.dockerCardDescription}</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-5">
+                <Field label={text.containerRuntimeLabel}>
+                  <Select
+                    value={draft.runtime}
+                    onValueChange={(value) =>
+                      value && setDraft({ ...draft, runtime: String(value) })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">{text.autoOption}</SelectItem>
+                      <SelectItem value="docker">Docker</SelectItem>
+                      <SelectItem value="podman">Podman</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Separator />
+                <SettingToggle
+                  title={text.dockerBuildkitTitle}
+                  description={text.dockerBuildkitDescription}
+                  checked={draft.dockerBuildkitEnabled}
+                  onChange={(dockerBuildkitEnabled) =>
+                    setDraft({ ...draft, dockerBuildkitEnabled })
+                  }
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {section === "projects" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{text.navProjects}</CardTitle>
+                <CardDescription>{text.projectDefaultsDescription}</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label={text.webServerLabel}>
+                    <Select
+                      value={draft.defaultWebServer}
+                      onValueChange={(value) =>
+                        value && setDraft({ ...draft, defaultWebServer: String(value) })
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Nginx">Nginx</SelectItem>
+                        <SelectItem value="Apache">Apache</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label={text.phpVersionLabel}>
+                    <Select
+                      value={draft.defaultPhpVersion}
+                      onValueChange={(value) =>
+                        value && setDraft({ ...draft, defaultPhpVersion: String(value) })
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PHP_VERSIONS.map((version) => (
+                          <SelectItem key={version} value={version}>
+                            {version}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label={text.nodeVersionLabel}>
+                    <Input
+                      value={draft.defaultNodeVersion}
+                      onChange={(event) =>
+                        setDraft({ ...draft, defaultNodeVersion: event.target.value })
+                      }
+                    />
+                  </Field>
+                  <Field label={text.databaseLabel}>
+                    <Select
+                      value={draft.defaultDatabase}
+                      onValueChange={(value) => {
+                        if (!value) return
+                        const database = String(value)
+                        setDraft({
+                          ...draft,
+                          defaultDatabase: database,
+                          defaultDatabaseVersion: defaultDatabaseVersion(database),
+                        })
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["MariaDB", "MySQL", "PostgreSQL"].map((database) => (
+                          <SelectItem key={database} value={database}>
+                            {database}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label={text.databaseVersionLabel}>
+                    <Select
+                      value={draft.defaultDatabaseVersion}
+                      onValueChange={(value) =>
+                        value && setDraft({ ...draft, defaultDatabaseVersion: String(value) })
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(DATABASE_VERSIONS[draft.defaultDatabase] ?? []).map((version) => (
+                          <SelectItem key={version} value={version}>
+                            {version}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+                <Separator />
+                <SettingToggle
+                  title={text.initializeGitTitle}
+                  description={text.initializeGitDescription}
+                  checked={draft.autoInitGit}
+                  onChange={(autoInitGit) => setDraft({ ...draft, autoInitGit })}
+                />
+                <SettingToggle
+                  title={text.startNewProjectsTitle}
+                  description={text.startNewProjectsDescription}
+                  checked={draft.autoStartProjects}
+                  onChange={(autoStartProjects) => setDraft({ ...draft, autoStartProjects })}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {section === "monitoring" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{text.navMonitoring}</CardTitle>
+                <CardDescription>{text.monitoringCardDescription}</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-5">
                 <SettingToggle
                   title={text.notifyOnOperationsTitle}
                   description={text.notifyOnOperationsDescription}
@@ -296,30 +589,15 @@ export function SettingsPage({
                 <p className="text-xs text-muted-foreground">{text.webhookUrlHint}</p>
               </CardContent>
             </Card>
-          </TabsContent>
-          <TabsContent value="appearance" className="pt-4">
+          )}
+
+          {section === "interface" && (
             <Card>
               <CardHeader>
-                <CardTitle>{text.tabAppearance}</CardTitle>
-                <CardDescription>{text.appearanceCardDescription}</CardDescription>
+                <CardTitle>{text.navInterface}</CardTitle>
+                <CardDescription>{text.interfaceCardDescription}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-5">
-                <Field label={text.themeLabel}>
-                  <Select
-                    value={draft.theme}
-                    onValueChange={(value) => value && setDraft({ ...draft, theme: String(value) })}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dark">{text.darkOption}</SelectItem>
-                      <SelectItem value="light">{text.lightOption}</SelectItem>
-                      <SelectItem value="system">{text.systemOption}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Separator />
                 <SettingToggle
                   title={text.compactSidebarTitle}
                   description={text.compactSidebarDescription}
@@ -334,127 +612,34 @@ export function SettingsPage({
                 />
               </CardContent>
             </Card>
-          </TabsContent>
-          <TabsContent value="projects" className="pt-4">
+          )}
+
+          {section === "performance" && (
             <Card>
               <CardHeader>
-                <CardTitle>{text.projectDefaultsTitle}</CardTitle>
-                <CardDescription>{text.projectDefaultsDescription}</CardDescription>
+                <CardTitle>{text.navPerformance}</CardTitle>
+                <CardDescription>{text.performanceCardDescription}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-5">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label={text.webServerLabel}>
-                    <Select
-                      value={draft.defaultWebServer}
-                      onValueChange={(value) =>
-                        value && setDraft({ ...draft, defaultWebServer: String(value) })
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Nginx">Nginx</SelectItem>
-                        <SelectItem value="Apache">Apache</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label={text.phpVersionLabel}>
-                    <Select
-                      value={draft.defaultPhpVersion}
-                      onValueChange={(value) =>
-                        value && setDraft({ ...draft, defaultPhpVersion: String(value) })
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PHP_VERSIONS.map((version) => (
-                          <SelectItem key={version} value={version}>
-                            {version}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label={text.nodeVersionLabel}>
-                    <Input
-                      value={draft.defaultNodeVersion}
-                      onChange={(event) =>
-                        setDraft({ ...draft, defaultNodeVersion: event.target.value })
-                      }
-                    />
-                  </Field>
-                  <Field label={text.databaseLabel}>
-                    <Select
-                      value={draft.defaultDatabase}
-                      onValueChange={(value) => {
-                        if (!value) return
-                        const database = String(value)
-                        setDraft({
-                          ...draft,
-                          defaultDatabase: database,
-                          defaultDatabaseVersion: defaultDatabaseVersion(database),
-                        })
-                      }}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {["MariaDB", "MySQL", "PostgreSQL"].map((database) => (
-                          <SelectItem key={database} value={database}>
-                            {database}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label={text.databaseVersionLabel}>
-                    <Select
-                      value={draft.defaultDatabaseVersion}
-                      onValueChange={(value) =>
-                        value && setDraft({ ...draft, defaultDatabaseVersion: String(value) })
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(DATABASE_VERSIONS[draft.defaultDatabase] ?? []).map((version) => (
-                          <SelectItem key={version} value={version}>
-                            {version}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </div>
-                <Separator />
-                <SettingToggle
-                  title={text.initializeGitTitle}
-                  description={text.initializeGitDescription}
-                  checked={draft.autoInitGit}
-                  onChange={(autoInitGit) => setDraft({ ...draft, autoInitGit })}
-                />
-                <SettingToggle
-                  title={text.startNewProjectsTitle}
-                  description={text.startNewProjectsDescription}
-                  checked={draft.autoStartProjects}
-                  onChange={(autoStartProjects) => setDraft({ ...draft, autoStartProjects })}
-                />
+                <Field label={text.statsRefreshIntervalLabel}>
+                  <Input
+                    type="number"
+                    min={3}
+                    max={300}
+                    value={draft.statsRefreshIntervalSeconds}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        statsRefreshIntervalSeconds: Number(event.target.value),
+                      })
+                    }
+                  />
+                </Field>
+                <p className="text-xs text-muted-foreground">{text.statsRefreshIntervalHint}</p>
               </CardContent>
             </Card>
-          </TabsContent>
-          <div className="flex items-center justify-between py-4">
-            <span className="text-sm text-muted-foreground">{status}</span>
-            <Button onClick={save}>
-              <Save />
-              {text.saveChanges}
-            </Button>
-          </div>
-        </Tabs>
+          )}
+        </div>
       </div>
     </div>
   )

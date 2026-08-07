@@ -33,6 +33,12 @@ pub struct AppSettings {
     pub tls_expiry_notify_enabled: bool,
     pub tls_expiry_warning_days: u32,
     pub webhook_url: String,
+    pub preferred_terminal: String,
+    pub custom_terminal_command: String,
+    pub preferred_browser: String,
+    pub custom_browser_command: String,
+    pub docker_buildkit_enabled: bool,
+    pub stats_refresh_interval_seconds: u32,
 }
 
 impl Default for AppSettings {
@@ -66,6 +72,12 @@ impl Default for AppSettings {
             tls_expiry_notify_enabled: true,
             tls_expiry_warning_days: 14,
             webhook_url: String::new(),
+            preferred_terminal: "auto".into(),
+            custom_terminal_command: String::new(),
+            preferred_browser: "system".into(),
+            custom_browser_command: String::new(),
+            docker_buildkit_enabled: true,
+            stats_refresh_interval_seconds: 10,
         }
     }
 }
@@ -94,7 +106,7 @@ pub fn save(app: &tauri::AppHandle, settings: AppSettings) -> Result<AppSettings
     if !matches!(settings.default_web_server.as_str(), "Nginx" | "Apache")
         || !matches!(
             settings.default_php_version.as_str(),
-            "8.1" | "8.2" | "8.3" | "8.4"
+            "8.1" | "8.2" | "8.3" | "8.4" | "8.5"
         )
         || !matches!(
             settings.default_database.as_str(),
@@ -137,6 +149,29 @@ pub fn save(app: &tauri::AppHandle, settings: AppSettings) -> Result<AppSettings
         && !settings.webhook_url.trim().starts_with("https://")
     {
         return Err("Webhook URL must start with https://".into());
+    }
+    if !matches!(
+        settings.preferred_terminal.as_str(),
+        "auto" | "gnome-terminal" | "konsole" | "xfce4-terminal" | "custom"
+    ) {
+        return Err("Unsupported terminal".into());
+    }
+    if settings.preferred_terminal == "custom" && settings.custom_terminal_command.trim().is_empty()
+    {
+        return Err("Custom terminal command cannot be empty".into());
+    }
+    if !matches!(
+        settings.preferred_browser.as_str(),
+        "system" | "firefox" | "chrome" | "chromium" | "custom"
+    ) {
+        return Err("Unsupported browser".into());
+    }
+    if settings.preferred_browser == "custom" && settings.custom_browser_command.trim().is_empty() {
+        return Err("Custom browser command cannot be empty".into());
+    }
+    if settings.stats_refresh_interval_seconds < 3 || settings.stats_refresh_interval_seconds > 300
+    {
+        return Err("Stats refresh interval must be between 3 and 300 seconds".into());
     }
     fs::create_dir_all(&settings.sites_directory)
         .map_err(|e| format!("Не удалось создать директорию сайтов: {e}"))?;

@@ -81,7 +81,17 @@ pub(crate) fn run_compose(
     directory: &Path,
     args: &[&str],
 ) -> Result<String, String> {
-    let child = runtime_command(executable)
+    let mut command = runtime_command(executable);
+    if crate::settings::load(app)
+        .ok()
+        .flatten()
+        .is_some_and(|settings| settings.docker_buildkit_enabled)
+    {
+        command
+            .env("DOCKER_BUILDKIT", "1")
+            .env("COMPOSE_DOCKER_CLI_BUILD", "1");
+    }
+    let child = command
         .args(args)
         .current_dir(directory)
         .stdin(Stdio::null())

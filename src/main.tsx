@@ -269,6 +269,7 @@ function App() {
                     states={states}
                     running={running}
                     runtime={runtime}
+                    statsRefreshIntervalSeconds={settings?.statsRefreshIntervalSeconds ?? 10}
                     onNavigate={setView}
                     onSelectSite={openProject}
                     onCreate={() => setCreateOpen(true)}
@@ -280,6 +281,7 @@ function App() {
                     sites={sites}
                     environments={environments}
                     states={states}
+                    statsRefreshIntervalSeconds={settings?.statsRefreshIntervalSeconds ?? 10}
                     onCreate={() => setCreateOpen(true)}
                     onSelect={setSelectedSite}
                     onOperate={operateSite}

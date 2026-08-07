@@ -23,8 +23,23 @@ pub fn open_path(path: String) -> Result<(), String> {
     spawn_program("xdg-open", &[&path])
 }
 
-#[tauri::command]
-pub fn open_url(url: String) -> Result<(), String> {
+fn browser_program(settings: &crate::settings::AppSettings) -> Result<String, String> {
+    match settings.preferred_browser.as_str() {
+        "firefox" => Ok("firefox".into()),
+        "chrome" => Ok("google-chrome".into()),
+        "chromium" => Ok("chromium".into()),
+        "custom" => {
+            let command = settings.custom_browser_command.trim();
+            if command.is_empty() {
+                return Err("No custom browser command is configured".into());
+            }
+            Ok(command.to_string())
+        }
+        _ => Ok("xdg-open".into()),
+    }
+}
+
+fn validate_local_url(url: &str) -> Result<(), String> {
     let without_scheme = url
         .strip_prefix("http://")
         .or_else(|| url.strip_prefix("https://"))
@@ -57,32 +72,54 @@ pub fn open_url(url: String) -> Result<(), String> {
                 .into(),
         );
     }
-    spawn_program("xdg-open", &[&url])
+    Ok(())
 }
 
 #[tauri::command]
-pub fn open_terminal(path: String) -> Result<(), String> {
+pub fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    validate_local_url(&url)?;
+    let settings = crate::settings::load(&app)?.unwrap_or_default();
+    spawn_program(&browser_program(&settings)?, &[&url])
+}
+
+#[tauri::command]
+pub fn open_terminal(app: tauri::AppHandle, path: String) -> Result<(), String> {
     if !Path::new(&path).is_dir() {
         return Err(format!("Directory does not exist: {path}"));
     }
-    for (program, args) in [
-        ("xdg-terminal-exec", vec!["--working-directory", &path]),
-        ("gnome-terminal", vec!["--working-directory", &path]),
-        ("konsole", vec!["--workdir", &path]),
-        ("xfce4-terminal", vec!["--working-directory", &path]),
-    ] {
-        if Command::new(program)
-            .args(&args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .is_ok()
-        {
-            return Ok(());
+    let settings = crate::settings::load(&app)?.unwrap_or_default();
+    match settings.preferred_terminal.as_str() {
+        "gnome-terminal" => spawn_program("gnome-terminal", &["--working-directory", &path]),
+        "konsole" => spawn_program("konsole", &["--workdir", &path]),
+        "xfce4-terminal" => spawn_program("xfce4-terminal", &["--working-directory", &path]),
+        "custom" => {
+            let command = settings.custom_terminal_command.trim();
+            if command.is_empty() {
+                return Err("No custom terminal command is configured".into());
+            }
+            spawn_program(command, &[&path])
+        }
+        _ => {
+            for (program, args) in [
+                ("xdg-terminal-exec", vec!["--working-directory", &path]),
+                ("gnome-terminal", vec!["--working-directory", &path]),
+                ("konsole", vec!["--workdir", &path]),
+                ("xfce4-terminal", vec!["--working-directory", &path]),
+            ] {
+                if Command::new(program)
+                    .args(&args)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .is_ok()
+                {
+                    return Ok(());
+                }
+            }
+            Err("No supported terminal emulator was found".into())
         }
     }
-    Err("No supported terminal emulator was found".into())
 }
 
 fn editor_program(settings: &crate::settings::AppSettings) -> Result<String, String> {
@@ -140,7 +177,7 @@ pub fn open_containers_window(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{editor_program, open_url};
+    use super::{browser_program, editor_program, validate_local_url};
 
     #[test]
     fn resolves_known_editor_binaries() {
@@ -181,21 +218,57 @@ mod tests {
 
     #[test]
     fn rejects_non_local_urls_before_launching_a_browser() {
-        assert!(open_url("https://example.com".into()).is_err());
-        assert!(open_url("file:///etc/passwd".into()).is_err());
+        assert!(validate_local_url("https://example.com").is_err());
+        assert!(validate_local_url("file:///etc/passwd").is_err());
     }
 
     #[test]
     fn rejects_spoofed_tailscale_urls() {
-        assert!(open_url("javascript:alert(1)".into()).is_err());
-        assert!(open_url("https://example.ts.net.evil.test".into()).is_err());
+        assert!(validate_local_url("javascript:alert(1)").is_err());
+        assert!(validate_local_url("https://example.ts.net.evil.test").is_err());
     }
 
     #[test]
     fn rejects_domains_that_merely_resemble_the_allowed_documentation_links() {
-        assert!(open_url("https://github.com.evil.test".into()).is_err());
-        assert!(open_url("https://notgithub.com".into()).is_err());
-        assert!(open_url("https://docs.docker.com.evil.test".into()).is_err());
-        assert!(open_url("https://tailscale.com.evil.test".into()).is_err());
+        assert!(validate_local_url("https://github.com.evil.test").is_err());
+        assert!(validate_local_url("https://notgithub.com").is_err());
+        assert!(validate_local_url("https://docs.docker.com.evil.test").is_err());
+        assert!(validate_local_url("https://tailscale.com.evil.test").is_err());
+    }
+
+    #[test]
+    fn resolves_known_browser_binaries() {
+        let mut settings = crate::settings::AppSettings::default();
+        for (id, expected) in [
+            ("system", "xdg-open"),
+            ("firefox", "firefox"),
+            ("chrome", "google-chrome"),
+            ("chromium", "chromium"),
+        ] {
+            settings.preferred_browser = id.into();
+            assert_eq!(browser_program(&settings).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn resolves_custom_browser_command() {
+        let settings = crate::settings::AppSettings {
+            preferred_browser: "custom".into(),
+            custom_browser_command: "/usr/local/bin/my-browser".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            browser_program(&settings).unwrap(),
+            "/usr/local/bin/my-browser"
+        );
+    }
+
+    #[test]
+    fn rejects_empty_custom_browser_command() {
+        let settings = crate::settings::AppSettings {
+            preferred_browser: "custom".into(),
+            ..Default::default()
+        };
+        assert!(browser_program(&settings).is_err());
     }
 }
