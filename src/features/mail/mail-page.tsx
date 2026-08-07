@@ -81,37 +81,54 @@ export function MailPage({
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState("")
   const [notice, setNotice] = React.useState("")
+  const checksCacheRef = React.useRef(new Map<string, unknown>())
 
-  const refresh = React.useCallback(async () => {
-    if (!available.length) return
-    setBusy(true)
-    setError("")
-    setNotice("")
-    try {
-      const responses = await Promise.allSettled(
-        available.map(async (environment) => {
-          const response = await invoke<unknown>("list_mailpit_messages", {
-            environmentId: environment.id,
-          })
-          return normalizeList(response, environment.id, environment.name)
-        }),
-      )
-      setMessages(
-        responses.flatMap((response) => (response.status === "fulfilled" ? response.value : [])),
-      )
-      const failures = responses.filter(
-        (response): response is PromiseRejectedResult => response.status === "rejected",
-      )
-      if (failures.length) setError(failures.map((failure) => String(failure.reason)).join("\n"))
-    } finally {
-      setBusy(false)
-    }
-  }, [available])
+  const refresh = React.useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!available.length) return
+      const silent = options?.silent ?? false
+      if (!silent) {
+        setBusy(true)
+        setError("")
+        setNotice("")
+      }
+      try {
+        const responses = await Promise.allSettled(
+          available.map(async (environment) => {
+            const response = await invoke<unknown>("list_mailpit_messages", {
+              environmentId: environment.id,
+            })
+            return normalizeList(response, environment.id, environment.name)
+          }),
+        )
+        setMessages(
+          responses.flatMap((response) => (response.status === "fulfilled" ? response.value : [])),
+        )
+        if (!silent) {
+          const failures = responses.filter(
+            (response): response is PromiseRejectedResult => response.status === "rejected",
+          )
+          if (failures.length)
+            setError(failures.map((failure) => String(failure.reason)).join("\n"))
+        }
+      } finally {
+        if (!silent) setBusy(false)
+      }
+    },
+    [available],
+  )
 
   React.useEffect(() => {
     setSelected(null)
+    checksCacheRef.current.clear()
     void refresh()
   }, [refresh])
+
+  React.useEffect(() => {
+    if (!available.length) return
+    const timer = window.setInterval(() => void refresh({ silent: true }), 10000)
+    return () => window.clearInterval(timer)
+  }, [refresh, available.length])
 
   const mailboxes = React.useMemo(
     () =>
@@ -128,16 +145,24 @@ export function MailPage({
     setBusy(true)
     setError("")
     try {
+      const cacheKey = `${message.environmentId}:${message.id}`
+      const cachedChecks = checksCacheRef.current.get(cacheKey)
       const [response, checks] = await Promise.all([
         invoke<unknown>("read_mailpit_message", {
           environmentId: message.environmentId,
           messageId: message.id,
         }),
-        invoke<unknown>("check_mailpit_message", {
-          environmentId: message.environmentId,
-          messageId: message.id,
-        }),
+        cachedChecks !== undefined
+          ? Promise.resolve(cachedChecks)
+          : invoke<unknown>("check_mailpit_message", {
+              environmentId: message.environmentId,
+              messageId: message.id,
+            }),
       ])
+      // SpamAssassin's sa-check is slow and its result is deterministic for
+      // a given message's content, so it's only worth running once per
+      // message rather than on every reopen.
+      if (cachedChecks === undefined) checksCacheRef.current.set(cacheKey, checks)
       setSelected(normalizeDetail(response, checks, message))
     } catch (value) {
       setError(String(value))
@@ -153,6 +178,7 @@ export function MailPage({
         environmentId: selected.environmentId,
         messageId: selected.id,
       })
+      checksCacheRef.current.delete(`${selected.environmentId}:${selected.id}`)
       setSelected(null)
       await refresh()
     } catch (value) {
