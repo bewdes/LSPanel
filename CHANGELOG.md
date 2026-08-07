@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Visiting a known site whose environment is stopped now shows a "Project stopped" page naming the project, instead of the same generic "domain not found" page shown for an unrecognized/mistyped domain.
 - Database import can now target specific tables instead of always importing the whole dump: "Import tables…" reads the tables present in the selected `.sql` file (via the standard `mysqldump`/`pg_dump` per-table comment markers) and lets you choose which ones to apply.
 - The Operations and Notifications panels now have a search box to filter a long history down to what you're looking for.
 - Mail now refreshes its inbox list automatically in the background, and no longer re-runs the SpamAssassin/HTML compatibility checks every time you reopen a message you've already checked in this session.

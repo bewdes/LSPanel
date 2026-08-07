@@ -18,7 +18,7 @@ use crate::container_lifecycle::{emit_progress, pull_images, run_compose};
 pub use crate::container_logs::LogProcess;
 use crate::container_routes::{
     https_proxy_block, live_link_proxy_block, local_http_status, service_hostname,
-    status_is_available as route_status_is_available,
+    status_is_available as route_status_is_available, stopped_site_block,
 };
 pub(crate) use crate::container_runtime::command as runtime_command;
 pub use crate::container_runtime::{
@@ -1223,9 +1223,12 @@ fn ensure_gateway(app: &tauri::AppHandle, executable: &str) -> Result<(), String
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     let sites = crate::sites::list(app)?;
     let environments = list(app)?;
+    // Every site's hostnames are included here, not just enabled ones, so the
+    // local CA certificate covers a stopped project's domain too - it still
+    // needs a valid HTTPS response (the "project stopped" block below),
+    // rather than a cert error, when visited while its environment is off.
     let mut hostnames = sites
         .iter()
-        .filter(|site| site.enabled)
         .flat_map(|site| std::iter::once(site.domain.clone()).chain(site.aliases.clone()))
         .collect::<Vec<_>>();
     let mut blocks = sites
@@ -1245,6 +1248,12 @@ fn ensure_gateway(app: &tauri::AppHandle, executable: &str) -> Result<(), String
                 })
         })
         .collect::<Vec<_>>();
+    blocks.extend(
+        sites
+            .iter()
+            .filter(|site| !site.enabled)
+            .map(|site| stopped_site_block(&site_hostnames(site), &site.name)),
+    );
     for environment in &environments {
         for (service, port) in [
             ("mailpit", 8025),

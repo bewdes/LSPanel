@@ -50,6 +50,17 @@ pub(crate) fn https_proxy_block(hostnames: &str, target: &str) -> String {
     )
 }
 
+/// A known project whose environment is stopped has no backend to proxy to,
+/// but it's also not the same situation as a mistyped/unknown domain - the
+/// visitor picked a real site, it's just off. `project_name` is validated
+/// elsewhere to only ever contain `[a-zA-Z0-9_-]`, so it's safe to embed
+/// directly in both the nginx string literal and the HTML body.
+pub(crate) fn stopped_site_block(hostnames: &str, project_name: &str) -> String {
+    format!(
+        "server {{ listen 443 ssl; server_name {hostnames}; ssl_certificate /etc/nginx/tls/local.crt; ssl_certificate_key /etc/nginx/tls/local.key; ssl_protocols TLSv1.2 TLSv1.3; default_type text/html; return 503 '<!doctype html><title>LS Panel</title><style>body{{font-family:system-ui;background:#111;color:#eee;display:grid;place-items:center;height:100vh;margin:0}}main{{text-align:center}}p{{color:#999}}</style><main><h1>Project stopped</h1><p>Start &quot;{project_name}&quot; in LS Panel to view this site.</p></main>'; }}"
+    )
+}
+
 pub(crate) fn live_link_proxy_block(
     domain: &str,
     target: &str,
@@ -71,7 +82,10 @@ pub(crate) fn live_link_proxy_block(
 
 #[cfg(test)]
 mod tests {
-    use super::{https_proxy_block, live_link_proxy_block, service_hostname, status_is_available};
+    use super::{
+        https_proxy_block, live_link_proxy_block, service_hostname, status_is_available,
+        stopped_site_block,
+    };
 
     #[test]
     fn routes_normalize_names_and_accept_application_errors() {
@@ -103,5 +117,19 @@ mod tests {
         assert!(block.contains("proxy_redirect https://demo.localhost/ https://$http_host/"));
         assert!(block.contains("proxy_cookie_domain demo.localhost $host"));
         assert!(block.contains("proxy_set_header Upgrade $http_upgrade"));
+    }
+
+    #[test]
+    fn stopped_site_shows_its_own_name_instead_of_a_generic_not_found() {
+        // Regression test: a known site whose environment is off used to
+        // fall through to the same "domain not found" page as a genuinely
+        // unknown hostname, which reads as "you mistyped this" rather than
+        // "this project is just stopped".
+        let block = stopped_site_block("demo.localhost", "demo");
+        assert!(block.contains("server_name demo.localhost"));
+        assert!(block.contains("listen 443 ssl"));
+        assert!(block.contains("ssl_certificate /etc/nginx/tls/local.crt"));
+        assert!(block.contains("return 503"));
+        assert!(block.contains("Start &quot;demo&quot; in LS Panel"));
     }
 }
