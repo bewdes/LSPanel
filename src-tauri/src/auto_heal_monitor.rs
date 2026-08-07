@@ -7,15 +7,27 @@ const CHECK_INTERVAL: Duration = Duration::from_secs(5 * 60);
 /// Never alert about the same environment more than once per hour, so a
 /// container stuck crash-looping doesn't spam a notification every 5 minutes.
 const RENOTIFY_INTERVAL_SECS: i64 = 60 * 60;
+/// Delay before the very first check. Unlike auto-stop (which only acts
+/// after an environment has been observed idle continuously for its full
+/// threshold), this monitor acts on a single point-in-time read - so
+/// checking immediately on launch would catch an environment that's simply
+/// still in the middle of starting up (containers created but not yet
+/// healthy) and misread that as a crash, restarting it and firing an
+/// alarming "service issue" notification for something that was never
+/// actually broken.
+const STARTUP_GRACE: Duration = Duration::from_secs(90);
 
 static LAST_ALERT: LazyLock<Mutex<HashMap<String, i64>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 pub fn start(app: &tauri::AppHandle) {
     let app = app.clone();
-    std::thread::spawn(move || loop {
-        check(&app);
-        std::thread::sleep(CHECK_INTERVAL);
+    std::thread::spawn(move || {
+        std::thread::sleep(STARTUP_GRACE);
+        loop {
+            check(&app);
+            std::thread::sleep(CHECK_INTERVAL);
+        }
     });
 }
 

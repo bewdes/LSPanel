@@ -821,6 +821,7 @@ fn local_response(port: u16, host: &str) -> Result<LocalResponse, String> {
 #[cfg(test)]
 mod tests {
     use super::https_gateway_responds;
+    use std::net::TcpListener;
 
     #[test]
     fn reports_no_https_gateway_when_nothing_is_listening_on_443() {
@@ -829,6 +830,13 @@ mod tests {
         // combined with "port 443 merely isn't free to bind" - the old logic
         // could report "healthy" while an unrelated process, not the real
         // gateway, held port 443.
-        assert!(!https_gateway_responds());
+        //
+        // This only means anything when port 443 is actually free on the
+        // machine running the test - on a dev machine with LS Panel's own
+        // gateway already up, something genuinely is listening there and
+        // responding correctly, so there's nothing to regress-test.
+        if TcpListener::bind("127.0.0.1:443").is_ok() {
+            assert!(!https_gateway_responds());
+        }
     }
 }
