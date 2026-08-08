@@ -122,6 +122,8 @@ const uk: Dictionary = {
     databaseBackupsDescription: "SQL-дампи зберігаються локально в даних застосунку LS Panel.",
     working: "Виконання…",
     createBackup: "Створити резервну копію",
+    startEnvironmentForBackupRestore:
+      "Запустіть середовище, щоб створювати чи відновлювати резервні копії.",
     backupRetention: "Збереження резервних копій",
     backupRetentionHint: "Зберігати найновіші резервні копії та видаляти старіші локальні дампи.",
     backupsToKeepLabel: "Кількість резервних копій для збереження",
@@ -186,6 +188,7 @@ const uk: Dictionary = {
     databaseActions: "Дії з базою даних",
     databaseActionsDescription:
       "Імпорт, експорт, резервне копіювання або безпечне очищення налаштованої бази даних.",
+    startEnvironmentForActions: "Запустіть середовище, щоб скористатись цими діями.",
     importSql: "Імпорт SQL",
     exportSql: "Експорт SQL",
     exportTables: "Експорт таблиць…",

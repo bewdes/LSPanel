@@ -265,6 +265,7 @@ function DatabaseDetails({
   const [selectedImportTables, setSelectedImportTables] = React.useState<Set<string>>(new Set())
   const [tableImportError, setTableImportError] = React.useState("")
   const [importTablesLoading, setImportTablesLoading] = React.useState(false)
+  const [databaseReachable, setDatabaseReachable] = React.useState(true)
 
   const load = React.useCallback(async () => {
     setBusy(true)
@@ -273,9 +274,11 @@ function DatabaseDetails({
       setDatabases(
         await invoke<DatabaseEntry[]>("list_databases", { environmentId: environment.id }),
       )
+      setDatabaseReachable(true)
     } catch (value) {
       setMessage(errorMessage(value))
       setMessageOk(false)
+      setDatabaseReachable(false)
     } finally {
       setBusy(false)
     }
@@ -522,21 +525,37 @@ function DatabaseDetails({
           <CardDescription>{text.databaseActionsDescription}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={busy} onClick={() => void importSql()}>
+          <Button
+            variant="outline"
+            disabled={busy || !databaseReachable}
+            onClick={() => void importSql()}
+          >
             <Upload /> {text.importSql}
           </Button>
-          <Button variant="outline" disabled={busy} onClick={() => void exportSql()}>
+          <Button
+            variant="outline"
+            disabled={busy || !databaseReachable}
+            onClick={() => void exportSql()}
+          >
             <Download /> {text.exportSql}
           </Button>
-          <Button variant="outline" disabled={busy} onClick={() => void openTableExport()}>
+          <Button
+            variant="outline"
+            disabled={busy || !databaseReachable}
+            onClick={() => void openTableExport()}
+          >
             <Download /> {text.exportTables}
           </Button>
-          <Button variant="outline" disabled={busy} onClick={() => void openTableImport()}>
+          <Button
+            variant="outline"
+            disabled={busy || !databaseReachable}
+            onClick={() => void openTableImport()}
+          >
             <Upload /> {text.importTables}
           </Button>
           <Button
             variant="outline"
-            disabled={busy}
+            disabled={busy || !databaseReachable}
             onClick={() =>
               void action("create_database_backup", {}, text.databaseBackupCreated).catch(
                 () => undefined,
@@ -545,10 +564,19 @@ function DatabaseDetails({
           >
             <Save /> {text.quickBackup}
           </Button>
-          <Button variant="destructive" disabled={busy} onClick={() => setClearOpen(true)}>
+          <Button
+            variant="destructive"
+            disabled={busy || !databaseReachable}
+            onClick={() => setClearOpen(true)}
+          >
             <Eraser /> {text.clearDatabase}
           </Button>
         </CardContent>
+        {!databaseReachable && (
+          <CardContent className="pt-0">
+            <p className="text-sm text-muted-foreground">{text.startEnvironmentForActions}</p>
+          </CardContent>
+        )}
       </Card>
 
       <Card>
@@ -564,7 +592,10 @@ function DatabaseDetails({
               onChange={(event) => setName(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && void create()}
             />
-            <Button disabled={busy || !name.trim()} onClick={() => void create()}>
+            <Button
+              disabled={busy || !databaseReachable || !name.trim()}
+              onClick={() => void create()}
+            >
               <Plus /> {text.create}
             </Button>
             <Button variant="outline" size="icon" disabled={busy} onClick={() => void load()}>
@@ -600,7 +631,7 @@ function DatabaseDetails({
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          disabled={busy}
+                          disabled={busy || !databaseReachable}
                           title={text.renameDatabase}
                           onClick={() => {
                             setRenameSource(database.name)
@@ -614,7 +645,7 @@ function DatabaseDetails({
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          disabled={busy}
+                          disabled={busy || !databaseReachable}
                           title={text.cloneDatabase}
                           onClick={() => {
                             setCloneSource(database.name)
@@ -627,7 +658,9 @@ function DatabaseDetails({
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        disabled={busy || database.configured || database.system}
+                        disabled={
+                          busy || !databaseReachable || database.configured || database.system
+                        }
                         onClick={() => setDeleteName(database.name)}
                       >
                         <Trash2 />

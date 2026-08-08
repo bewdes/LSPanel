@@ -52,6 +52,7 @@ export function DatabaseBackups({
   const [messageOk, setMessageOk] = React.useState(false)
   const [keep, setKeep] = React.useState(10)
   const [maxTotalMb, setMaxTotalMb] = React.useState("")
+  const [databaseReachable, setDatabaseReachable] = React.useState(false)
   const [confirm, setConfirm] = React.useState<{
     backup: DatabaseBackup
     action: "restore" | "delete"
@@ -69,6 +70,15 @@ export function DatabaseBackups({
   React.useEffect(() => {
     void refresh()
   }, [refresh])
+  React.useEffect(() => {
+    let disposed = false
+    invoke("database_info", { environmentId: environment.id })
+      .then(() => !disposed && setDatabaseReachable(true))
+      .catch(() => !disposed && setDatabaseReachable(false))
+    return () => {
+      disposed = true
+    }
+  }, [environment.id])
   const create = async () => {
     setBusy(true)
     setMessage("")
@@ -141,7 +151,7 @@ export function DatabaseBackups({
         <CardTitle>{text.databaseBackups}</CardTitle>
         <CardDescription>{text.databaseBackupsDescription}</CardDescription>
         <CardAction>
-          <Button disabled={busy} onClick={() => void create()}>
+          <Button disabled={busy || !databaseReachable} onClick={() => void create()}>
             <Save />
             {busy ? text.working : text.createBackup}
           </Button>
@@ -152,6 +162,9 @@ export function DatabaseBackups({
           <Alert variant={messageOk ? "default" : "destructive"}>
             <AlertDescription>{message}</AlertDescription>
           </Alert>
+        )}
+        {!databaseReachable && (
+          <p className="text-sm text-muted-foreground">{text.startEnvironmentForBackupRestore}</p>
         )}
         <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
           <div className="min-w-0 flex-1">
@@ -206,7 +219,7 @@ export function DatabaseBackups({
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={busy}
+                      disabled={busy || !databaseReachable}
                       onClick={() => setConfirm({ backup, action: "restore" })}
                     >
                       <RefreshCw />

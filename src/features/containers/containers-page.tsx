@@ -130,7 +130,10 @@ export function ContainersPage({
                             <Pause />
                             {text.pause}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => onOperate(environment.id, "unpause")}>
+                          <DropdownMenuItem
+                            disabled={active}
+                            onClick={() => onOperate(environment.id, "unpause")}
+                          >
                             <Play />
                             {text.resume}
                           </DropdownMenuItem>

@@ -102,8 +102,11 @@ export function DatabaseConsole({
           </Alert>
         )}
         {result && <Textarea readOnly className="min-h-32 font-mono text-xs" value={result} />}
-        <div className="flex justify-end">
-          <Button disabled={busy || !sql.trim()} onClick={run}>
+        <div className="flex items-center justify-end gap-3">
+          {!info && (
+            <p className="text-sm text-muted-foreground">{text.startEnvironmentForActions}</p>
+          )}
+          <Button disabled={busy || !sql.trim() || !info} onClick={run}>
             {busy ? <RefreshCw className="animate-spin" /> : <Play />}
             {text.runQuery}
           </Button>
