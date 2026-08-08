@@ -16,6 +16,13 @@ const RENOTIFY_INTERVAL_SECS: i64 = 60 * 60;
 /// alarming "service issue" notification for something that was never
 /// actually broken.
 const STARTUP_GRACE: Duration = Duration::from_secs(90);
+/// A service that's merely still starting up (its compose stack was just
+/// (re)created, or its healthcheck hasn't had time to pass yet) can briefly
+/// read as "exited"/"not running" or "unhealthy" - indistinguishable from a
+/// genuine crash in a single point-in-time read. This delay applies only to
+/// an environment that already looked like it had a problem on the first
+/// read, so it doesn't slow down the common case of everything being fine.
+const CONFIRM_DELAY: Duration = Duration::from_secs(30);
 
 static LAST_ALERT: LazyLock<Mutex<HashMap<String, i64>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -57,6 +64,13 @@ fn check(app: &tauri::AppHandle) {
             // The user deliberately stopped this project; not a crash to heal.
             continue;
         }
+        let Some(problem_services) = unhealthy_services(app, &environment.id) else {
+            continue;
+        };
+        if problem_services.is_empty() {
+            continue;
+        }
+        std::thread::sleep(CONFIRM_DELAY);
         let Some(problem_services) = unhealthy_services(app, &environment.id) else {
             continue;
         };
