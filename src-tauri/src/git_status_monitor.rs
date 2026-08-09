@@ -33,14 +33,18 @@ fn check(app: &tauri::AppHandle) {
         if !site.enabled {
             continue;
         }
+        // Every site's actual git repository lives in `app/` under the
+        // project directory (see e.g. site-details-page.tsx), not at the
+        // project root itself.
+        let repository = format!("{}/app", site.directory);
         // A quiet, read-only fetch is required first: local refs only know
         // about the remote's state as of the last fetch, so without this the
         // "behind" count would just reflect however stale the repo happens
         // to be rather than the actual gap right now.
-        if crate::git::action(&site.directory, "fetch", "").is_err() {
+        if crate::git::action(&repository, "fetch", "").is_err() {
             continue;
         }
-        let Ok(status) = crate::git::status(&site.directory) else {
+        let Ok(status) = crate::git::status(&repository) else {
             continue;
         };
         if !status.repository || status.behind < settings.git_status_behind_threshold as usize {
