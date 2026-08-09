@@ -69,7 +69,15 @@ function providerName(id: string) {
   return PROVIDER_OPTIONS.find((option) => option.id === id)?.name ?? id
 }
 
-export function LiveLinkPage({ sites, language }: { sites: Site[]; language: string }) {
+export function LiveLinkPage({
+  sites,
+  states,
+  language,
+}: {
+  sites: Site[]
+  states: Record<string, string>
+  language: string
+}) {
   const text = pickLanguage(language).liveLink
   const [status, setStatus] = React.useState<LiveLinkStatus | null>(null)
   const [siteId, setSiteId] = React.useState(sites[0]?.id ?? "")
@@ -269,8 +277,12 @@ export function LiveLinkPage({ sites, language }: { sites: Site[]; language: str
             )
           : providerInstalled(provider)
 
+  const selectedSite = sites.find((site) => site.id === siteId)
+  const siteRunning = Boolean(selectedSite && states[selectedSite.environmentId] === "running")
+
   const startBlockedReason = (() => {
     if (!siteId) return text.noSitesAvailable
+    if (!siteRunning) return text.siteNotRunning
     if (provider === "tailscale") {
       if (!status?.installed) return text.tailscaleNotInstalled
       if (!status?.connected) return text.tailscaleNotConnected
@@ -411,7 +423,10 @@ export function LiveLinkPage({ sites, language }: { sites: Site[]; language: str
               </Alert>
             )}
             <div className="flex flex-wrap gap-2">
-              <Button disabled={busy || !siteId || !providerReady} onClick={() => void start()}>
+              <Button
+                disabled={busy || !siteId || !siteRunning || !providerReady}
+                onClick={() => void start()}
+              >
                 <Globe2 className={busy ? "animate-pulse" : ""} />
                 {busy ? text.configuringLiveLink : status?.active ? text.addProject : text.start}
               </Button>

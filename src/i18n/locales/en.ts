@@ -517,6 +517,7 @@ const en = {
     cloudflareAuthenticated: "Cloudflare authenticated.",
     cloudflareAuthReset: "Cloudflare authorization was reset.",
     noSitesAvailable: "No sites available.",
+    siteNotRunning: "Start the selected site's environment before enabling LiveLink.",
     tailscaleNotInstalled: "Tailscale is not installed.",
     tailscaleNotConnected: "Tailscale is not connected.",
     tailscaleServeNotEnabled: "Tailscale Serve is not enabled for this device yet.",

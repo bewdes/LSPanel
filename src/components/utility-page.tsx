@@ -22,6 +22,7 @@ export function UtilityPage({
   language,
   runtime: _runtime,
   sites,
+  states,
   settings,
   onSettingsChange,
 }: {
@@ -29,6 +30,7 @@ export function UtilityPage({
   language: string
   runtime: Runtime | null
   sites: Site[]
+  states: Record<string, string>
   settings: AppSettings | null | undefined
   onSettingsChange: (settings: AppSettings) => void
 }) {
@@ -120,5 +122,5 @@ export function UtilityPage({
       </div>
     )
   }
-  return <LiveLinkPage sites={sites} language={language} />
+  return <LiveLinkPage sites={sites} states={states} language={language} />
 }

@@ -559,6 +559,7 @@ const uk: Dictionary = {
     cloudflareAuthenticated: "Cloudflare успішно авторизовано.",
     cloudflareAuthReset: "Авторизацію Cloudflare скинуто.",
     noSitesAvailable: "Немає доступних сайтів.",
+    siteNotRunning: "Спочатку запустіть середовище обраного сайту, а потім увімкніть LiveLink.",
     tailscaleNotInstalled: "Tailscale не встановлено.",
     tailscaleNotConnected: "Tailscale не підключено.",
     tailscaleServeNotEnabled: "Tailscale Serve ще не активовано для цього пристрою.",
