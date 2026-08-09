@@ -55,6 +55,11 @@ fn strip_infrastructure_secrets(environment: &mut Environment) {
     environment.database_password = String::new();
     environment.database_root_password = String::new();
     environment.redis_password = String::new();
+    environment.minio_root_password = String::new();
+    environment.rabbitmq_password = String::new();
+    environment
+        .environment_variables
+        .retain(|key, _| !crate::environment_files::secret_key(key));
 }
 
 pub fn export(
