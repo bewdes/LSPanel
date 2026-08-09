@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - On Apache-based projects, the idle auto-stop feature could stop the environment mid-Xdebug-session: the debugger-activity check always looked for a "php" service, which only exists on Nginx-based stacks (Apache runs PHP inside the "web" service), so the check silently failed and reported "no active session."
 - The project details page's Terminal tab could be opened even when the project's environment was stopped, leading to a raw connection error instead of an explained disabled state.
 - The LiveLink page let you attempt to start a tunnel for a site whose environment wasn't running instead of proactively explaining why it's blocked, matching the pattern already used on the Database page.
+- The project wizard never checked whether Docker/Podman was ready, so filling out the entire multi-step form only to have it fail deep in provisioning was possible if the runtime wasn't running. It now shows an early warning for container-based projects (native execution mode is unaffected, since it doesn't need Docker/Podman).
 
 ### Security
 
