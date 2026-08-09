@@ -99,6 +99,8 @@ pub fn configured_secrets(environment: &crate::containers::Environment) -> Vec<S
         environment.database_root_password.clone(),
         environment.redis_password.clone(),
         environment.wordpress_admin_password.clone(),
+        environment.minio_root_password.clone(),
+        environment.rabbitmq_password.clone(),
     ];
     secrets.extend(
         environment
