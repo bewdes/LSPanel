@@ -2543,7 +2543,17 @@ fn compose(
         } else {
             "mysqladmin"
         };
-        format!("[\"CMD\", \"{}\", \"ping\", \"-h\", \"127.0.0.1\", \"-uroot\", \"-p{}\", \"--silent\"]", admin, e.database_root_password)
+        serde_json::to_string(&[
+            "CMD",
+            admin,
+            "ping",
+            "-h",
+            "127.0.0.1",
+            "-uroot",
+            &format!("-p{}", e.database_root_password),
+            "--silent",
+        ])
+        .unwrap()
     };
     let database_volume_mount = serde_json::to_string(&format!(
         "{}:/var/lib/{}",
