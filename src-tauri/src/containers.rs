@@ -19,7 +19,7 @@ use crate::container_inspection::{
 };
 pub use crate::container_inspection::{EnvironmentInspection, EnvironmentState, ServiceInspection};
 use crate::container_lifecycle::{emit_progress, pull_images, run_compose};
-pub use crate::container_logs::LogProcess;
+pub use crate::container_logs::{environment_logs, LogProcess};
 use crate::container_routes::service_hostname;
 pub(crate) use crate::container_runtime::command as runtime_command;
 pub use crate::container_runtime::{
@@ -743,43 +743,6 @@ pub fn environment_resources(
         apply_service_stats(&mut services, &String::from_utf8_lossy(&stats.stdout));
     }
     Ok(services)
-}
-
-pub fn environment_logs(app: &tauri::AppHandle, id: &str) -> Result<String, String> {
-    let directory = stack_directory(app, id)?;
-    if !directory.join("compose.yaml").exists() {
-        return Ok(String::new());
-    }
-    let preferred = crate::settings::load(app)?.map(|settings| settings.runtime);
-    let runtime = detect_runtime(preferred.as_deref());
-    let executable = runtime
-        .runtime
-        .filter(|_| runtime.running && runtime.compose_available)
-        .ok_or(runtime.message)?;
-    let output = crate::process::output(
-        runtime_command(&executable)
-            .args(["compose", "logs", "--no-color", "--tail", "200"])
-            .current_dir(directory)
-            .stdin(Stdio::null()),
-        crate::process::SHORT_TIMEOUT,
-        "container logs",
-    )?;
-    if !output.status.success() {
-        return Err(crate::security::environment_error(
-            app,
-            id,
-            String::from_utf8_lossy(&output.stderr).trim(),
-        ));
-    }
-    Ok(crate::security::environment_error(
-        app,
-        id,
-        &format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        ),
-    ))
 }
 
 pub fn spawn_log_stream(
