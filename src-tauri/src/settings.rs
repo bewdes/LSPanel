@@ -77,7 +77,7 @@ impl Default for AppSettings {
             preferred_browser: "system".into(),
             custom_browser_command: String::new(),
             docker_buildkit_enabled: true,
-            stats_refresh_interval_seconds: 10,
+            stats_refresh_interval_seconds: 3,
         }
     }
 }
