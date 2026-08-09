@@ -1,0 +1,106 @@
+name: Bug Report
+description: Report a reproducible problem with LS Panel
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem with LS Panel.
+
+        Before submitting, please make sure you are using a recent version
+        and check whether the issue has already been reported.
+
+  - type: input
+    id: version
+    attributes:
+      label: LS Panel version
+      description: Which version of LS Panel are you using?
+      placeholder: "v0.5.0-beta"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Container runtime
+      description: Which container runtime are you using?
+      options:
+        - Docker
+        - Podman
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: distro
+    attributes:
+      label: Linux distribution
+      description: Distribution and version.
+      placeholder: "Ubuntu 24.04 LTS"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem description
+      description: Describe what went wrong.
+      placeholder: Tell us what happened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide the steps needed to reproduce the problem.
+      placeholder: |
+        1. Open LS Panel
+        2. Create a project
+        3. Start the project
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Paste relevant LS Panel, Docker or Podman logs here.
+        Remove passwords, tokens and other sensitive information.
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add screenshots or any other information that may help diagnose the problem.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and could not find a duplicate.
+          required: true
+        - label: I have removed passwords, tokens and other sensitive information from logs.
+          required: true
