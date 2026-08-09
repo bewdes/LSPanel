@@ -754,6 +754,8 @@ const en = {
     steps: ["Type", "Basics", "Runtime", "Web server", "Database", "Services", "Review"],
     stepOf: (current: number, total: number) => `step ${current} of ${total}`,
     createProject: "Create project",
+    containerRuntimeNotReady:
+      "Docker/Podman isn't ready. You can still fill out this form, but starting a container-based project will fail until it is — check System Health, or switch to native execution mode below.",
     typePhpTitle: "Empty PHP",
     typePhpDescription: "A minimal PHP project with the selected container stack.",
     typeStaticTitle: "Static site",

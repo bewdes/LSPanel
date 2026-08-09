@@ -235,6 +235,7 @@ function App() {
                   environments={environments}
                   sites={sites}
                   language={language}
+                  runtime={runtime}
                   initialProjectType={createProjectType}
                   onCancel={() => {
                     setCreateOpen(false)

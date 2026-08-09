@@ -43,6 +43,7 @@ import {
   WEB_SERVER_VERSIONS,
   defaultDatabaseVersion,
 } from "@/lib/version-catalog"
+import type { Runtime } from "@/types"
 
 type Environment = {
   id: string
@@ -72,6 +73,7 @@ export function ProjectWizard({
   environments,
   sites,
   language,
+  runtime,
   initialProjectType,
   onCancel,
   onCreated,
@@ -79,6 +81,7 @@ export function ProjectWizard({
   environments: Environment[]
   sites: Site[]
   language: string
+  runtime: Runtime | null
   initialProjectType?: string
   onCancel: () => void
   onCreated: (id: string) => void
@@ -464,6 +467,11 @@ export function ProjectWizard({
             </div>
             <Progress value={((step + 1) / steps.length) * 100} />
           </div>
+          {executionMode !== "native" && runtime && !runtime.composeAvailable && (
+            <Alert variant="destructive">
+              <AlertDescription>{text.containerRuntimeNotReady}</AlertDescription>
+            </Alert>
+          )}
           {step === 0 && (
             <div className="grid gap-4 sm:grid-cols-2">
               <TypeCard

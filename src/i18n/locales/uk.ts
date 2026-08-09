@@ -791,6 +791,8 @@ const uk: Dictionary = {
     steps: ["Тип", "Основне", "Runtime", "Веб-сервер", "База даних", "Сервіси", "Огляд"],
     stepOf: (current: number, total: number) => `крок ${current} з ${total}`,
     createProject: "Створити проєкт",
+    containerRuntimeNotReady:
+      "Docker/Podman не готовий. Форму все ще можна заповнити, але запуск контейнерного проєкту не спрацює, доки він не запрацює — перевірте System Health, або нижче виберіть нативний режим виконання.",
     typePhpTitle: "Empty PHP",
     typePhpDescription: "Мінімальний PHP-проєкт із вибраним контейнерним стеком.",
     typeStaticTitle: "Static site",
