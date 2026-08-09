@@ -19,7 +19,7 @@ LS Panel is a [Tauri 2](https://tauri.app/) desktop application: a React/TypeScr
 - **`app/`** — application shell and dashboard composition.
 - **`features/*`** — one folder per domain area (sites, containers, database, backups, snapshots, certificates, mail, environment-files, files, logs, livelink, settings). Each feature owns its page component(s) and any feature-local components.
 - **`components/ui/`** — shared, shadcn-style UI primitives built on Tailwind CSS 4 and Radix/Base UI.
-- **`i18n/`** — one file per feature, each exporting an `{ en, uk }` dictionary. `i18n/index.ts` exposes `pickLanguage(dict, uk)` to select the active language; there is no runtime translation loading, dictionaries are statically imported.
+- **`i18n/`** — one file per locale under `locales/` (`en.ts`, `uk.ts`), each exporting the full translation dictionary for that language. `i18n/index.ts` exposes `pickLanguage(language: string)` to select the active language by locale code (e.g. `settings.language`), falling back to English; there is no runtime translation loading, dictionaries are statically imported.
 - **`hooks/`, `lib/`** — shared React hooks and utilities (formatting, error normalization, version catalog for project templates, etc.).
 
 ## Backend (`src-tauri/src/`)
