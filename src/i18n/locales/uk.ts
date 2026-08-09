@@ -105,6 +105,7 @@ const uk: Dictionary = {
     composeUnavailable: "Compose недоступний",
     resourceUsage: "Використання ресурсів",
     aggregatedAcross: (count: number) => `Сукупно для ${count} запущених сервісів`,
+    checkingEllipsis: "Перевірка…",
     recentSites: "Останні сайти",
     quickProjectAccess: "Швидкий доступ до проєктів",
     viewAll: "Усі",

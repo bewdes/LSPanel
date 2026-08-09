@@ -44,6 +44,7 @@ export function Dashboard({
   onCreate: () => void
 }) {
   const [resources, setResources] = React.useState<Record<string, ServiceResource[]>>({})
+  const [statsLoading, setStatsLoading] = React.useState(true)
   const text = pickLanguage(language).dashboard
   React.useEffect(() => {
     let disposed = false
@@ -62,7 +63,10 @@ export function Dashboard({
             ] as const,
         ),
       )
-      if (!disposed) setResources(Object.fromEntries(entries))
+      if (!disposed) {
+        setResources(Object.fromEntries(entries))
+        setStatsLoading(false)
+      }
       loading = false
     }
     void load()
@@ -87,15 +91,22 @@ export function Dashboard({
     number,
   ])
   const resourceStats = [
-    { label: "CPU", value: `${cpu.toFixed(2)}%` },
-    { label: text.memory, value: formatMetricBytes(memory) },
+    { label: "CPU", value: statsLoading ? text.checkingEllipsis : `${cpu.toFixed(2)}%` },
+    {
+      label: text.memory,
+      value: statsLoading ? text.checkingEllipsis : formatMetricBytes(memory),
+    },
     {
       label: "Network I/O",
-      value: `${formatMetricBytes(network[0])} / ${formatMetricBytes(network[1])}`,
+      value: statsLoading
+        ? text.checkingEllipsis
+        : `${formatMetricBytes(network[0])} / ${formatMetricBytes(network[1])}`,
     },
     {
       label: "Block I/O",
-      value: `${formatMetricBytes(block[0])} / ${formatMetricBytes(block[1])}`,
+      value: statsLoading
+        ? text.checkingEllipsis
+        : `${formatMetricBytes(block[0])} / ${formatMetricBytes(block[1])}`,
     },
   ]
   return (

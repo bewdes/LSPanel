@@ -103,6 +103,7 @@ const en = {
     composeUnavailable: "Compose unavailable",
     resourceUsage: "Resource usage",
     aggregatedAcross: (count: number) => `Aggregated across ${count} running services`,
+    checkingEllipsis: "Checking…",
     recentSites: "Recent sites",
     quickProjectAccess: "Quick project access",
     viewAll: "View all",
