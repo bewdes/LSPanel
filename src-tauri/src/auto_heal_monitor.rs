@@ -28,14 +28,7 @@ static LAST_ALERT: LazyLock<Mutex<HashMap<String, i64>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 pub fn start(app: &tauri::AppHandle) {
-    let app = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(STARTUP_GRACE);
-        loop {
-            check(&app);
-            std::thread::sleep(CHECK_INTERVAL);
-        }
-    });
+    crate::monitor::run_periodic(app, CHECK_INTERVAL, STARTUP_GRACE, check);
 }
 
 fn check(app: &tauri::AppHandle) {
@@ -159,7 +152,7 @@ fn unhealthy_services(app: &tauri::AppHandle, id: &str) -> Option<Vec<ProblemSer
 }
 
 fn should_notify(environment_id: &str) -> bool {
-    let now = now_secs();
+    let now = crate::monitor::now_secs();
     let mut last_alert = LAST_ALERT.lock().unwrap_or_else(|error| error.into_inner());
     match last_alert.get(environment_id) {
         Some(&last) if now - last < RENOTIFY_INTERVAL_SECS => false,
@@ -184,13 +177,6 @@ fn notify(
         format!("Environment \"{environment_name}\": service issue ({services_list})")
     };
     crate::notifications::send(app, "auto-heal", "LS Panel", &body);
-}
-
-fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
 }
 
 #[cfg(test)]

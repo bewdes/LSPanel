@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Restyled the Databases list to match the Sites page: a card-wrapped table with a database icon per row, denser stacked columns (usage, status, admin client), and clickable rows that open the database instead of requiring the separate "Edit" button.
+- Lowered the default stats refresh interval from 10s to 3s (the fastest the setting allows) so the dashboard and sites list feel closer to live. Existing installs keep whatever value is already saved in their settings — change it in Settings → Performance to pick up the new default.
+- The container terminal is now available in Ukrainian, and its Hide/Show password and Copy/Copied tooltips are too — both were the last hardcoded-English holdouts among LS Panel's feature pages.
+
+### Fixed
+
+- The dashboard's "Resource usage" card showed 0% CPU / 0 B for everything the instant the page opened, until the first stats fetch resolved — indistinguishable from genuinely idle services. It now shows "Checking…" until real numbers are in.
+- Restoring a project snapshot trusted the environment id embedded in the snapshot bundle instead of the project's actual environment — a bundle with a foreign or hand-edited id could overwrite and rebuild an unrelated environment on the same machine.
+- The "branch is behind origin" notification never fired for any project: the background check looked for a Git repository at the project's root directory instead of its `app/` subdirectory, where it actually lives.
+- Starting two LiveLink tunnels back-to-back could lose track of the first one — both stayed running, but the second `start`/`stop` call could silently overwrite the other's config entry, leaving a tunnel publicly reachable with no way to stop it short of restarting LS Panel.
+- Deleting an environment left its sites' `.env` files and project directories behind on disk with no way to reach or remove them through the UI, since the site record itself is already gone by that point.
+- On Apache-based projects, the idle auto-stop feature could stop the environment mid-Xdebug-session: the debugger-activity check always looked for a "php" service, which only exists on Nginx-based stacks (Apache runs PHP inside the "web" service), so the check silently failed and reported "no active session."
+- The project details page's Terminal tab could be opened even when the project's environment was stopped, leading to a raw connection error instead of an explained disabled state.
+- The LiveLink page let you attempt to start a tunnel for a site whose environment wasn't running instead of proactively explaining why it's blocked, matching the pattern already used on the Database page.
+- The project wizard never checked whether Docker/Podman was ready, so filling out the entire multi-step form only to have it fail deep in provisioning was possible if the runtime wasn't running. It now shows an early warning for container-based projects (native execution mode is unaffected, since it doesn't need Docker/Podman).
+
+### Security
+
+- Error messages, logs, and (if configured) webhook notifications could leak the MinIO/RabbitMQ passwords of a failing environment — they were missing from the internal secret-redaction and project-export secret-stripping lists that already covered every other generated password.
+- Opening a link like `https://tailscale.com:x@evil.example/` from inside LS Panel could silently send you to `evil.example` instead — the allowed-domains check for links opened in your browser mis-parsed URLs that embed a username before `@`.
+- The local SQLite database, which stores every environment's database/Redis/MinIO/RabbitMQ/WordPress passwords in plain text, is now created with owner-only file permissions (0600) instead of the OS default — existing installs get this fixed automatically on next launch.
+- The webhook URL setting (used for Slack/Discord-style notifications) only required `https://`, so it could be pointed at a loopback or private-network address (or the cloud metadata endpoint) and used to redirect a secret-bearing notification off-machine. It's now restricted to public hosts.
+- The generated MySQL/MariaDB healthcheck command embedded the root password using manual string formatting instead of JSON encoding, unlike everywhere else in the same file — currently harmless because the password is already restricted to safe characters, but a fragile pattern that could reopen compose-file injection if that validation ever changed.
+- Passwords shorter than 4 characters were never redacted from error messages and logs.
+- MySQL/MariaDB database queries, backups, and restores passed the root password as a command-line argument, visible to other local users via `ps`/`/proc` while the operation ran. It's now passed as an environment variable, matching how PostgreSQL already does it.
+- Local HTTPS certificate generation is now serialized, so two environments starting at the same time can no longer interleave their certificate generation and end up with a mismatched certificate/key pair.
+
 ## [0.5.0-beta] - 2026-08-08
 
 ### Added

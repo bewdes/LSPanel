@@ -156,14 +156,13 @@ fn user(script: String) -> PlannedCommand {
 
 fn display_command(command: &PlannedCommand) -> String {
     if command.privileged && !running_as_root() {
-        format!("pkexec /bin/sh -c {}", shell_quote(&command.script))
+        format!(
+            "pkexec /bin/sh -c {}",
+            crate::shell::shell_quote(&command.script)
+        )
     } else {
-        format!("/bin/sh -c {}", shell_quote(&command.script))
+        format!("/bin/sh -c {}", crate::shell::shell_quote(&command.script))
     }
-}
-
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 fn package_install_command(platform: &LinuxPlatform, packages: &str) -> String {
@@ -242,11 +241,11 @@ fn docker_access_script(platform: &LinuxPlatform) -> Result<String, String> {
             package_install_command(platform, packages_for(platform, "acl")?)
         )
     };
-    let group_command = platform.add_docker_group_command(&shell_quote(&user));
+    let group_command = platform.add_docker_group_command(&crate::shell::shell_quote(&user));
     Ok(format!(
         "{prerequisites}{group_command} \
 && if [ -S /var/run/docker.sock ]; then setfacl -m u:{user}:rw /var/run/docker.sock; fi",
-        user = shell_quote(&user)
+        user = crate::shell::shell_quote(&user)
     ))
 }
 

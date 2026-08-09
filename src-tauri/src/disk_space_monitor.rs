@@ -8,11 +8,7 @@ const BYTES_PER_GB: u64 = 1_000_000_000;
 static LAST_ALERT_AT: AtomicI64 = AtomicI64::new(0);
 
 pub fn start(app: &tauri::AppHandle) {
-    let app = app.clone();
-    std::thread::spawn(move || loop {
-        check(&app);
-        std::thread::sleep(CHECK_INTERVAL);
-    });
+    crate::monitor::run_periodic(app, CHECK_INTERVAL, Duration::ZERO, check);
 }
 
 fn check(app: &tauri::AppHandle) {

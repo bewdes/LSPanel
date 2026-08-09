@@ -64,6 +64,22 @@ const uk: Dictionary = {
     cancel: "Скасувати",
     delete: "Видалити",
   },
+  containerTerminal: {
+    terminalTitle: "Термінал",
+    containerTerminalTitle: "Термінал контейнера",
+    nativeShellDescription: "До шести незалежних сеансів shell у директорії проєкту.",
+    containerShellDescription: "До шести незалежних PTY-сеансів усередині Compose-сервісів.",
+    newTab: "Нова вкладка",
+    closeTerminalTab: "Закрити вкладку термінала",
+    commandLabelPlaceholder: "Назва команди",
+    saveCommand: "Зберегти команду",
+    clearHistory: "Очистити історію",
+    interactiveShell: "Інтерактивна оболонка",
+    deleteSavedCommand: "Видалити збережену команду",
+    recentCommands: "Останні команди",
+    connectingToContainer: "Підключення до контейнера…",
+    sessionEnded: "Сеанс завершено.",
+  },
   containers: {
     containers: "Контейнери",
     containersDescription: "Середовища PHP, web server та database.",
@@ -92,6 +108,12 @@ const uk: Dictionary = {
     recommendedAction: "Рекомендована дія: ",
     close: "Закрити",
   },
+  credential: {
+    hidePassword: "Приховати пароль",
+    showPassword: "Показати пароль",
+    copied: "Скопійовано",
+    copy: "Копіювати",
+  },
   dashboard: {
     memory: "Пам'ять",
     workspaceOverview: "Огляд робочого простору",
@@ -105,6 +127,7 @@ const uk: Dictionary = {
     composeUnavailable: "Compose недоступний",
     resourceUsage: "Використання ресурсів",
     aggregatedAcross: (count: number) => `Сукупно для ${count} запущених сервісів`,
+    checkingEllipsis: "Перевірка…",
     recentSites: "Останні сайти",
     quickProjectAccess: "Швидкий доступ до проєктів",
     viewAll: "Усі",
@@ -157,10 +180,21 @@ const uk: Dictionary = {
     siteColumn: "Сайт",
     databaseColumn: "База даних",
     engineColumn: "Двигун",
+    usageColumn: "Використання",
     sizeColumn: "Розмір",
     connectionsColumn: "З'єднання",
+    connectionsCount: (count: number) => {
+      const last = count % 10
+      const lastTwo = count % 100
+      const word =
+        lastTwo >= 11 && lastTwo <= 14
+          ? "з'єднань"
+          : last >= 1 && last <= 4
+            ? "з'єднання"
+            : "з'єднань"
+      return `${count} ${word}`
+    },
     statusColumn: "Статус",
-    adminClientColumn: "Адмін-клієнт",
     actionsColumn: "Дії",
     noLinkedSite: "Сайт не прив'язано",
     checkingEllipsis: "Перевірка…",
@@ -547,6 +581,7 @@ const uk: Dictionary = {
     cloudflareAuthenticated: "Cloudflare успішно авторизовано.",
     cloudflareAuthReset: "Авторизацію Cloudflare скинуто.",
     noSitesAvailable: "Немає доступних сайтів.",
+    siteNotRunning: "Спочатку запустіть середовище обраного сайту, а потім увімкніть LiveLink.",
     tailscaleNotInstalled: "Tailscale не встановлено.",
     tailscaleNotConnected: "Tailscale не підключено.",
     tailscaleServeNotEnabled: "Tailscale Serve ще не активовано для цього пристрою.",
@@ -756,6 +791,8 @@ const uk: Dictionary = {
     steps: ["Тип", "Основне", "Runtime", "Веб-сервер", "База даних", "Сервіси", "Огляд"],
     stepOf: (current: number, total: number) => `крок ${current} з ${total}`,
     createProject: "Створити проєкт",
+    containerRuntimeNotReady:
+      "Docker/Podman не готовий. Форму все ще можна заповнити, але запуск контейнерного проєкту не спрацює, доки він не запрацює — перевірте System Health, або нижче виберіть нативний режим виконання.",
     typePhpTitle: "Empty PHP",
     typePhpDescription: "Мінімальний PHP-проєкт із вибраним контейнерним стеком.",
     typeStaticTitle: "Static site",

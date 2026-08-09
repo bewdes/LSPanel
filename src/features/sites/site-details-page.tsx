@@ -548,7 +548,9 @@ export function SiteDetailsPage({
           {!(isNative && site.projectType === "static") && (
             <TabsTrigger value="environment">{text.tabEnvironment}</TabsTrigger>
           )}
-          <TabsTrigger value="terminal">{text.tabTerminal}</TabsTrigger>
+          <TabsTrigger value="terminal" disabled={busy || !active}>
+            {text.tabTerminal}
+          </TabsTrigger>
           <TabsTrigger value="backups">{text.tabBackups}</TabsTrigger>
           <TabsTrigger value="tools">{text.tabTools}</TabsTrigger>
         </TabsList>
@@ -701,23 +703,30 @@ export function SiteDetailsPage({
                 <CardDescription>{environment.databaseName ?? "app"}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
-                <Credential label={text.host} value="database" />
-                <Credential label={text.user} value={environment.databaseUser ?? "app"} />
+                <Credential label={text.host} value="database" language={language} />
+                <Credential
+                  label={text.user}
+                  value={environment.databaseUser ?? "app"}
+                  language={language}
+                />
                 <Credential
                   label={text.password}
                   value={environment.databasePassword ?? ""}
                   secret
+                  language={language}
                 />
                 {site.projectType === "wordpress" && (
                   <>
                     <Credential
                       label={text.wordpressAdmin}
                       value={environment.wordpressAdminUser ?? "admin"}
+                      language={language}
                     />
                     <Credential
                       label={text.wordpressPassword}
                       value={environment.wordpressAdminPassword ?? ""}
                       secret
+                      language={language}
                     />
                   </>
                 )}
@@ -770,7 +779,7 @@ export function SiteDetailsPage({
               </Card>
             }
           >
-            <ContainerTerminal site={site} environment={environment} />
+            <ContainerTerminal site={site} environment={environment} language={language} />
           </React.Suspense>
         </TabsContent>
         <TabsContent value="backups" className="pt-4">

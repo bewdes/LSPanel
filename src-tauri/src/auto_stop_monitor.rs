@@ -13,11 +13,7 @@ static IDLE_SINCE: LazyLock<Mutex<HashMap<String, i64>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 pub fn start(app: &tauri::AppHandle) {
-    let app = app.clone();
-    std::thread::spawn(move || loop {
-        check(&app);
-        std::thread::sleep(CHECK_INTERVAL);
-    });
+    crate::monitor::run_periodic(app, CHECK_INTERVAL, Duration::ZERO, check);
 }
 
 fn check(app: &tauri::AppHandle) {
@@ -31,7 +27,7 @@ fn check(app: &tauri::AppHandle) {
     let Ok(environments) = crate::containers::list(app) else {
         return;
     };
-    let now = now_secs();
+    let now = crate::monitor::now_secs();
     let idle_threshold_secs = i64::from(settings.auto_stop_idle_minutes) * 60;
     let mut idle_since = IDLE_SINCE.lock().unwrap_or_else(|error| error.into_inner());
     let tracked_ids: HashSet<&str> = environments
@@ -64,7 +60,7 @@ fn check(app: &tauri::AppHandle) {
                 // holds an open connection back to the IDE but uses ~0% CPU
                 // for as long as the developer is stepping through code, so
                 // treat that connection the same as active CPU.
-                if xdebug_session_active(app, environment).unwrap_or(false) {
+                if xdebug_session_active(app, environment).unwrap_or(true) {
                     idle_since.remove(&environment.id);
                     continue;
                 }
@@ -137,12 +133,19 @@ fn xdebug_session_active(
     if !directory.join("compose.yaml").exists() {
         return None;
     }
+    // Nginx stacks run PHP-FPM in its own "php" service; Apache stacks run
+    // mod_php inside "web" and never have a separate "php" service at all.
+    let service = if environment.web_server == "Nginx" {
+        "php"
+    } else {
+        "web"
+    };
     let output = crate::containers::runtime_command(&executable)
         .args([
             "compose",
             "exec",
             "-T",
-            "php",
+            service,
             "cat",
             "/proc/net/tcp",
             "/proc/net/tcp6",
@@ -152,9 +155,10 @@ fn xdebug_session_active(
         .output()
         .ok()?;
     if !output.status.success() {
-        // No "php" service, container not running the request, or /proc
-        // unavailable in this image — nothing to report as active.
-        return Some(false);
+        // Couldn't confirm either way (container not running the request,
+        // /proc unavailable in this image, etc.) — undeterminable, not
+        // "definitely not active"; the caller treats this like active CPU.
+        return None;
     }
     Some(has_established_connection_to_port(
         &String::from_utf8_lossy(&output.stdout),
@@ -201,13 +205,6 @@ fn notify(app: &tauri::AppHandle, settings: &crate::settings::AppSettings, envir
         format!("Environment \"{environment_name}\" was stopped due to inactivity")
     };
     crate::notifications::send(app, "auto-stop", "LS Panel", &body);
-}
-
-fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
 }
 
 #[cfg(test)]

@@ -213,10 +213,21 @@ pub fn restore(app: &tauri::AppHandle, site_id: &str, id: &str) -> Result<(), St
         return Err("Invalid snapshot identifier".into());
     }
     let directory = root(app, site_id)?.join(id);
-    let manifest = load_manifest(&directory)?;
+    let mut manifest = load_manifest(&directory)?;
     if manifest.site.id != site_id {
         return Err("Snapshot belongs to another project".into());
     }
+    // The manifest's `environment.id` comes from the snapshot bundle and
+    // isn't trustworthy on its own — a bundle edited by hand (or imported
+    // from elsewhere) could carry an id that happens to belong to a
+    // different environment on this machine. `apply` below saves and
+    // rebuilds whatever id ends up in the manifest, so always force it back
+    // to this site's actual current environment before proceeding.
+    let current_site = crate::sites::list(app)?
+        .into_iter()
+        .find(|site| site.id == site_id)
+        .ok_or("Site not found")?;
+    manifest.environment.id = current_site.environment_id;
     // `create` only backs up the database when the environment is currently
     // running, but `apply` below rebuilds/starts the environment regardless
     // of its current state and may overwrite the database. Start it first

@@ -12,8 +12,14 @@ fn data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 fn connect(app: &tauri::AppHandle) -> Result<Connection, String> {
     let directory = data_dir(app)?;
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    let mut connection =
-        Connection::open(directory.join("lspanel.sqlite3")).map_err(|error| error.to_string())?;
+    let path = directory.join("lspanel.sqlite3");
+    let mut connection = Connection::open(&path).map_err(|error| error.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .map_err(|error| error.to_string())?;
+    }
     connection
         .execute_batch(
             "PRAGMA foreign_keys = ON;

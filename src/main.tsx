@@ -235,6 +235,7 @@ function App() {
                   environments={environments}
                   sites={sites}
                   language={language}
+                  runtime={runtime}
                   initialProjectType={createProjectType}
                   onCancel={() => {
                     setCreateOpen(false)
@@ -359,6 +360,7 @@ function App() {
                     language={language}
                     runtime={runtime}
                     sites={sites}
+                    states={states}
                     settings={settings}
                     onSettingsChange={setSettings}
                   />

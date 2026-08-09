@@ -19,7 +19,7 @@ LS Panel is a [Tauri 2](https://tauri.app/) desktop application: a React/TypeScr
 - **`app/`** — application shell and dashboard composition.
 - **`features/*`** — one folder per domain area (sites, containers, database, backups, snapshots, certificates, mail, environment-files, files, logs, livelink, settings). Each feature owns its page component(s) and any feature-local components.
 - **`components/ui/`** — shared, shadcn-style UI primitives built on Tailwind CSS 4 and Radix/Base UI.
-- **`i18n/`** — one file per feature, each exporting an `{ en, uk }` dictionary. `i18n/index.ts` exposes `pickLanguage(dict, uk)` to select the active language; there is no runtime translation loading, dictionaries are statically imported.
+- **`i18n/`** — one file per locale under `locales/` (`en.ts`, `uk.ts`), each exporting the full translation dictionary for that language. `i18n/index.ts` exposes `pickLanguage(language: string)` to select the active language by locale code (e.g. `settings.language`), falling back to English; there is no runtime translation loading, dictionaries are statically imported.
 - **`hooks/`, `lib/`** — shared React hooks and utilities (formatting, error normalization, version catalog for project templates, etc.).
 
 ## Backend (`src-tauri/src/`)
@@ -60,6 +60,17 @@ Longer-running actions (provisioning, container operations, snapshot restore, et
 ### Security-sensitive file handling
 
 `security.rs` centralizes filesystem writes for anything exported outside the app's own data directory (`.env` exports, snapshot exports, log exports): writes go to a temporary sibling file and are only renamed into place after success, existing symlinks at the destination are refused, and secret values can be redacted in logs/output.
+
+### Trust model
+
+Every Tauri command in `src-tauri/src/` is directly invokable by the renderer with arbitrary arguments — via devtools today, or a compromised/XSS'd webview in principle. This is a property of the IPC surface itself, not a per-command bug, and it means two classes of "issue" are accepted risk rather than something a single command-level fix can close:
+
+- Commands whose legitimate UX is "act on a path the user picked via a native OS dialog" (database/snapshot export and import, `.env` import) validate that the target's parent directory exists and isn't a symlink, but don't confine the path to a project root — unlike `file_manager.rs`, whose "browse within this project" model does support confinement. Adding confinement here would break the "export/import anywhere" UX these commands exist for.
+- The configurable terminal/browser/editor commands (`desktop_commands.rs`, `settings.rs`) are a deliberate escape hatch for running an arbitrary local binary; they're validated for non-emptiness only, with no shell parsing (so no metacharacter injection), and no allowlist beyond that.
+
+Both are only exploitable through the same compromised-renderer precondition as calling any other command directly, and are documented here rather than "fixed" so a future contributor doesn't reintroduce path confinement expecting it to close something it can't.
+
+Separately: dependency versions in `Cargo.toml`/`package.json` are pinned to major only (e.g. `tauri "2"`, `react "^19"`), and the install scripts in `dependency_install.rs` fetch third-party installers over `curl | sh` (run via `pkexec`, so as root) without checksum verification — standard practice for these tools, but worth periodically running `cargo audit`/`npm audit` rather than relying on manual review.
 
 ### Other backend modules
 

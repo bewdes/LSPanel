@@ -3,8 +3,17 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::{LazyLock, Mutex},
 };
 use tauri::Manager;
+
+/// Serializes certificate generation. All environments share the same
+/// `certificates/` directory and the same temporary filenames
+/// (`local.key.next`, `local.crt.next`, `local.ext`) while a new leaf
+/// certificate is being generated — two environments starting at the same
+/// time could otherwise interleave their openssl runs and end up with a
+/// mixed cert/key pair.
+static TLS_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 pub struct CertificatePaths {
     pub certificate: PathBuf,
@@ -57,6 +66,7 @@ pub fn ensure(
     app: &tauri::AppHandle,
     hostnames: impl IntoIterator<Item = String>,
 ) -> Result<CertificatePaths, String> {
+    let _lock = TLS_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     let directory = root(app)?;
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     let ca_key = directory.join("lspanel-ca.key");

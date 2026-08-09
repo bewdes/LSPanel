@@ -53,7 +53,7 @@ pub fn redact(text: &str, secrets: impl IntoIterator<Item = String>) -> String {
     let mut result = redact_url_credentials(text);
     let mut secrets = secrets
         .into_iter()
-        .filter(|value| value.len() >= 4)
+        .filter(|value| !value.is_empty())
         .collect::<Vec<_>>();
     secrets.sort_by_key(|value| std::cmp::Reverse(value.len()));
     secrets.dedup();
@@ -99,6 +99,8 @@ pub fn configured_secrets(environment: &crate::containers::Environment) -> Vec<S
         environment.database_root_password.clone(),
         environment.redis_password.clone(),
         environment.wordpress_admin_password.clone(),
+        environment.minio_root_password.clone(),
+        environment.rabbitmq_password.clone(),
     ];
     secrets.extend(
         environment
@@ -154,10 +156,10 @@ mod tests {
     }
 
     #[test]
-    fn ignores_empty_and_too_short_values() {
+    fn ignores_empty_values_but_redacts_short_ones() {
         assert_eq!(
             redact("service db failed", ["", "db"].map(str::to_owned)),
-            "service db failed"
+            "service •••••••• failed"
         );
     }
 

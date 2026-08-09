@@ -45,7 +45,8 @@ fn validate_local_url(url: &str) -> Result<(), String> {
         .or_else(|| url.strip_prefix("https://"))
         .ok_or("Only HTTP(S) local site URLs are allowed")?;
     let authority = without_scheme.split('/').next().unwrap_or_default();
-    let host = authority.split(':').next().unwrap_or_default();
+    let host_port = authority.rsplit('@').next().unwrap_or_default();
+    let host = host_port.split(':').next().unwrap_or_default();
     if !(host == "localhost"
         || host == "127.0.0.1"
         || host.ends_with(".localhost")
@@ -234,6 +235,13 @@ mod tests {
         assert!(validate_local_url("https://notgithub.com").is_err());
         assert!(validate_local_url("https://docs.docker.com.evil.test").is_err());
         assert!(validate_local_url("https://tailscale.com.evil.test").is_err());
+    }
+
+    #[test]
+    fn rejects_userinfo_tricks_that_disguise_the_real_host() {
+        assert!(validate_local_url("https://tailscale.com:x@evil.test/").is_err());
+        assert!(validate_local_url("https://tailscale.com@evil.test").is_err());
+        assert!(validate_local_url("http://user:pass@localhost:8080/app").is_ok());
     }
 
     #[test]

@@ -142,7 +142,7 @@ export function WelcomeScreen({ onComplete }: { onComplete: (settings: AppSettin
     preferredBrowser: "system",
     customBrowserCommand: "",
     dockerBuildkitEnabled: true,
-    statsRefreshIntervalSeconds: 10,
+    statsRefreshIntervalSeconds: 3,
   })
   const [freeSpace, setFreeSpace] = React.useState<number | null | undefined>(undefined)
   const [runtimeStatus, setRuntimeStatus] = React.useState<Runtime | null>(null)
