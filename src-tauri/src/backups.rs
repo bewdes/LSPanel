@@ -391,6 +391,8 @@ fn client_args(e: &crate::containers::Environment) -> Vec<String> {
             "compose".into(),
             "exec".into(),
             "-T".into(),
+            "-e".into(),
+            format!("MYSQL_PWD={}", e.database_root_password),
             "database".into(),
             if e.database == "MariaDB" {
                 "mariadb".into()
@@ -400,7 +402,6 @@ fn client_args(e: &crate::containers::Environment) -> Vec<String> {
             "-N".into(),
             "-B".into(),
             "-uroot".into(),
-            format!("-p{}", e.database_root_password),
             e.database_name.clone(),
         ]
     }
@@ -990,6 +991,8 @@ fn dump_args_for(e: &crate::containers::Environment, database: &str) -> Vec<Stri
             "compose".into(),
             "exec".into(),
             "-T".into(),
+            "-e".into(),
+            format!("MYSQL_PWD={}", e.database_root_password),
             "database".into(),
             if e.database == "MariaDB" {
                 "mariadb-dump".into()
@@ -997,7 +1000,6 @@ fn dump_args_for(e: &crate::containers::Environment, database: &str) -> Vec<Stri
                 "mysqldump".into()
             },
             "-uroot".into(),
-            format!("-p{}", e.database_root_password),
             "--single-transaction".into(),
             "--routines".into(),
             "--triggers".into(),
@@ -1049,6 +1051,8 @@ fn restore_args_for(e: &crate::containers::Environment, database: &str) -> Vec<S
             "compose".into(),
             "exec".into(),
             "-T".into(),
+            "-e".into(),
+            format!("MYSQL_PWD={}", e.database_root_password),
             "database".into(),
             if e.database == "MariaDB" {
                 "mariadb".into()
@@ -1056,7 +1060,6 @@ fn restore_args_for(e: &crate::containers::Environment, database: &str) -> Vec<S
                 "mysql".into()
             },
             "-uroot".into(),
-            format!("-p{}", e.database_root_password),
             database.into(),
         ]
     }
