@@ -34,6 +34,7 @@ mod livelink_commands;
 mod logs;
 mod mailpit;
 mod mailpit_commands;
+mod monitor;
 mod native_runtime;
 mod notifications;
 mod operations;

@@ -13,11 +13,7 @@ static IDLE_SINCE: LazyLock<Mutex<HashMap<String, i64>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 pub fn start(app: &tauri::AppHandle) {
-    let app = app.clone();
-    std::thread::spawn(move || loop {
-        check(&app);
-        std::thread::sleep(CHECK_INTERVAL);
-    });
+    crate::monitor::run_periodic(app, CHECK_INTERVAL, Duration::ZERO, check);
 }
 
 fn check(app: &tauri::AppHandle) {
@@ -31,7 +27,7 @@ fn check(app: &tauri::AppHandle) {
     let Ok(environments) = crate::containers::list(app) else {
         return;
     };
-    let now = now_secs();
+    let now = crate::monitor::now_secs();
     let idle_threshold_secs = i64::from(settings.auto_stop_idle_minutes) * 60;
     let mut idle_since = IDLE_SINCE.lock().unwrap_or_else(|error| error.into_inner());
     let tracked_ids: HashSet<&str> = environments
@@ -209,13 +205,6 @@ fn notify(app: &tauri::AppHandle, settings: &crate::settings::AppSettings, envir
         format!("Environment \"{environment_name}\" was stopped due to inactivity")
     };
     crate::notifications::send(app, "auto-stop", "LS Panel", &body);
-}
-
-fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
 }
 
 #[cfg(test)]
