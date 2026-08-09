@@ -7,6 +7,7 @@ mod backup_scheduler;
 mod backups;
 mod bootstrap;
 mod certificate_commands;
+mod container_bootstrap;
 mod container_compose;
 mod container_inspection;
 mod container_lifecycle;
