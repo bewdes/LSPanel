@@ -64,7 +64,7 @@ fn check(app: &tauri::AppHandle) {
                 // holds an open connection back to the IDE but uses ~0% CPU
                 // for as long as the developer is stepping through code, so
                 // treat that connection the same as active CPU.
-                if xdebug_session_active(app, environment).unwrap_or(false) {
+                if xdebug_session_active(app, environment).unwrap_or(true) {
                     idle_since.remove(&environment.id);
                     continue;
                 }
@@ -137,12 +137,19 @@ fn xdebug_session_active(
     if !directory.join("compose.yaml").exists() {
         return None;
     }
+    // Nginx stacks run PHP-FPM in its own "php" service; Apache stacks run
+    // mod_php inside "web" and never have a separate "php" service at all.
+    let service = if environment.web_server == "Nginx" {
+        "php"
+    } else {
+        "web"
+    };
     let output = crate::containers::runtime_command(&executable)
         .args([
             "compose",
             "exec",
             "-T",
-            "php",
+            service,
             "cat",
             "/proc/net/tcp",
             "/proc/net/tcp6",
@@ -152,9 +159,10 @@ fn xdebug_session_active(
         .output()
         .ok()?;
     if !output.status.success() {
-        // No "php" service, container not running the request, or /proc
-        // unavailable in this image — nothing to report as active.
-        return Some(false);
+        // Couldn't confirm either way (container not running the request,
+        // /proc unavailable in this image, etc.) — undeterminable, not
+        // "definitely not active"; the caller treats this like active CPU.
+        return None;
     }
     Some(has_established_connection_to_port(
         &String::from_utf8_lossy(&output.stdout),
