@@ -12,6 +12,7 @@ mod container_lifecycle;
 mod container_logs;
 mod container_routes;
 mod container_runtime;
+mod container_schema;
 mod container_validation;
 mod containers;
 mod database_commands;
