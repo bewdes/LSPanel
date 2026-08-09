@@ -342,10 +342,9 @@ pub fn delete(app: &tauri::AppHandle, id: &str) -> Result<Vec<Environment>, Stri
     if !safe_resource_id(id) {
         return Err("Invalid environment identifier".into());
     }
-    let site_ids = crate::sites::list(app)?
+    let sites = crate::sites::list(app)?
         .into_iter()
         .filter(|site| site.environment_id == id)
-        .map(|site| site.id)
         .collect::<Vec<_>>();
     crate::storage::delete_environment(app, id)?;
     let mut cleanup_errors = Vec::new();
@@ -358,9 +357,40 @@ pub fn delete(app: &tauri::AppHandle, id: &str) -> Result<Vec<Environment>, Stri
     if let Err(error) = crate::backups::delete_all(app, id) {
         cleanup_errors.push(format!("database backups: {error}"));
     }
-    for site_id in site_ids {
-        if let Err(error) = crate::snapshots::delete_all(app, &site_id) {
-            cleanup_errors.push(format!("snapshots for {site_id}: {error}"));
+    // `storage::delete_environment` already cascades away the DB rows for
+    // these sites, but their `.env` profile and project directory on disk
+    // are not tracked by anything else once that happens — clean them up
+    // here or they become permanently unreachable through the UI.
+    for site in sites {
+        if let Err(error) = crate::snapshots::delete_all(app, &site.id) {
+            cleanup_errors.push(format!("snapshots for {}: {error}", site.id));
+        }
+        if let Err(error) = crate::environment_files::remove(app, &site.id) {
+            cleanup_errors.push(format!("env file for {}: {error}", site.id));
+        }
+        let directory = PathBuf::from(&site.directory);
+        if directory.exists() {
+            let parent = directory.parent();
+            let quarantine = parent.map(|parent| {
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis();
+                parent.join(format!(".lspanel-delete-{timestamp}"))
+            });
+            match quarantine {
+                Some(quarantine) => {
+                    if let Err(error) = fs::rename(&directory, quarantine) {
+                        cleanup_errors.push(format!("project files for {}: {error}", site.id));
+                    }
+                }
+                None => {
+                    cleanup_errors.push(format!(
+                        "project files for {}: directory has no parent",
+                        site.id
+                    ));
+                }
+            }
         }
     }
     if !cleanup_errors.is_empty() {
