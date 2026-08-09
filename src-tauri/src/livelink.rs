@@ -6,8 +6,16 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::{LazyLock, Mutex},
 };
 use tauri::Manager;
+
+/// Serializes mutating access to the shared `livelink.json` config across
+/// `start()`/`stop()`. Without this, two near-simultaneous `start()` calls
+/// each read the same snapshot of `links` and the later `save_config` wins,
+/// silently dropping the other's entry — the tunnel it started keeps
+/// running (publicly reachable) but disappears from `status()`/the UI.
+static LIVELINK_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -525,6 +533,9 @@ pub fn start(
         }
         "tunnel".to_owned()
     };
+    let _lock = LIVELINK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let previous_links = load_config(app)
         .map(|config| config.links)
         .unwrap_or_default();
@@ -648,6 +659,9 @@ fn validate_hostname(hostname: &str) -> Result<String, String> {
 }
 
 pub fn stop(app: &tauri::AppHandle) -> Result<LiveLinkStatus, String> {
+    let _lock = LIVELINK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     if let Some(config) = load_config(app) {
         let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
         for link in config.links {
