@@ -34,7 +34,7 @@
 
 ## Features
 
-**Development** — Sites · Containers · Databases · Environment files · Live logs · Integrated terminal
+**Development** — Sites · Git · Containers · Databases · Environment files · Live logs · Integrated terminal
 
 **Productivity** — Mail capture (Mailpit) · Project snapshots · Database backups · LiveLink · Certificates
 
