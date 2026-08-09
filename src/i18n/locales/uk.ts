@@ -158,10 +158,21 @@ const uk: Dictionary = {
     siteColumn: "Сайт",
     databaseColumn: "База даних",
     engineColumn: "Двигун",
+    usageColumn: "Використання",
     sizeColumn: "Розмір",
     connectionsColumn: "З'єднання",
+    connectionsCount: (count: number) => {
+      const last = count % 10
+      const lastTwo = count % 100
+      const word =
+        lastTwo >= 11 && lastTwo <= 14
+          ? "з'єднань"
+          : last >= 1 && last <= 4
+            ? "з'єднання"
+            : "з'єднань"
+      return `${count} ${word}`
+    },
     statusColumn: "Статус",
-    adminClientColumn: "Адмін-клієнт",
     actionsColumn: "Дії",
     noLinkedSite: "Сайт не прив'язано",
     checkingEllipsis: "Перевірка…",

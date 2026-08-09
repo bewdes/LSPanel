@@ -136,19 +136,16 @@ export function DatabasePage({
           </Button>
         }
       />
-      <div className="px-4 lg:px-6">
-        <div className="overflow-hidden rounded-xl border">
+      <div className="grid gap-3 px-4 lg:px-6">
+        <Card className="overflow-hidden py-0">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>{text.siteColumn}</TableHead>
-                <TableHead>{text.databaseColumn}</TableHead>
-                <TableHead>{text.engineColumn}</TableHead>
-                <TableHead>{text.sizeColumn}</TableHead>
-                <TableHead>{text.connectionsColumn}</TableHead>
-                <TableHead>{text.statusColumn}</TableHead>
-                <TableHead>{text.adminClientColumn}</TableHead>
-                <TableHead className="text-right">{text.actionsColumn}</TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="h-11 px-4">{text.siteColumn}</TableHead>
+                <TableHead className="h-11">{text.engineColumn}</TableHead>
+                <TableHead className="h-11">{text.usageColumn}</TableHead>
+                <TableHead className="h-11">{text.statusColumn}</TableHead>
+                <TableHead className="h-11 px-4 text-right">{text.actionsColumn}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -162,23 +159,41 @@ export function DatabasePage({
                     : ""
                 const status = overview[environment.id]
                 return (
-                  <TableRow key={environment.id}>
-                    <TableCell>
-                      <p className="font-medium">
-                        {relatedSites.map((site) => site.name).join(", ") || environment.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {relatedSites.map((site) => site.domain).join(", ") || text.noLinkedSite}
-                      </p>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {environment.databaseName ?? "app"}
+                  <TableRow
+                    key={environment.id}
+                    className="cursor-pointer"
+                    onClick={() => setSelectedId(environment.id)}
+                  >
+                    <TableCell className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="grid size-9 shrink-0 place-items-center rounded-md bg-muted">
+                          <Database className="size-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {relatedSites.map((site) => site.name).join(", ") || environment.name}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {relatedSites.map((site) => site.domain).join(", ") ||
+                              text.noLinkedSite}
+                          </p>
+                          <p className="truncate font-mono text-xs text-muted-foreground">
+                            {environment.databaseName ?? "app"}
+                          </p>
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       {environment.database} {environment.databaseVersion}
                     </TableCell>
-                    <TableCell>{status?.size ?? text.checkingEllipsis}</TableCell>
-                    <TableCell>{status?.connections ?? "—"}</TableCell>
+                    <TableCell>
+                      <p className="font-medium tabular-nums">
+                        {status?.size ?? text.checkingEllipsis}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {status ? text.connectionsCount(status.connections) : "—"}
+                      </p>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={status?.connected ? "default" : "secondary"}>
                         {status
@@ -187,31 +202,36 @@ export function DatabasePage({
                             : text.unavailable
                           : text.checking}
                       </Badge>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {admin ? admin : text.notEnabled}
+                      </p>
                     </TableCell>
-                    <TableCell>
-                      {admin ? (
+                    <TableCell className="px-4 text-right">
+                      {admin && (
                         <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
+                          variant="ghost"
+                          size="icon-sm"
+                          title={admin}
+                          onClick={(event) => {
+                            event.stopPropagation()
                             void invoke("open_url", {
                               url: `https://${serviceHostname(admin.toLowerCase(), environment.name)}`,
                             })
-                          }
+                          }}
                         >
-                          {admin} <ExternalLink />
+                          <ExternalLink />
                         </Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">{text.notEnabled}</span>
                       )}
-                    </TableCell>
-                    <TableCell className="text-right">
                       <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedId(environment.id)}
+                        variant="ghost"
+                        size="icon-sm"
+                        title={text.edit}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setSelectedId(environment.id)
+                        }}
                       >
-                        <Pencil /> {text.edit}
+                        <Pencil />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -225,7 +245,7 @@ export function DatabasePage({
               <p className="text-sm">{text.noDatabasesYet}</p>
             </div>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   )
