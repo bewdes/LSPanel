@@ -46,6 +46,7 @@ mod runtime_commands;
 mod security;
 mod settings;
 mod settings_commands;
+mod shell;
 mod site_commands;
 mod sites;
 mod snapshot_commands;

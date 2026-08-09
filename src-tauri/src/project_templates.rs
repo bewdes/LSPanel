@@ -385,11 +385,11 @@ fn provision_wordpress(
     )?;
     let install = format!(
         "php -r '$d=file_get_contents(\"https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar\"); if($d===false){{exit(2);}} file_put_contents(\"/tmp/lspanel-wp-cli.phar\",$d);' && (php /tmp/lspanel-wp-cli.phar core is-installed --allow-root || php /tmp/lspanel-wp-cli.phar core install --allow-root --url={} --title={} --admin_user={} --admin_password={} --admin_email={} --skip-email) && rm -f /tmp/lspanel-wp-cli.phar",
-        shell_quote(&format!("https://{}", site.domain)),
-        shell_quote(&environment.wordpress_site_title),
-        shell_quote(&environment.wordpress_admin_user),
-        shell_quote(&environment.wordpress_admin_password),
-        shell_quote(&environment.wordpress_admin_email),
+        crate::shell::shell_quote(&format!("https://{}", site.domain)),
+        crate::shell::shell_quote(&environment.wordpress_site_title),
+        crate::shell::shell_quote(&environment.wordpress_admin_user),
+        crate::shell::shell_quote(&environment.wordpress_admin_password),
+        crate::shell::shell_quote(&environment.wordpress_admin_email),
     );
     run_in_php(app, site, environment, &install)?;
     restore_ownership(app, site, environment)?;
@@ -675,10 +675,6 @@ fn podman_is_rootless() -> bool {
 
 fn php_string(value: &str) -> String {
     format!("'{}'", value.replace('\\', "\\\\").replace('\'', "\\'"))
-}
-
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
 fn wordpress_proxy_https_config() -> &'static str {
