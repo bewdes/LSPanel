@@ -13,6 +13,17 @@ Create, browse, and manage local projects.
 - Repair site file permissions when ownership drifts (common after container-root writes).
 - Backed by: `site_commands.rs`, `sites.rs`, `project_templates.rs`.
 
+## Git
+
+Per-site Git status and source control, without leaving LS Panel.
+
+- Initialize a repository for a site that doesn't have one yet, or open its remote in the browser.
+- View status (branch, ahead/behind counts, dirty working tree) and recent branch details.
+- Fetch, pull (fast-forward only), push, and commit.
+- Switch branches with a safety net: if uncommitted changes would be overwritten, LS Panel offers to stash them before switching or discard them and switch anyway, instead of just failing.
+- An opt-in background monitor periodically fetches each site's repository and notifies you when the local branch falls behind its origin by more than a configurable number of commits (see [Background monitors](#background-monitors)).
+- Backed by: `git.rs`, `git_commands.rs`, `git_status_monitor.rs`.
+
 ## Containers
 
 Manage the Docker/Podman stack backing a site.
@@ -22,8 +33,10 @@ Manage the Docker/Podman stack backing a site.
 - Connect projects through the shared `lspanel` network, with stable service addresses such as `web.demo.localhost`, `database.demo.localhost`, and `redis.demo.localhost`.
 - Optional extra services per environment, each with its own version, credentials, and limits: Redis, Elasticsearch, MinIO, RabbitMQ.
 - Auto-heal restarts a service that crashes or reports unhealthy, and auto-stop shuts down containers that sit idle past a configurable threshold — both optional, both configured in Settings.
+- View the generated configuration behind an environment (compose.yaml, Dockerfile.php, nginx/Apache vhost, php-overrides.ini, and related files) read-only, without needing to find them on disk.
+- Visiting a known site whose environment is stopped shows a "Project stopped" page naming the project, instead of the same generic "domain not found" page shown for an unrecognized domain.
 - Long-running actions are tracked through the operation center so the UI reflects real progress instead of a blocking spinner.
-- Backed by: `container_lifecycle.rs`, `container_inspection.rs`, `container_logs.rs`, `container_routes.rs`, `container_runtime.rs`, `container_validation.rs`, `containers.rs`, `runtime_commands.rs`, `auto_heal_monitor.rs`, `auto_stop_monitor.rs`.
+- Backed by: `container_lifecycle.rs`, `container_inspection.rs`, `container_logs.rs`, `container_routes.rs`, `container_runtime.rs`, `container_validation.rs`, `container_schema.rs`, `container_compose.rs`, `container_bootstrap.rs`, `container_gateway.rs`, `containers.rs`, `runtime_commands.rs`, `auto_heal_monitor.rs`, `auto_stop_monitor.rs`.
 
 ## Databases
 
@@ -32,7 +45,9 @@ Per-project database management, independent of LS Panel's own SQLite metadata s
 - View connection credentials for use in external DB clients or application config.
 - Create, clone, rename, clear, or delete additional databases inside an environment.
 - Import/export a database from/to a file, and run ad-hoc queries.
-- Backed by: `database_commands.rs`.
+- Import or export specific tables instead of the whole database: reads the tables present in a `.sql` file (via the standard `mysqldump`/`pg_dump` per-table comment markers) or lists a database's own tables, and lets you pick which ones.
+- Database actions disable themselves with an explanatory note whenever the environment's database isn't reachable, instead of failing after the fact.
+- Backed by: `database_commands.rs`, `backups.rs`.
 
 ## Backups
 
@@ -74,6 +89,7 @@ Live, streaming logs for both whole projects and individual containers, using a 
 Captures and displays local development email instead of letting projects send real mail, by integrating with a local [Mailpit](https://github.com/axllent/mailpit) instance.
 
 - List, read, delete, mark as read/unread ("check"), and release (actually send) captured messages.
+- The inbox list refreshes automatically in the background, and the SpamAssassin/HTML-compatibility checks for a message you've already opened aren't re-run every time you reopen it in the same session.
 - Backed by: `mailpit.rs`, `mailpit_commands.rs`.
 
 ## Certificates
@@ -92,6 +108,7 @@ Exposes a running local site through a temporary, shareable public link — usef
 - Choice of tunnel provider: Tailscale Serve/Funnel (default), ngrok, or Cloudflare Tunnel — install/auth state, setup, and notes are shown per selected provider, with the same confirm-then-progress install dialog used during onboarding.
 - ngrok: authtoken managed in-app; optional reserved custom domain (requires a paid ngrok plan).
 - Cloudflare Tunnel: browser-based login with the auth URL surfaced in-app (in case the browser doesn't open on its own), a base-domain field that auto-derives each site's hostname, and a one-click authorization reset for switching to a different Cloudflare zone.
+- Starting a LiveLink is disabled with an explanation while the selected site's environment isn't running, instead of failing after the fact.
 - Backed by: `livelink.rs`, `livelink_commands.rs`, `tunnel_provider.rs`.
 
 ## System health & diagnostics
@@ -113,17 +130,20 @@ A real terminal, not a command runner — backed by `portable-pty` on the Rust s
 Panel-wide preferences, not tied to any one project:
 
 - Interface language (English/Ukrainian) and confirmation behavior for destructive actions.
-- System preferences: project storage location, preferred container runtime.
+- System preferences: project storage location, preferred container runtime, Docker BuildKit toggle.
+- Preferred terminal and browser (used everywhere LS Panel opens a terminal or a local site/tool link), each with a custom-command option.
 - Appearance: theme, sidebar behavior, motion/animation.
+- How often the dashboard and sites list refresh their resource-usage stats.
 - Defaults applied to newly created projects, including whether to auto-initialize a Git repository.
-- Backed by: `settings.rs`, `settings_commands.rs`.
+- Backed by: `settings.rs`, `settings_commands.rs`, `desktop_commands.rs`.
 
 ## Notifications
 
 A persistent, in-app notification bell alongside OS-level toast notifications — every tracked action across sites, containers, databases, the file manager, certificates, LiveLink, and settings records a notification you can revisit later.
 
 - View, mark as read, delete individually, or clear all notifications.
-- Optionally forward every notification to a Slack- or Discord-compatible webhook URL, configured once in Settings.
+- Search both the notification history and the operation center's history to filter a long list down to what you're looking for.
+- Optionally forward every notification to a Slack- or Discord-compatible webhook URL, restricted to public hosts, configured once in Settings.
 - Backed by: `notifications.rs`, `webhook.rs`, plus the corresponding commands in `administration_commands.rs`.
 
 ## Background monitors
