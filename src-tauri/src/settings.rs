@@ -146,9 +146,9 @@ pub fn save(app: &tauri::AppHandle, settings: AppSettings) -> Result<AppSettings
         return Err("TLS expiry warning must be between 1 and 365 days".into());
     }
     if !settings.webhook_url.trim().is_empty()
-        && !settings.webhook_url.trim().starts_with("https://")
+        && !crate::webhook::targets_public_host(settings.webhook_url.trim())
     {
-        return Err("Webhook URL must start with https://".into());
+        return Err("Webhook URL must start with https:// and point at a public host".into());
     }
     if !matches!(
         settings.preferred_terminal.as_str(),
