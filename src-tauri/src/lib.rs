@@ -9,6 +9,7 @@ mod bootstrap;
 mod certificate_commands;
 mod container_bootstrap;
 mod container_compose;
+mod container_gateway;
 mod container_inspection;
 mod container_lifecycle;
 mod container_logs;
