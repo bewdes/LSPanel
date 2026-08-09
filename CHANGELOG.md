@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1-beta] - 2026-08-10
+
 ### Changed
 
 - Restyled the Databases list to match the Sites page: a card-wrapped table with a database icon per row, denser stacked columns (usage, status, admin client), and clickable rows that open the database instead of requiring the separate "Edit" button.
@@ -164,7 +166,8 @@ Initial public beta.
 - Bilingual UI and documentation (English / Ukrainian).
 - Apache-2.0 license.
 
-[Unreleased]: https://github.com/bewdes/LSPanel/compare/v0.5.0-beta...HEAD
+[Unreleased]: https://github.com/bewdes/LSPanel/compare/v0.5.1-beta...HEAD
+[0.5.1-beta]: https://github.com/bewdes/LSPanel/releases/tag/v0.5.1-beta
 [0.5.0-beta]: https://github.com/bewdes/LSPanel/releases/tag/v0.5.0-beta
 [0.4.0-beta]: https://github.com/bewdes/LSPanel/releases/tag/v0.4.0-beta
 [0.3.1-beta]: https://github.com/bewdes/LSPanel/releases/tag/v0.3.1-beta
