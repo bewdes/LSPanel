@@ -548,7 +548,9 @@ export function SiteDetailsPage({
           {!(isNative && site.projectType === "static") && (
             <TabsTrigger value="environment">{text.tabEnvironment}</TabsTrigger>
           )}
-          <TabsTrigger value="terminal">{text.tabTerminal}</TabsTrigger>
+          <TabsTrigger value="terminal" disabled={busy || !active}>
+            {text.tabTerminal}
+          </TabsTrigger>
           <TabsTrigger value="backups">{text.tabBackups}</TabsTrigger>
           <TabsTrigger value="tools">{text.tabTools}</TabsTrigger>
         </TabsList>
