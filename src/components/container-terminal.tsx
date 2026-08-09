@@ -7,6 +7,7 @@ import { FitAddon } from "@xterm/addon-fit"
 import { History, Plus, Save, Trash2, X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 
+import { pickLanguage } from "@/i18n"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -44,7 +45,16 @@ type CommandHistory = {
   executedAt: number
 }
 
-export function ContainerTerminal({ site, environment }: { site: Site; environment: Environment }) {
+export function ContainerTerminal({
+  site,
+  environment,
+  language,
+}: {
+  site: Site
+  environment: Environment
+  language: string
+}) {
+  const text = pickLanguage(language).containerTerminal
   const isNative = environment.runtimeMode === "native"
   const initialService = isNative ? "shell" : environment.webServer === "Nginx" ? "php" : "web"
   const [tabs, setTabs] = React.useState([{ id: 1, service: initialService }])
@@ -133,15 +143,13 @@ export function ContainerTerminal({ site, environment }: { site: Site; environme
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{isNative ? "Terminal" : "Container terminal"}</CardTitle>
+        <CardTitle>{isNative ? text.terminalTitle : text.containerTerminalTitle}</CardTitle>
         <CardDescription>
-          {isNative
-            ? "Up to six independent shell sessions in the project directory."
-            : "Up to six independent PTY sessions inside Compose services."}
+          {isNative ? text.nativeShellDescription : text.containerShellDescription}
         </CardDescription>
         <CardAction>
           <Button variant="outline" size="sm" disabled={tabs.length >= 6} onClick={addTab}>
-            <Plus /> New tab
+            <Plus /> {text.newTab}
           </Button>
         </CardAction>
       </CardHeader>
@@ -164,7 +172,7 @@ export function ContainerTerminal({ site, environment }: { site: Site; environme
               <Button
                 variant="ghost"
                 size="icon-sm"
-                title="Close terminal tab"
+                title={text.closeTerminalTab}
                 onClick={() => closeTab(tab.id)}
               >
                 <X />
@@ -176,7 +184,7 @@ export function ContainerTerminal({ site, environment }: { site: Site; environme
           <Input
             value={commandLabel}
             maxLength={80}
-            placeholder="Command label"
+            placeholder={text.commandLabelPlaceholder}
             onChange={(event) => setCommandLabel(event.target.value)}
           />
           <Input
@@ -195,11 +203,11 @@ export function ContainerTerminal({ site, environment }: { site: Site; environme
             disabled={!commandLabel.trim() || !commandText.trim()}
             onClick={() => void saveCommand()}
           >
-            <Save /> Save command
+            <Save /> {text.saveCommand}
           </Button>
           {history.length > 0 && (
             <Button variant="ghost" size="sm" onClick={() => void clearHistory()}>
-              <History /> Clear history
+              <History /> {text.clearHistory}
             </Button>
           )}
           {commandError && <p className="text-xs text-destructive sm:col-span-3">{commandError}</p>}
@@ -209,6 +217,7 @@ export function ContainerTerminal({ site, environment }: { site: Site; environme
             <TerminalSession
               site={site}
               environment={environment}
+              language={language}
               onServiceChange={(service) =>
                 setTabs((current) =>
                   current.map((item) => (item.id === tab.id ? { ...item, service } : item)),
@@ -229,6 +238,7 @@ export function ContainerTerminal({ site, environment }: { site: Site; environme
 function TerminalSession({
   site,
   environment,
+  language,
   onServiceChange,
   savedCommands,
   onDeleteCommand,
@@ -237,12 +247,14 @@ function TerminalSession({
 }: {
   site: Site
   environment: Environment
+  language: string
   onServiceChange: (service: string) => void
   savedCommands: SavedCommand[]
   onDeleteCommand: (id: number) => Promise<void>
   history: CommandHistory[]
   onExecuted: (service: string, command: string) => Promise<void>
 }) {
+  const text = pickLanguage(language).containerTerminal
   const isNative = environment.runtimeMode === "native"
   const [service, setService] = React.useState(
     isNative ? "shell" : environment.webServer === "Nginx" ? "php" : "web",
@@ -275,14 +287,14 @@ function TerminalSession({
     terminal.loadAddon(fit)
     terminal.open(element)
     fit.fit()
-    terminal.writeln("\x1b[2mConnecting to container…\x1b[0m")
+    terminal.writeln(`\x1b[2m${text.connectingToContainer}\x1b[0m`)
     const start = async () => {
       const output = await listen<TerminalEvent>("terminal-output", (event) => {
         if (event.payload.sessionId === sessionId) terminal.write(event.payload.data)
       })
       const exited = await listen<TerminalEvent>("terminal-exited", (event) => {
         if (event.payload.sessionId === sessionId)
-          terminal.writeln("\r\n\x1b[2mSession ended.\x1b[0m")
+          terminal.writeln(`\r\n\x1b[2m${text.sessionEnded}\x1b[0m`)
       })
       try {
         sessionId = await invoke<string>("open_container_terminal", {
@@ -329,7 +341,7 @@ function TerminalSession({
       disposed = true
       cleanup()
     }
-  }, [site.id, service])
+  }, [site.id, service, text.connectingToContainer, text.sessionEnded])
 
   const commands = isNative
     ? []
@@ -359,7 +371,7 @@ function TerminalSession({
   return (
     <div className="grid gap-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">Interactive shell</p>
+        <p className="text-xs text-muted-foreground">{text.interactiveShell}</p>
         {!isNative && (
           <Select value={service} onValueChange={changeService}>
             <SelectTrigger className="w-40">
@@ -401,7 +413,7 @@ function TerminalSession({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                title="Delete saved command"
+                title={text.deleteSavedCommand}
                 onClick={() => void onDeleteCommand(command.id)}
               >
                 <Trash2 />
@@ -412,7 +424,7 @@ function TerminalSession({
       {history.some((entry) => entry.service === service) && (
         <div className="grid gap-2 rounded-lg border p-2">
           <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <History className="size-3" /> Recent commands
+            <History className="size-3" /> {text.recentCommands}
           </p>
           <div className="flex flex-wrap gap-1">
             {history
