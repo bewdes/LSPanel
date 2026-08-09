@@ -106,6 +106,12 @@ const en = {
     recommendedAction: "Recommended action: ",
     close: "Close",
   },
+  credential: {
+    hidePassword: "Hide password",
+    showPassword: "Show password",
+    copied: "Copied",
+    copy: "Copy",
+  },
   dashboard: {
     memory: "Memory",
     workspaceOverview: "Workspace overview",

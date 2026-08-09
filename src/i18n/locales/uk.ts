@@ -108,6 +108,12 @@ const uk: Dictionary = {
     recommendedAction: "Рекомендована дія: ",
     close: "Закрити",
   },
+  credential: {
+    hidePassword: "Приховати пароль",
+    showPassword: "Показати пароль",
+    copied: "Скопійовано",
+    copy: "Копіювати",
+  },
   dashboard: {
     memory: "Пам'ять",
     workspaceOverview: "Огляд робочого простору",

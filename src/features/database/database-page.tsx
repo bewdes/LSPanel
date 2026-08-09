@@ -524,17 +524,27 @@ function DatabaseDetails({
           <CardDescription>{text.connectionSettingsDescription}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
-          <Credential label={text.host} value="database" />
+          <Credential label={text.host} value="database" language={language} />
           <Credential
             label={text.crossProjectHost}
             value={`database.${environment.name.replaceAll("_", "-").toLowerCase()}.localhost`}
+            language={language}
           />
-          <Credential label={text.databaseColumn} value={environment.databaseName ?? "app"} />
-          <Credential label={text.user} value={environment.databaseUser ?? "app"} />
+          <Credential
+            label={text.databaseColumn}
+            value={environment.databaseName ?? "app"}
+            language={language}
+          />
+          <Credential
+            label={text.user}
+            value={environment.databaseUser ?? "app"}
+            language={language}
+          />
           <Credential
             label={text.password}
             value={environment.databasePassword ?? "localdev"}
             secret
+            language={language}
           />
         </CardContent>
       </Card>

@@ -1,17 +1,21 @@
 import * as React from "react"
 import { Check, Copy, Eye, EyeOff } from "lucide-react"
 
+import { pickLanguage } from "@/i18n"
 import { Button } from "@/components/ui/button"
 
 export function Credential({
   label,
   value,
   secret = false,
+  language,
 }: {
   label: string
   value: string
   secret?: boolean
+  language: string
 }) {
+  const text = pickLanguage(language).credential
   const [visible, setVisible] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
   const copy = async () => {
@@ -29,7 +33,7 @@ export function Credential({
             type="button"
             variant="ghost"
             size="icon-sm"
-            title={visible ? "Hide password" : "Show password"}
+            title={visible ? text.hidePassword : text.showPassword}
             onClick={() => setVisible((current) => !current)}
           >
             {visible ? <EyeOff /> : <Eye />}
@@ -39,7 +43,7 @@ export function Credential({
           type="button"
           variant="ghost"
           size="icon-sm"
-          title={copied ? "Copied" : "Copy"}
+          title={copied ? text.copied : text.copy}
           disabled={!value}
           onClick={() => void copy()}
         >
