@@ -8,10 +8,10 @@ LS Panel is currently in beta development.
 
 Security fixes are generally provided for the latest available release.
 
-| Version | Supported |
-| ------- | --------- |
-| Latest beta release | ✅ |
-| Older releases | ❌ |
+| Version             | Supported |
+| ------------------- | --------- |
+| Latest beta release | ✅        |
+| Older releases      | ❌        |
 
 Users are encouraged to update to the latest version before reporting a security issue.
 
