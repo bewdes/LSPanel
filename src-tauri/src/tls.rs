@@ -290,6 +290,7 @@ fn certificate_fingerprint(path: &Path) -> Option<String> {
 }
 
 pub fn force_reissue(app: &tauri::AppHandle) -> Result<(), String> {
+    let _lock = TLS_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     let directory = root(app)?;
     for name in ["local.crt", "local.key", "domains.txt"] {
         let path = directory.join(name);
@@ -302,6 +303,7 @@ pub fn force_reissue(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 pub fn remove_server_certificate(app: &tauri::AppHandle) -> Result<(), String> {
+    let _lock = TLS_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     let directory = root(app)?;
     for name in [
         "local.crt",
@@ -320,6 +322,7 @@ pub fn remove_server_certificate(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 pub fn reset_ca(app: &tauri::AppHandle) -> Result<(), String> {
+    let _lock = TLS_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     for store in browser_stores() {
         let database = format!("sql:{}", store.display());
         let _ = Command::new("certutil")
