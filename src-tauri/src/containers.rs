@@ -247,6 +247,9 @@ pub fn operate_service(
         "adminer",
         "phpmyadmin",
         "cron",
+        "elasticsearch",
+        "minio",
+        "rabbitmq",
     ];
     if !SERVICES.contains(&service) {
         return Err("Unsupported service".into());
@@ -300,6 +303,9 @@ fn service_context(
         "adminer",
         "phpmyadmin",
         "cron",
+        "elasticsearch",
+        "minio",
+        "rabbitmq",
     ];
     if !SERVICES.contains(&service) {
         return Err("Unsupported service".into());
