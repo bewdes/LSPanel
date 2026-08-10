@@ -63,7 +63,9 @@ const EnvironmentWindow = React.lazy(() =>
   })),
 )
 const ProjectWizard = React.lazy(() =>
-  import("@/components/project-wizard").then((module) => ({ default: module.ProjectWizard })),
+  import("@/features/project-wizard/project-wizard").then((module) => ({
+    default: module.ProjectWizard,
+  })),
 )
 
 function App() {
