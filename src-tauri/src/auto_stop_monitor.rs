@@ -67,6 +67,10 @@ fn check(app: &tauri::AppHandle) {
                 let since = *idle_since.entry(environment.id.clone()).or_insert(now);
                 if now - since >= idle_threshold_secs {
                     idle_since.remove(&environment.id);
+                    // Mirrors operate_environment's own "stop" handling: without
+                    // this, auto-heal still sees an enabled site on a stack that
+                    // just stopped and reports it as a crash a few minutes later.
+                    let _ = crate::sites::set_environment_enabled(app, &environment.id, false);
                     if crate::containers::operate(app, &environment.id, "stop").is_ok() {
                         notify(app, &settings, &environment.name);
                     }
