@@ -175,6 +175,7 @@ function App() {
       await invoke("operate_environment", { id, action })
       await refresh()
     } catch (value) {
+      await refresh()
       setError(errorMessage(value))
     }
   }
@@ -185,6 +186,7 @@ function App() {
       await invoke("operate_site", { id, action })
       await refresh()
     } catch (value) {
+      await refresh()
       setError(errorMessage(value))
     }
   }
