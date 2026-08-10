@@ -286,6 +286,7 @@ function DatabaseDetails({
   const [tableImportError, setTableImportError] = React.useState("")
   const [importTablesLoading, setImportTablesLoading] = React.useState(false)
   const [databaseReachable, setDatabaseReachable] = React.useState(true)
+  const [backupsRefreshToken, setBackupsRefreshToken] = React.useState(0)
 
   const load = React.useCallback(async () => {
     setBusy(true)
@@ -330,6 +331,7 @@ function DatabaseDetails({
       await invoke(command, { environmentId: environment.id, ...payload })
       setMessage(success)
       setMessageOk(true)
+      setBackupsRefreshToken((value) => value + 1)
     } catch (value) {
       setMessage(errorMessage(value))
       setMessageOk(false)
@@ -705,7 +707,11 @@ function DatabaseDetails({
       </Card>
 
       <DatabaseConsole environment={environment} language={language} />
-      <DatabaseBackups environment={environment} language={language} />
+      <DatabaseBackups
+        environment={environment}
+        language={language}
+        refreshToken={backupsRefreshToken}
+      />
 
       <Dialog
         open={Boolean(cloneSource)}
