@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Editing an environment from the separate Containers window no longer leaves the main window's environment list stale.
 - Deleting an environment now names the projects it will remove and lets you keep their files on disk instead of always deleting them unconditionally, matching the option already available when deleting a single project.
 - Start/Stop/Restart, exec, log-clearing, and "open in browser" now work for Elasticsearch, MinIO, and RabbitMQ services — they were previously rejected with "Unsupported service" even though they could be added to an environment.
+- The Containers window now notices when its environment is deleted from elsewhere (the main window or another Containers window) instead of continuing to show it as editable.
+- Start/stop/restart no longer leave the status badge showing the pre-operation state after a failure — the real state (which may have partially changed before the failure) is now refreshed immediately instead of only on manual refresh.
 - Removing an extra service (Redis, MinIO, etc.) from a running environment and saving no longer leaves its container running with no way to stop it — saving now reconciles the running stack with the updated configuration.
 
 ## [0.5.1-beta] - 2026-08-10
