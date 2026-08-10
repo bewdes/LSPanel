@@ -40,10 +40,12 @@ export function DatabaseBackups({
   environment,
   language,
   onChanged,
+  refreshToken,
 }: {
   environment: Environment
   language: string
   onChanged?: () => void
+  refreshToken?: number
 }) {
   const text = pickLanguage(language).databaseBackups
   const [items, setItems] = React.useState<DatabaseBackup[]>([])
@@ -69,7 +71,11 @@ export function DatabaseBackups({
   )
   React.useEffect(() => {
     void refresh()
-  }, [refresh])
+    // refreshToken has no meaning of its own — the parent bumps it to signal
+    // that a sibling action (Quick Backup, Clear Database, Import…) may have
+    // changed the backup list, so it's listed here purely to retrigger this
+    // effect.
+  }, [refresh, refreshToken])
   React.useEffect(() => {
     let disposed = false
     invoke("database_info", { environmentId: environment.id })
