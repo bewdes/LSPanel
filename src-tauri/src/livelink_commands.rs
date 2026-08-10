@@ -70,6 +70,26 @@ pub async fn cloudflare_tunnel_reset(app: tauri::AppHandle) -> Result<(), AppErr
 }
 
 #[tauri::command]
+pub async fn stop_livelink_site(
+    app: tauri::AppHandle,
+    site_id: String,
+) -> Result<LiveLinkStatus, AppError> {
+    let worker = app.clone();
+    let result =
+        tauri::async_runtime::spawn_blocking(move || crate::livelink::stop_site(&worker, &site_id))
+            .await
+            .map_err(|error| AppError::from(format!("Не вдалося зупинити LiveLink: {error}")))?
+            .map_err(AppError::from)?;
+    crate::notifications::send_localized(
+        &app,
+        "livelink",
+        "LiveLink вимкнено",
+        "LiveLink disabled",
+    );
+    Ok(result)
+}
+
+#[tauri::command]
 pub async fn stop_livelink(app: tauri::AppHandle) -> Result<LiveLinkStatus, AppError> {
     let worker = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || crate::livelink::stop(&worker))

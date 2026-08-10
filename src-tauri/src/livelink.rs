@@ -253,34 +253,44 @@ fn start_mode(mode: &str, port: u16, local_port: u16) -> Result<std::process::Ou
     )
 }
 
-fn restore_links(app: &tauri::AppHandle, links: &[LiveLinkEntry]) {
-    let _ = save_config(app, links.to_vec());
+/// Rolls the on-disk config back to `previous_links` and, if `site_id` had an
+/// entry there, restarts just that one. Other sites' entries in
+/// `previous_links` are written back to disk (their config never actually
+/// changed) but deliberately NOT restarted — their tunnels were never
+/// touched by the failed operation and are still running; restarting them
+/// here would mean `tunnel_provider::start`'s implicit stop-then-respawn
+/// killing and relaunching an unrelated, working tunnel (changing its public
+/// URL for providers without a reserved domain) just because a different
+/// site's LiveLink attempt failed.
+fn restore_previous_link(app: &tauri::AppHandle, previous_links: &[LiveLinkEntry], site_id: &str) {
+    let _ = save_config(app, previous_links.to_vec());
     let _ = crate::containers::refresh_gateway(app);
-    for link in links {
-        if link.provider == "tailscale" {
-            let _ = start_mode(&link.mode, link.port, link.local_port);
-        } else {
-            let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
-            let cloudflare_directory = cloudflare_config_directory(app).ok();
-            let cloudflare = (link.provider == "cloudflare")
-                .then(|| {
-                    link.hostname
-                        .as_deref()
-                        .zip(cloudflare_directory.as_deref())
-                })
-                .flatten();
-            let ngrok_hostname = (link.provider == "ngrok")
-                .then_some(link.hostname.as_deref())
-                .flatten();
-            let _ = crate::tunnel_provider::start(
-                &tunnel_state,
-                &link.provider,
-                &link.site_id,
-                link.local_port,
-                cloudflare,
-                ngrok_hostname,
-            );
-        }
+    let Some(link) = previous_links.iter().find(|link| link.site_id == site_id) else {
+        return;
+    };
+    if link.provider == "tailscale" {
+        let _ = start_mode(&link.mode, link.port, link.local_port);
+    } else {
+        let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
+        let cloudflare_directory = cloudflare_config_directory(app).ok();
+        let cloudflare = (link.provider == "cloudflare")
+            .then(|| {
+                link.hostname
+                    .as_deref()
+                    .zip(cloudflare_directory.as_deref())
+            })
+            .flatten();
+        let ngrok_hostname = (link.provider == "ngrok")
+            .then_some(link.hostname.as_deref())
+            .flatten();
+        let _ = crate::tunnel_provider::start(
+            &tunnel_state,
+            &link.provider,
+            &link.site_id,
+            link.local_port,
+            cloudflare,
+            ngrok_hostname,
+        );
     }
 }
 
@@ -599,7 +609,7 @@ pub fn start(
     });
     save_config(app, links)?;
     if let Err(error) = crate::containers::refresh_gateway(app) {
-        restore_links(app, &previous_links);
+        restore_previous_link(app, &previous_links, site_id);
         return Err(error);
     }
     if provider == "tailscale" {
@@ -614,7 +624,7 @@ pub fn start(
             output = start_mode(&mode, port, local_port)?;
         }
         if !output.status.success() {
-            restore_links(app, &previous_links);
+            restore_previous_link(app, &previous_links, site_id);
             let detail = format!(
                 "{}{}",
                 String::from_utf8_lossy(&output.stdout),
@@ -646,7 +656,7 @@ pub fn start(
             cloudflare,
             ngrok_hostname,
         ) {
-            restore_links(app, &previous_links);
+            restore_previous_link(app, &previous_links, site_id);
             return Err(error);
         }
     }
@@ -678,6 +688,30 @@ fn validate_hostname(hostname: &str) -> Result<String, String> {
     } else {
         Err("Enter a valid DNS hostname without https:// or a path".into())
     }
+}
+
+/// Stops LiveLink for a single site, leaving every other site's tunnel
+/// untouched — unlike `stop()`, which is a global kill switch for all of
+/// them at once.
+pub fn stop_site(app: &tauri::AppHandle, site_id: &str) -> Result<LiveLinkStatus, String> {
+    let _lock = LIVELINK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let mut links = load_config(app)
+        .map(|config| config.links)
+        .unwrap_or_default();
+    if let Some(existing) = links.iter().find(|link| link.site_id == site_id).cloned() {
+        if existing.provider == "tailscale" {
+            disable_mode(&existing.mode, existing.port)?;
+        } else {
+            let tunnel_state = app.state::<crate::tunnel_provider::TunnelProcesses>();
+            crate::tunnel_provider::stop(&tunnel_state, &existing.site_id);
+        }
+        links.retain(|link| link.site_id != site_id);
+        save_config(app, links)?;
+        crate::containers::refresh_gateway(app)?;
+    }
+    Ok(status(app))
 }
 
 pub fn stop(app: &tauri::AppHandle) -> Result<LiveLinkStatus, String> {
