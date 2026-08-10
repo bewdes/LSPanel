@@ -18,13 +18,26 @@ fn run_due_backups(app: &tauri::AppHandle) {
         if !environment.backup_schedule_enabled || !is_due(app, &environment) {
             continue;
         }
-        if crate::backups::create(app, &environment.id).is_ok() {
-            let _ = crate::backups::prune(
-                app,
-                &environment.id,
-                environment.backup_retention_count as usize,
-                None,
-            );
+        let Ok(operation) =
+            crate::operations::create(app, Some(&environment.id), "database-backup")
+        else {
+            // Another operation is already running for this environment;
+            // try again next tick instead of racing it.
+            continue;
+        };
+        match crate::backups::create(app, &environment.id) {
+            Ok(_) => {
+                let _ = crate::operations::complete(app, &operation.id);
+                let _ = crate::backups::prune(
+                    app,
+                    &environment.id,
+                    environment.backup_retention_count as usize,
+                    None,
+                );
+            }
+            Err(error) => {
+                let _ = crate::operations::fail(app, &operation.id, &error);
+            }
         }
     }
 }
