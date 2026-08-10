@@ -319,6 +319,20 @@ export function LiveLinkPage({
     }
   }
 
+  const stopSite = async (linkSiteId: string) => {
+    setBusy(true)
+    setError("")
+    try {
+      const next = await invoke<LiveLinkStatus>("stop_livelink_site", { siteId: linkSiteId })
+      setStatus(next)
+      setSiteId(nextUnlinkedSite(next.links))
+    } catch (value) {
+      setError(errorMessage(value))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div>
       <PageHeading
@@ -720,15 +734,26 @@ export function LiveLinkPage({
                             {url ?? text.establishing}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={!url}
-                              onClick={() => url && void invoke("open_url", { url })}
-                            >
-                              <ExternalLink />
-                              {text.open}
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!url}
+                                onClick={() => url && void invoke("open_url", { url })}
+                              >
+                                <ExternalLink />
+                                {text.open}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={busy}
+                                onClick={() => void stopSite(link.siteId)}
+                              >
+                                <Unplug />
+                                {text.stop}
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )
