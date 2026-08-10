@@ -940,6 +940,7 @@ const en = {
     navMonitoring: "Monitoring",
     navInterface: "Interface",
     navPerformance: "Performance",
+    navAbout: "About",
     generalCardDescription: "Language, theme, and safety confirmations.",
     languageLabel: "Language",
     confirmDestructiveTitle: "Confirm destructive actions",
@@ -1024,6 +1025,10 @@ const en = {
     performanceCardDescription: "How often LS Panel refreshes live data.",
     statsRefreshIntervalLabel: "Stats refresh interval (seconds)",
     statsRefreshIntervalHint: "How often the dashboard and project resource usage numbers update.",
+    aboutVersion: (version: string) => `Version ${version}`,
+    aboutDescription:
+      "A desktop local development environment manager for PHP/web projects, built with Tauri and React.",
+    aboutContactTitle: "Author & contact",
     saveChanges: "Save changes",
   },
   siteDetails: {

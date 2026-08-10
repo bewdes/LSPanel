@@ -1,15 +1,22 @@
 import * as React from "react"
+import { getVersion } from "@tauri-apps/api/app"
 import { invoke } from "@tauri-apps/api/core"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import {
   BellRing,
+  BookOpen,
   Container,
+  ExternalLink,
   FolderCog,
   Folder,
   Gauge,
+  GitBranch,
+  Info,
   LayoutPanelLeft,
   Layers,
+  Mail,
   Save,
+  Server,
   SlidersHorizontal,
 } from "lucide-react"
 
@@ -33,7 +40,14 @@ import { applyTheme } from "@/theme"
 import { DATABASE_VERSIONS, PHP_VERSIONS, defaultDatabaseVersion } from "@/lib/version-catalog"
 
 type Section =
-  "general" | "workspace" | "docker" | "projects" | "monitoring" | "interface" | "performance"
+  | "general"
+  | "workspace"
+  | "docker"
+  | "projects"
+  | "monitoring"
+  | "interface"
+  | "performance"
+  | "about"
 
 export function SettingsPage({
   settings,
@@ -45,7 +59,12 @@ export function SettingsPage({
   const [draft, setDraft] = React.useState(settings)
   const [status, setStatus] = React.useState("")
   const [section, setSection] = React.useState<Section>("general")
+  const [appVersion, setAppVersion] = React.useState("")
   const text = pickLanguage(draft.language).settings
+
+  React.useEffect(() => {
+    void getVersion().then(setAppVersion)
+  }, [])
 
   const sections: { id: Section; label: string; icon: typeof SlidersHorizontal }[] = [
     { id: "general", label: text.navGeneral, icon: SlidersHorizontal },
@@ -55,6 +74,7 @@ export function SettingsPage({
     { id: "monitoring", label: text.navMonitoring, icon: BellRing },
     { id: "interface", label: text.navInterface, icon: LayoutPanelLeft },
     { id: "performance", label: text.navPerformance, icon: Gauge },
+    { id: "about", label: text.navAbout, icon: Info },
   ]
 
   async function chooseDirectory() {
@@ -636,6 +656,61 @@ export function SettingsPage({
                   />
                 </Field>
                 <p className="text-xs text-muted-foreground">{text.statsRefreshIntervalHint}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {section === "about" && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
+                    <Server className="size-5" />
+                  </div>
+                  <div>
+                    <CardTitle>LS Panel</CardTitle>
+                    {appVersion && (
+                      <CardDescription>{text.aboutVersion(appVersion)}</CardDescription>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-5">
+                <p className="text-sm text-muted-foreground">{text.aboutDescription}</p>
+                <Separator />
+                <div className="grid gap-2">
+                  <Label>{text.aboutContactTitle}</Label>
+                  <Button
+                    variant="outline"
+                    className="justify-start gap-2"
+                    onClick={() => void invoke("open_url", { url: "https://github.com/bewdes" })}
+                  >
+                    <GitBranch className="size-4" />
+                    <span className="flex-1 text-left">github.com/bewdes</span>
+                    <ExternalLink className="size-4 text-muted-foreground" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="justify-start gap-2"
+                    onClick={() =>
+                      void invoke("open_url", { url: "https://github.com/bewdes/LSPanel" })
+                    }
+                  >
+                    <BookOpen className="size-4" />
+                    <span className="flex-1 text-left">github.com/bewdes/LSPanel</span>
+                    <ExternalLink className="size-4 text-muted-foreground" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="justify-start gap-2"
+                    onClick={() => {
+                      window.location.href = "mailto:bewdes.studio@gmail.com"
+                    }}
+                  >
+                    <Mail className="size-4" />
+                    <span className="flex-1 text-left">bewdes.studio@gmail.com</span>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}

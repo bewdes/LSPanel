@@ -1,3 +1,5 @@
+import * as React from "react"
+import { getVersion } from "@tauri-apps/api/app"
 import {
   Blocks,
   ArchiveRestore,
@@ -58,6 +60,10 @@ export function AppSidebar({
   onOpenSearch: () => void
 }) {
   const text = pickLanguage(language).appSidebar
+  const [appVersion, setAppVersion] = React.useState("")
+  React.useEffect(() => {
+    void getVersion().then(setAppVersion)
+  }, [])
   const primary = [
     { id: "dashboard" as const, label: text.dashboard, icon: LayoutDashboard },
     { id: "sites" as const, label: text.sites, icon: Server },
@@ -98,9 +104,11 @@ export function AppSidebar({
               <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="flex items-center gap-1.5 truncate font-semibold">
                   LS Panel
-                  <span className="truncate text-[10px] font-normal text-muted-foreground">
-                    Beta v. 0.1.0
-                  </span>
+                  {appVersion && (
+                    <span className="truncate text-[10px] font-normal text-muted-foreground">
+                      Beta v.{appVersion}
+                    </span>
+                  )}
                 </span>
                 <span className="truncate text-xs text-muted-foreground">Local development</span>
               </div>
