@@ -116,7 +116,7 @@ fn rollback_created_project(
     let _ = project_templates::prepare_for_removal(app, project, environment);
     let _ = containers::operate(app, &environment.id, "destroy");
     let _ = storage::delete_site(app, &project.id);
-    let _ = containers::delete(app, &environment.id);
+    let _ = containers::delete(app, &environment.id, true);
     let _ = containers::refresh_gateway(app);
     rollback_directory_error(baseline, original)
 }
@@ -200,7 +200,7 @@ pub async fn create_project_environment(
         let created = match sites::create(&worker, site) {
             Ok(value) => value,
             Err(error) => {
-                let _ = containers::delete(&worker, &environment.id);
+                let _ = containers::delete(&worker, &environment.id, true);
                 return Err(rollback_directory_error(&directory_baseline, error));
             }
         };
@@ -613,7 +613,11 @@ pub async fn duplicate_site(
                 if let Err(cleanup) = containers::operate(&worker, &environment_id, "destroy") {
                     rollback_errors.push(format!("containers: {cleanup}"));
                 }
-                if let Err(cleanup) = containers::delete(&worker, &environment_id) {
+                // `false`: the project directory is handled by baseline.rollback()
+                // right below - letting containers::delete's own file cleanup run
+                // too would have both mechanisms racing to rename/remove the same
+                // directory.
+                if let Err(cleanup) = containers::delete(&worker, &environment_id, false) {
                     rollback_errors.push(format!("environment record: {cleanup}"));
                 }
             }
