@@ -840,6 +840,10 @@ pub fn terminal_context(
         "mailpit",
         "adminer",
         "phpmyadmin",
+        "cron",
+        "elasticsearch",
+        "minio",
+        "rabbitmq",
     ];
     if !SERVICES.contains(&service) {
         return Err("Unsupported terminal service".into());
