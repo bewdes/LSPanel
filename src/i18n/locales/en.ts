@@ -410,8 +410,11 @@ const en = {
     deletingEnvironment: "Deleting environment…",
     deleteEnvironmentTitle: (name: string) => `Delete ${name}?`,
     keepOpenHint: "Keep LS Panel open until all container resources have been removed.",
-    deleteEnvironmentDescription:
-      "This permanently removes the environment containers, generated stack, database volume, and related site records. This action cannot be undone.",
+    deleteEnvironmentDescription: (siteNames: string[]) =>
+      siteNames.length
+        ? `This permanently removes the environment containers, generated stack, and database volume, along with ${siteNames.length} project${siteNames.length === 1 ? "" : "s"} — ${siteNames.join(", ")}. This action cannot be undone.`
+        : "This permanently removes the environment containers, generated stack, and database volume. This action cannot be undone.",
+    deleteFilesLabel: "Also delete project files from disk",
     cancel: "Cancel",
     deleting: "Deleting…",
     deleteEnvironment: "Delete environment",
