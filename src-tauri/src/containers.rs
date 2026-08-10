@@ -40,12 +40,50 @@ pub fn list(app: &tauri::AppHandle) -> Result<Vec<Environment>, String> {
 
 pub fn save(app: &tauri::AppHandle, environment: Environment) -> Result<Vec<Environment>, String> {
     validate(&environment)?;
+    let was_running = environment.runtime_mode != "native"
+        && environment_status(app, &environment.id)
+            .map(|state| state.status == "running")
+            .unwrap_or(false);
     if environment.runtime_mode != "native" {
         prepare(app, &environment)?;
     }
     let data = serde_json::to_string(&environment).map_err(|error| error.to_string())?;
     crate::storage::save_environment(app, &environment.id, &data)?;
+    if was_running {
+        reconcile_running_stack(app, &environment);
+    }
     list(app)
+}
+
+/// If a service was removed from `extraServices` while the stack was already
+/// running, `prepare()` above already rewrote compose.yaml without it, but
+/// its container is still running — `compose ps` still reports it, yet
+/// `operate_service` now rejects actions on it as "not enabled". Reconcile
+/// the running containers with the just-saved file so a removed service's
+/// container actually stops. Best-effort: a reconciliation failure must
+/// never fail the save, since the environment record and compose.yaml are
+/// already correctly persisted by this point.
+fn reconcile_running_stack(app: &tauri::AppHandle, environment: &Environment) {
+    let Ok(directory) = stack_directory(app, &environment.id) else {
+        return;
+    };
+    let Ok(Some(settings)) = crate::settings::load(app) else {
+        return;
+    };
+    let runtime = detect_runtime(Some(&settings.runtime));
+    let Some(executable) = runtime
+        .runtime
+        .filter(|_| runtime.running && runtime.compose_available)
+    else {
+        return;
+    };
+    let _ = run_compose(
+        app,
+        &environment.id,
+        &executable,
+        &directory,
+        &["compose", "up", "-d", "--remove-orphans"],
+    );
 }
 
 pub fn delete(

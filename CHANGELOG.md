@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The environment status badge said "Running" even when only some of its services were actually up (e.g. one crashed while the rest kept going) — it now shows "Running (2/3)"-style counts when the environment is only partially running.
 - Pinning or archiving a project from its own details page no longer navigates you back to the sites list — only editing its settings or duplicating it does that now.
 - Duplicating or importing a project now shows real progress (stage and percentage) instead of a static "Duplicating…"/"Importing…" label for what can be a multi-minute operation.
+- Removing an extra service (Redis, MinIO, etc.) from a running environment and saving no longer leaves its container running with no way to stop it — saving now reconciles the running stack with the updated configuration.
 
 ## [0.5.1-beta] - 2026-08-10
 
