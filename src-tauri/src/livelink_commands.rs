@@ -16,6 +16,7 @@ pub async fn start_livelink(
     hostname: Option<String>,
 ) -> Result<LiveLinkStatus, AppError> {
     let worker = app.clone();
+    let provider_for_watch = provider.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         crate::livelink::start(&worker, &site_id, &mode, &provider, hostname.as_deref())
     })
@@ -28,6 +29,12 @@ pub async fn start_livelink(
         "LiveLink увімкнено",
         "LiveLink enabled",
     );
+    if provider_for_watch == "tailscale" && !result.serve_enabled {
+        let watcher = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            crate::livelink::watch_until_serve_enabled(&watcher)
+        });
+    }
     Ok(result)
 }
 

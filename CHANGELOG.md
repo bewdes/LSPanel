@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Settings: an "About" section showing the app version, description, and author contact links (GitHub profile, repository, email).
 
+### Fixed
+
+- Editing an environment from the separate Containers window no longer leaves the main window's environment list stale.
+
 ## [0.5.1-beta] - 2026-08-10
 
 ### Changed

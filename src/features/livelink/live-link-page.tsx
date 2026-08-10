@@ -230,9 +230,14 @@ export function LiveLinkPage({
 
   React.useEffect(() => {
     if (!status?.connected || status.serveEnabled) return
-    const timer = window.setInterval(() => void refresh(), 3000)
-    return () => window.clearInterval(timer)
-  }, [refresh, status?.connected, status?.serveEnabled])
+    // Tailscale Serve can take a few seconds to come up after start(); the
+    // backend samples status server-side and pushes each change here instead
+    // of the frontend polling on a timer.
+    const unlisten = listen<LiveLinkStatus>("livelink-status-changed", ({ payload }) =>
+      setStatus(payload),
+    )
+    return () => void unlisten.then((stop) => stop())
+  }, [status?.connected, status?.serveEnabled])
 
   const start = async () => {
     if (!siteId) return

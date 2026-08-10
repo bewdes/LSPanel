@@ -1,3 +1,5 @@
+use tauri::Emitter;
+
 #[tauri::command]
 pub fn export_environment_logs(
     app: tauri::AppHandle,
@@ -72,6 +74,7 @@ pub fn save_environment(
         &format!("Середовище «{name}» збережено"),
         &format!("Environment \"{name}\" saved"),
     );
+    let _ = app.emit("environments-changed", ());
     Ok(result)
 }
 
@@ -83,7 +86,10 @@ pub fn delete_environment(
     let operation = crate::operations::create(&app, Some(&id), "delete-environment")?;
     let result = crate::containers::delete(&app, &id);
     match &result {
-        Ok(_) => crate::operations::complete(&app, &operation.id)?,
+        Ok(_) => {
+            crate::operations::complete(&app, &operation.id)?;
+            let _ = app.emit("environments-changed", ());
+        }
         Err(error) => crate::operations::fail(&app, &operation.id, error)?,
     }
     result

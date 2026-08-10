@@ -2,6 +2,7 @@ use crate::{
     app_error, backups, containers, environment_files, notifications, operations,
     project_templates, security, settings, sites, storage,
 };
+use tauri::Emitter;
 
 #[tauri::command]
 pub fn list_sites(app: tauri::AppHandle) -> Result<Vec<sites::Site>, String> {
@@ -319,7 +320,10 @@ pub async fn create_project_environment(
     .map_err(|error| error.to_string())?;
     let result = result.map_err(|error| security::redact(&error, creation_secrets));
     match &result {
-        Ok(_) => operations::complete(&app, &operation_id)?,
+        Ok(_) => {
+            operations::complete(&app, &operation_id)?;
+            let _ = app.emit("environments-changed", ());
+        }
         Err(error) => operations::fail(&app, &operation_id, error)?,
     }
     app_error::AppError::operation_result(result, operation_id)
