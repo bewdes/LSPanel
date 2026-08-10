@@ -268,6 +268,7 @@ const en = {
     checkingRuntime: "Checking container runtime…",
     nativeRuntimeDescription: "Native process on the host — Docker is not required.",
     checking: "checking",
+    partiallyRunning: (running: number, total: number) => `Running (${running}/${total})`,
     pause: "Pause",
     resume: "Resume",
     clearView: "Clear view",

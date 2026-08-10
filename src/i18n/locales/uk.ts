@@ -307,6 +307,7 @@ const uk: Dictionary = {
     checkingRuntime: "Перевірка контейнерного runtime…",
     nativeRuntimeDescription: "Нативний процес на хості — Docker не потрібен.",
     checking: "перевірка",
+    partiallyRunning: (running: number, total: number) => `Запущено (${running}/${total})`,
     pause: "Пауза",
     resume: "Продовжити",
     clearView: "Очистити перегляд",

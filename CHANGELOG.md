@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Editing an environment from the separate Containers window no longer leaves the main window's environment list stale.
+- The environment status badge said "Running" even when only some of its services were actually up (e.g. one crashed while the rest kept going) — it now shows "Running (2/3)"-style counts when the environment is only partially running.
 
 ## [0.5.1-beta] - 2026-08-10
 
