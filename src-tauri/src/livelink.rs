@@ -8,7 +8,7 @@ use std::{
     process::{Command, Stdio},
     sync::{LazyLock, Mutex},
 };
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// Serializes mutating access to the shared `livelink.json` config across
 /// `start()`/`stop()`. Without this, two near-simultaneous `start()` calls
@@ -444,6 +444,28 @@ pub fn status(app: &tauri::AppHandle) -> LiveLinkStatus {
             "Tailscale is ready".into()
         },
         links,
+    }
+}
+
+/// After `start()` returns for Tailscale, HTTPS serve can take a few more
+/// seconds to actually come up on Tailscale's backend. Rather than have the
+/// frontend poll `status()` on a timer, sample it here on the backend and
+/// push each change via the "livelink-status-changed" event. Bounded to
+/// ~60s and stops as soon as serve is enabled or the tunnel drops, so this
+/// never lingers as a permanent background task.
+pub fn watch_until_serve_enabled(app: &tauri::AppHandle) {
+    let mut previous: Option<(bool, bool)> = None;
+    for _ in 0..60 {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let current = status(app);
+        let signature = (current.connected, current.serve_enabled);
+        if previous != Some(signature) {
+            previous = Some(signature);
+            let _ = app.emit("livelink-status-changed", &current);
+        }
+        if current.serve_enabled || !current.connected {
+            return;
+        }
     }
 }
 
