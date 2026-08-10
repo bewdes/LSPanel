@@ -976,6 +976,7 @@ const uk: Dictionary = {
     navMonitoring: "Моніторинг",
     navInterface: "Інтерфейс",
     navPerformance: "Продуктивність",
+    navAbout: "Про застосунок",
     generalCardDescription: "Мова, тема та підтвердження небезпечних дій.",
     languageLabel: "Мова",
     confirmDestructiveTitle: "Підтверджувати руйнівні дії",
@@ -1062,6 +1063,10 @@ const uk: Dictionary = {
     statsRefreshIntervalLabel: "Інтервал оновлення статистики (секунд)",
     statsRefreshIntervalHint:
       "Як часто оновлюються показники дашборду та використання ресурсів проєктів.",
+    aboutVersion: (version: string) => `Версія ${version}`,
+    aboutDescription:
+      "Десктопний менеджер локального середовища розробки для PHP/веб-проєктів, створений на Tauri та React.",
+    aboutContactTitle: "Автор і контакти",
     saveChanges: "Зберегти зміни",
   },
   siteDetails: {
