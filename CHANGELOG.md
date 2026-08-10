@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Editing an environment from the separate Containers window no longer leaves the main window's environment list stale.
 - Deleting an environment now names the projects it will remove and lets you keep their files on disk instead of always deleting them unconditionally, matching the option already available when deleting a single project.
+- Start/Stop/Restart, exec, log-clearing, and "open in browser" now work for Elasticsearch, MinIO, and RabbitMQ services — they were previously rejected with "Unsupported service" even though they could be added to an environment.
 - The environment status badge said "Running" even when only some of its services were actually up (e.g. one crashed while the rest kept going) — it now shows "Running (2/3)"-style counts when the environment is only partially running.
 
 ## [0.5.1-beta] - 2026-08-10
