@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Editing an environment from the separate Containers window no longer leaves the main window's environment list stale.
+- Deleting an environment now names the projects it will remove and lets you keep their files on disk instead of always deleting them unconditionally, matching the option already available when deleting a single project.
 - Removing an extra service (Redis, MinIO, etc.) from a running environment and saving no longer leaves its container running with no way to stop it — saving now reconciles the running stack with the updated configuration.
 
 ## [0.5.1-beta] - 2026-08-10
