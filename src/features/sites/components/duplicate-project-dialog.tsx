@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import { pickLanguage } from "@/i18n"
 
 export function DuplicateProjectDialog({
@@ -19,6 +20,7 @@ export function DuplicateProjectDialog({
   domain,
   setDomain,
   busy,
+  progress,
   onDuplicate,
   language,
 }: {
@@ -29,6 +31,7 @@ export function DuplicateProjectDialog({
   domain: string
   setDomain: (value: string) => void
   busy: boolean
+  progress: { progress: number; stage: string } | null
   onDuplicate: () => void
   language: string
 }) {
@@ -59,6 +62,15 @@ export function DuplicateProjectDialog({
             />
           </div>
         </div>
+        {progress && (
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span className="truncate">{progress.stage}</span>
+              <span className="shrink-0 tabular-nums">{progress.progress}%</span>
+            </div>
+            <Progress value={progress.progress} />
+          </div>
+        )}
         <DialogFooter>
           <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
             {text.cancel}

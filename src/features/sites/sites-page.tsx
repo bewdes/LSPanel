@@ -1,5 +1,6 @@
 import * as React from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import {
   Archive,
@@ -43,6 +44,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import {
   Select,
   SelectContent,
@@ -98,6 +100,10 @@ export function SitesPage({
   const [importDomain, setImportDomain] = React.useState("")
   const [importBusy, setImportBusy] = React.useState(false)
   const [importError, setImportError] = React.useState("")
+  const [importProgress, setImportProgress] = React.useState<{
+    progress: number
+    stage: string
+  } | null>(null)
   const text = pickLanguage(language).sites
   const chooseImportBundle = async () => {
     const selected = await openDialog({ directory: true, multiple: false })
@@ -107,6 +113,14 @@ export function SitesPage({
   async function importProject() {
     setImportBusy(true)
     setImportError("")
+    setImportProgress({ progress: 0, stage: "" })
+    const unlisten = await listen<{ kind: string; progress: number; stage: string }>(
+      "operation-progress",
+      ({ payload }) => {
+        if (payload.kind !== "project-import") return
+        setImportProgress({ progress: payload.progress, stage: payload.stage })
+      },
+    )
     try {
       const created = await invoke<Site[]>("import_project_bundle", {
         source: importSource,
@@ -122,6 +136,8 @@ export function SitesPage({
     } catch (error) {
       setImportError(errorMessage(error))
     } finally {
+      unlisten()
+      setImportProgress(null)
       setImportBusy(false)
     }
   }
@@ -499,6 +515,15 @@ export function SitesPage({
               />
             </div>
           </div>
+          {importProgress && (
+            <div className="grid gap-1.5">
+              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span className="truncate">{importProgress.stage}</span>
+                <span className="shrink-0 tabular-nums">{importProgress.progress}%</span>
+              </div>
+              <Progress value={importProgress.progress} />
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" disabled={importBusy} onClick={() => setImportOpen(false)}>
               {text.cancel}
