@@ -27,14 +27,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-type Site = { id: string }
-type Environment = {
-  id: string
-  webServer: string
-  database: string
-  extraServices?: string[]
-  runtimeMode?: string
-}
+import type { Environment, Site } from "@/types"
+
 type TerminalEvent = { sessionId: string; data: string }
 type SavedCommand = { id: number; siteId: string; label: string; command: string; service: string }
 type CommandHistory = {
