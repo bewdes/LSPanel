@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Editing an environment from the separate Containers window no longer leaves the main window's environment list stale.
 - Deleting an environment now names the projects it will remove and lets you keep their files on disk instead of always deleting them unconditionally, matching the option already available when deleting a single project.
+- Start/Stop/Restart, exec, log-clearing, and "open in browser" now work for Elasticsearch, MinIO, and RabbitMQ services — they were previously rejected with "Unsupported service" even though they could be added to an environment.
 - Pinning or archiving a project from its own details page no longer navigates you back to the sites list — only editing its settings or duplicating it does that now.
 - Duplicating or importing a project now shows real progress (stage and percentage) instead of a static "Duplicating…"/"Importing…" label for what can be a multi-minute operation.
 
