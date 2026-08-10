@@ -91,6 +91,23 @@ export function EnvironmentWindow({
       void unlisten.then((dispose) => dispose())
     }
   }, [id, inspect])
+  React.useEffect(() => {
+    const unlisten = listen("environments-changed", () => {
+      if (!id) return
+      void invoke<Environment[]>("list_environments").then((items) => {
+        if (!items.some((item) => item.id === id)) {
+          setMessage(text.environmentDeletedElsewhere)
+          setMessageOk(false)
+          onBack()
+        } else {
+          void inspect()
+        }
+      })
+    })
+    return () => {
+      void unlisten.then((dispose) => dispose())
+    }
+  }, [id, onBack, inspect, text.environmentDeletedElsewhere])
   if (!draft)
     return (
       <div className="grid size-full place-items-center text-sm text-muted-foreground">
@@ -165,6 +182,8 @@ export function EnvironmentWindow({
       await inspect()
       await emit("environments-changed")
     } catch (error) {
+      await inspect()
+      await emit("environments-changed")
       setMessage(errorMessage(error))
     } finally {
       setBusy(false)
@@ -179,6 +198,8 @@ export function EnvironmentWindow({
       await inspect()
       await emit("environments-changed")
     } catch (error) {
+      await inspect()
+      await emit("environments-changed")
       setMessage(errorMessage(error))
     } finally {
       setBusy(false)

@@ -459,6 +459,7 @@ const uk: Dictionary = {
     saveEnvironment: "Зберегти середовище",
     environmentSaved: "Середовище збережено",
     environmentBuiltAndStarted: "Середовище зібрано та запущено",
+    environmentDeletedElsewhere: "Це середовище було видалено з іншого вікна.",
     preparingRemoval: "Підготовка до видалення середовища",
     stoppingContainers: "Зупинка контейнерів та видалення томів",
     removingData: "Видалення згенерованих даних та записів сайтів",

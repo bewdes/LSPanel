@@ -419,6 +419,7 @@ const en = {
     saveEnvironment: "Save environment",
     environmentSaved: "Environment saved",
     environmentBuiltAndStarted: "Environment built and started",
+    environmentDeletedElsewhere: "This environment was deleted from another window.",
     preparingRemoval: "Preparing environment removal",
     stoppingContainers: "Stopping containers and removing volumes",
     removingData: "Removing generated data and site records",

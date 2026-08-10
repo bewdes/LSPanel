@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Editing an environment from the separate Containers window no longer leaves the main window's environment list stale.
+- The Containers window now notices when its environment is deleted from elsewhere (the main window or another Containers window) instead of continuing to show it as editable.
+- Start/stop/restart no longer leave the status badge showing the pre-operation state after a failure — the real state (which may have partially changed before the failure) is now refreshed immediately instead of only on manual refresh.
 
 ## [0.5.1-beta] - 2026-08-10
 
