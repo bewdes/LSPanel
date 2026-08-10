@@ -1,11 +1,8 @@
 # LS Panel
 
-<!--
-  Add a real dashboard screenshot once available, then uncomment:
-  <p align="center">
-    <img src="docs/images/dashboard.png" alt="LS Panel dashboard" width="800">
-  </p>
--->
+<p align="center">
+  <img src="docs/assets/poster_en.jpg" alt="LS Panel — desktop local development environment manager for PHP/web projects" width="800">
+</p>
 
 **LS Panel** is a desktop local development environment manager for PHP/web projects. It runs as a native app (Tauri + React) and drives Docker/Podman containers, local databases, TLS certificates, mail capture, backups, and more through a single UI.
 
