@@ -73,78 +73,8 @@ import {
   WEB_SERVER_VERSIONS,
   defaultDatabaseVersion,
 } from "@/lib/version-catalog"
+import type { Environment } from "@/types"
 
-export type Environment = {
-  id: string
-  name: string
-  webServer: string
-  webVersion: string
-  phpVersion: string
-  database: string
-  databaseVersion: string
-  port: string
-  webContainerName: string
-  databaseContainerName: string
-  phpExtensions: string[]
-  extraServices: string[]
-  nodeVersion: string
-  redisVersion: string
-  databaseName: string
-  databaseUser: string
-  databasePassword: string
-  databaseRootPassword: string
-  phpMemoryLimit: string
-  phpUploadLimit: string
-  phpPostLimit: string
-  phpExecutionTime: number
-  phpJit: boolean
-  phpJitMode: string
-  phpJitBufferSize: string
-  phpCron: boolean
-  phpCronSchedule: string
-  phpCronCommand: string
-  phpFpmProcessManager: string
-  phpFpmMaxChildren: number
-  phpFpmStartServers: number
-  phpFpmMinSpareServers: number
-  phpFpmMaxSpareServers: number
-  phpFpmMaxRequests: number
-  phpXdebug: boolean
-  phpXdebugMode: string
-  phpXdebugPort: number
-  phpXdebugStart: string
-  phpXdebugIdeKey: string
-  environmentVariables: Record<string, string>
-  redisPassword: string
-  redisMemoryLimit: string
-  redisEvictionPolicy: string
-  elasticsearchVersion: string
-  elasticsearchMemoryLimit: string
-  minioVersion: string
-  minioRootUser: string
-  minioRootPassword: string
-  rabbitmqVersion: string
-  rabbitmqUser: string
-  rabbitmqPassword: string
-  nodePackageManager: string
-  nodeAutoInstall: boolean
-  nodeAutoRestart: boolean
-  nodeCommand: string
-  nodeRunMode: string
-  nodeDevCommand: string
-  nodeBuildCommand: string
-  nodeStartCommand: string
-  nodeInspector: boolean
-  nodeInspectorPort: number
-  composerVersion: string
-  restartPolicy: string
-  cpuLimit: string
-  containerMemoryLimit: string
-  runtimeMode: string
-  backupScheduleEnabled: boolean
-  backupScheduleIntervalHours: number
-  backupRetentionCount: number
-}
 type Inspection = {
   status: string
   provisioned: boolean
@@ -234,6 +164,10 @@ const defaults = (): Environment => ({
   backupScheduleEnabled: false,
   backupScheduleIntervalHours: 24,
   backupRetentionCount: 7,
+  wordpressSiteTitle: "",
+  wordpressAdminUser: "",
+  wordpressAdminPassword: "",
+  wordpressAdminEmail: "",
 })
 const services = [
   "redis",

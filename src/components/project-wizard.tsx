@@ -43,17 +43,23 @@ import {
   WEB_SERVER_VERSIONS,
   defaultDatabaseVersion,
 } from "@/lib/version-catalog"
-import type { Runtime } from "@/types"
+import type { Environment, Runtime, Site } from "@/types"
 
-type Environment = {
-  id: string
-  name: string
-  phpVersion: string
-  webServer: string
-  database: string
-  databaseVersion: string
-}
-type Site = { id: string; name: string; domain: string; environmentId: string }
+// Fields intentionally not collected by the wizard; the backend fills them via #[serde(default)].
+type WizardEnvironmentPayload = Omit<
+  Environment,
+  | "elasticsearchVersion"
+  | "elasticsearchMemoryLimit"
+  | "minioVersion"
+  | "minioRootUser"
+  | "minioRootPassword"
+  | "rabbitmqVersion"
+  | "rabbitmqUser"
+  | "rabbitmqPassword"
+  | "backupScheduleEnabled"
+  | "backupScheduleIntervalHours"
+  | "backupRetentionCount"
+>
 type OperationProgress = {
   environmentId?: string
   progress: number
@@ -298,7 +304,7 @@ export function ProjectWizard({
         ])
         targetEnvironment = `env-${timestamp}`
         activeCreationEnvironment.current = targetEnvironment
-        const payload = {
+        const payload: WizardEnvironmentPayload = {
           id: targetEnvironment,
           name: environmentName,
           webServer,
