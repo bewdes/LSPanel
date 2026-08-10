@@ -240,6 +240,7 @@ pub fn restore(app: &tauri::AppHandle, site_id: &str, id: &str) -> Result<(), St
         crate::containers::operate(app, &manifest.environment.id, "start")?;
     }
     let safety = create(app, site_id, "Automatic pre-restore snapshot")?;
+    prune(app, site_id, 20, None)?;
     let safety_directory = root(app, site_id)?.join(&safety.id);
     let safety_manifest = load_manifest(&safety_directory)?;
     run_with_rollback(
