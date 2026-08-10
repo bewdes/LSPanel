@@ -9,35 +9,18 @@ import {
   Download,
   ExternalLink,
   Folder,
-  GitBranch,
-  History,
   KeyRound,
   Pin,
   Play,
-  Plus,
-  RefreshCw,
-  Save,
   Settings2,
   Square,
   TerminalSquare,
   Trash2,
-  Wrench,
 } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { errorMessage } from "@/lib/errors"
 import {
   Card,
@@ -55,15 +38,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Credential } from "@/components/credential"
@@ -75,7 +49,21 @@ import { DatabaseBackups } from "@/features/backups/components/database-backups"
 import { pickLanguage } from "@/i18n"
 import { serviceHostname } from "@/lib/format"
 import type { Environment, Site } from "@/types"
-import type { GitDetails, GitStatus, HealthReport } from "@/features/sites/types"
+import type { HealthReport } from "@/features/sites/types"
+
+import { CheckoutConflictDialog } from "./components/checkout-conflict-dialog"
+import { DeleteSiteDialog } from "./components/delete-site-dialog"
+import { DeveloperToolsCard } from "./components/developer-tools-card"
+import { DomainAliasesCard } from "./components/domain-aliases-card"
+import { DuplicateProjectDialog } from "./components/duplicate-project-dialog"
+import { EditProjectDialog } from "./components/edit-project-dialog"
+import { ProjectHealthCard } from "./components/project-health-card"
+import { ProjectServicesCard } from "./components/project-services-card"
+import { QuickCommandsCard } from "./components/quick-commands-card"
+import { SiteGitPanel } from "./components/site-git-panel"
+import { WpCliCard } from "./components/wp-cli-card"
+import { splitCommandLine } from "./helpers"
+import { useSiteGit } from "./use-site-git"
 
 const ContainerTerminal = React.lazy(() =>
   import("@/components/container-terminal").then((module) => ({
@@ -105,21 +93,10 @@ export function SiteDetailsPage({
   const [messageOk, setMessageOk] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [deleteFiles, setDeleteFiles] = React.useState(true)
-  const [gitStatus, setGitStatus] = React.useState<GitStatus | null>(null)
-  const [gitDetails, setGitDetails] = React.useState<GitDetails | null>(null)
-  const [newBranch, setNewBranch] = React.useState("")
-  const [pendingCheckout, setPendingCheckout] = React.useState<{
-    branch: string
-    create: boolean
-  } | null>(null)
   const [quickOutput, setQuickOutput] = React.useState("")
   const [customCommand, setCustomCommand] = React.useState("")
-  const [wpCliCommand, setWpCliCommand] = React.useState("")
-  const [wpCliBusy, setWpCliBusy] = React.useState(false)
-  const [wpCliOutput, setWpCliOutput] = React.useState("")
   const [projectHealth, setProjectHealth] = React.useState<HealthReport | null>(null)
   const [phpInfo, setPhpInfo] = React.useState<string | null>(null)
-  const [commitMessage, setCommitMessage] = React.useState("")
   const [editOpen, setEditOpen] = React.useState(false)
   const [editName, setEditName] = React.useState(site?.name ?? "")
   const [editDomain, setEditDomain] = React.useState(site?.domain ?? "")
@@ -137,23 +114,11 @@ export function SiteDetailsPage({
     setEditTags((site?.tags ?? []).join(", "))
     setEditAliases((site?.aliases ?? []).join(", "))
   }, [site?.id, site?.name, site?.domain, site?.group, site?.tags, site?.aliases])
-  React.useEffect(() => {
-    if (site?.directory)
-      void Promise.all([
-        invoke<GitStatus>("site_git_status", { directory: `${site.directory}/app` }),
-        invoke<GitDetails>("site_git_details", { directory: `${site.directory}/app` }).catch(
-          () => null,
-        ),
-      ])
-        .then(([status, details]) => {
-          setGitStatus(status)
-          setGitDetails(details)
-        })
-        .catch(() => {
-          setGitStatus(null)
-          setGitDetails(null)
-        })
-  }, [site?.directory])
+  const git = useSiteGit(
+    site ?? { id: "", name: "", domain: "", environmentId: "", directory: "" },
+    { setBusy, setMessage, setMessageOk },
+    language,
+  )
   if (!site || !environment)
     return <EmptyPage title={text.notFoundTitle} description={text.notFoundDescription} />
   const currentSite = site
@@ -263,88 +228,6 @@ export function SiteDetailsPage({
       setBusy(false)
     }
   }
-  async function refreshGit() {
-    const [status, details] = await Promise.all([
-      invoke<GitStatus>("site_git_status", { directory: `${currentSite.directory}/app` }),
-      invoke<GitDetails>("site_git_details", { directory: `${currentSite.directory}/app` }),
-    ])
-    setGitStatus(status)
-    setGitDetails(details)
-  }
-  async function gitAction(action: "fetch" | "pull" | "commit" | "push") {
-    setBusy(true)
-    setMessage("")
-    try {
-      await invoke<GitStatus>("site_git_action", {
-        directory: `${currentSite.directory}/app`,
-        action,
-        message: commitMessage,
-      })
-      if (action === "commit") setCommitMessage("")
-      await refreshGit()
-      setMessage(text.gitCompletedMessage(action))
-      setMessageOk(true)
-    } catch (error) {
-      setMessage(errorMessage(error))
-      setMessageOk(false)
-    } finally {
-      setBusy(false)
-    }
-  }
-  async function initializeGit() {
-    setBusy(true)
-    setMessage("")
-    try {
-      await invoke<GitStatus>("initialize_site_git", { siteId: currentSite.id })
-      await refreshGit()
-      setMessage(text.gitInitSuccessMessage)
-      setMessageOk(true)
-    } catch (error) {
-      setMessage(errorMessage(error))
-      setMessageOk(false)
-    } finally {
-      setBusy(false)
-    }
-  }
-  async function checkoutBranch(
-    branch: string,
-    create = false,
-    options?: { stash?: boolean; force?: boolean },
-  ) {
-    if (!branch) return
-    setBusy(true)
-    setMessage("")
-    try {
-      await invoke<GitStatus>("site_git_checkout", {
-        directory: `${currentSite.directory}/app`,
-        branch,
-        create,
-        stash: options?.stash ?? false,
-        force: options?.force ?? false,
-      })
-      setNewBranch("")
-      setPendingCheckout(null)
-      await refreshGit()
-      setMessage(
-        options?.stash
-          ? text.stashedAndSwitchedTo(branch)
-          : create
-            ? text.createdAndSwitchedTo(branch)
-            : text.switchedTo(branch),
-      )
-      setMessageOk(true)
-    } catch (error) {
-      const description = errorMessage(error)
-      if (!options?.stash && !options?.force && isDirtyCheckoutConflict(description)) {
-        setPendingCheckout({ branch, create })
-      } else {
-        setMessage(description)
-        setMessageOk(false)
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
   async function runQuickCommand(command: string) {
     setBusy(true)
     setQuickOutput("")
@@ -366,41 +249,6 @@ export function SiteDetailsPage({
       setQuickOutput(`$ ${command}\n${errorMessage(error)}`)
     } finally {
       setBusy(false)
-    }
-  }
-  async function runWpCli(command: string) {
-    const trimmed = command.trim()
-    if (!trimmed) return
-    setWpCliBusy(true)
-    setWpCliOutput("")
-    try {
-      const service = currentEnvironment.webServer === "Nginx" ? "php" : "web"
-      await invoke<string>("execute_environment_service_command", {
-        id: currentEnvironment.id,
-        service,
-        command: [
-          "php",
-          "-r",
-          "$d=file_get_contents('https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar'); if($d===false){exit(2);} file_put_contents('/tmp/lspanel-wpcli.phar',$d);",
-        ],
-      })
-      const args = splitCommandLine(trimmed)
-      const output = await invoke<string>("execute_environment_service_command", {
-        id: currentEnvironment.id,
-        service,
-        command: [
-          "php",
-          "/tmp/lspanel-wpcli.phar",
-          ...args,
-          "--allow-root",
-          `--path=/var/www/sites/${currentSite.name}/app`,
-        ],
-      })
-      setWpCliOutput(`$ wp ${trimmed}\n${output}`)
-    } catch (error) {
-      setWpCliOutput(`$ wp ${trimmed}\n${errorMessage(error)}`)
-    } finally {
-      setWpCliBusy(false)
     }
   }
   async function checkProjectHealth() {
@@ -555,145 +403,30 @@ export function SiteDetailsPage({
           <TabsTrigger value="tools">{text.tabTools}</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="grid gap-4 pt-4 md:grid-cols-2">
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-base">{text.projectServices}</CardTitle>
-              <CardDescription>{text.projectServicesDescription}</CardDescription>
-            </CardHeader>
-            <CardContent className="grid divide-y text-sm">
-              <div className="flex items-center justify-between py-1.5 first:pt-0">
-                <span className="text-muted-foreground">{text.domain}</span>
-                <span className="font-medium">
-                  {isNative ? `127.0.0.1:${currentEnvironment.port}` : site.domain}
-                </span>
-              </div>
-              {isNative ? (
-                (site.projectType === "node" || site.projectType === "react") && (
-                  <div className="flex items-center justify-between py-1.5">
-                    <span className="text-muted-foreground">Node.js</span>
-                    <span className="font-medium">
-                      {environment.nodeVersion} · {environment.nodePackageManager}
-                    </span>
-                  </div>
-                )
-              ) : (
-                <>
-                  <div className="flex items-center justify-between py-1.5">
-                    <span className="text-muted-foreground">{text.webServer}</span>
-                    <span className="font-medium">
-                      {environment.webServer}
-                      {environment.webServer === "Nginx" ? ` ${environment.webVersion}` : ""}
-                    </span>
-                  </div>
-                  {site.projectType !== "node" && site.projectType !== "react" && (
-                    <div className="flex items-center justify-between py-1.5">
-                      <span className="text-muted-foreground">PHP</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{environment.phpVersion}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={busy || !active}
-                          title={text.viewPhpInfo}
-                          onClick={() => void loadPhpInfo()}
-                        >
-                          <Code2 />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between py-1.5">
-                    <span className="text-muted-foreground">{text.database}</span>
-                    <span className="font-medium">
-                      {environment.database} {environment.databaseVersion}
-                    </span>
-                  </div>
-                </>
-              )}
-              <div className="flex items-center justify-between py-1.5 last:pb-0">
-                <span className="text-muted-foreground">Git</span>
-                <span className="font-medium">
-                  {gitStatus?.repository
-                    ? `${gitStatus.branch}${gitStatus.dirty ? ` · ${text.changedFiles(gitStatus.changedFiles)}` : ` · ${text.workingTreeClean}`}`
-                    : text.gitNotInitialized}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{text.domainAliases}</CardTitle>
-              <CardDescription>{text.domainAliasesDescription}</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2">
-              <Input
-                value={editAliases}
-                onChange={(event) => setEditAliases(event.target.value.toLowerCase())}
-                placeholder="api.demo.localhost, *.demo.localhost"
-              />
-              <p className="text-xs text-muted-foreground">{text.aliasesHint}</p>
-            </CardContent>
-            <CardFooter>
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => void updateProject({ aliases: editAliases.split(",") })}
-              >
-                <Save />
-                {text.saveAliases}
-              </Button>
-            </CardFooter>
-          </Card>
-          <Card>
-            <CardHeader className="flex-row items-center">
-              <div>
-                <CardTitle className="text-base">{text.projectHealth}</CardTitle>
-                <CardDescription>{text.projectHealthDescription}</CardDescription>
-              </div>
-              <Button
-                className="ml-auto"
-                variant="outline"
-                disabled={busy || !active}
-                onClick={() => void checkProjectHealth()}
-              >
-                <RefreshCw className={busy ? "animate-spin" : ""} />
-                {text.runChecks}
-              </Button>
-            </CardHeader>
-            {projectHealth && (
-              <CardContent className="grid gap-2 sm:grid-cols-2">
-                {projectHealth.checks.map((item) => (
-                  <div key={item.code} className="grid gap-1 rounded-lg border p-3 text-sm">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">{item.title}</span>
-                      <Badge
-                        variant={
-                          item.status === "healthy"
-                            ? "default"
-                            : item.status === "warning"
-                              ? "secondary"
-                              : "destructive"
-                        }
-                      >
-                        {item.status}
-                      </Badge>
-                    </div>
-                    <p className="text-muted-foreground">{item.summary}</p>
-                    {item.suggestions.map((suggestion) => (
-                      <p key={suggestion} className="text-xs text-muted-foreground">
-                        {suggestion}
-                      </p>
-                    ))}
-                  </div>
-                ))}
-              </CardContent>
-            )}
-            {!active && (
-              <CardFooter className="text-sm text-muted-foreground">
-                {text.startEnvironmentBeforeChecks}
-              </CardFooter>
-            )}
-          </Card>
+          <ProjectServicesCard
+            site={site}
+            environment={environment}
+            isNative={isNative}
+            gitStatus={git.status}
+            busy={busy}
+            active={active}
+            onViewPhpInfo={() => void loadPhpInfo()}
+            language={language}
+          />
+          <DomainAliasesCard
+            aliases={editAliases}
+            setAliases={setEditAliases}
+            busy={busy}
+            onSave={() => void updateProject({ aliases: editAliases.split(",") })}
+            language={language}
+          />
+          <ProjectHealthCard
+            health={projectHealth}
+            busy={busy}
+            active={active}
+            onCheck={() => void checkProjectHealth()}
+            language={language}
+          />
         </TabsContent>
         {!isNative && (
           <TabsContent value="database" className="grid gap-4 pt-4">
@@ -790,310 +523,53 @@ export function SiteDetailsPage({
         </TabsContent>
         <TabsContent value="tools" className="grid gap-4 pt-4">
           {!isNative && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{text.developerTools}</CardTitle>
-                <CardDescription>{text.projectActions}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  disabled={!active}
-                  onClick={() => open("repair_site_permissions", { id: site.id })}
-                >
-                  <Wrench />
-                  {text.repairPermissions}
-                </Button>
-                {environment.extraServices?.includes("mailpit") && (
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      open("open_url", {
-                        url: `https://${serviceHostname("mailpit", environment.name)}`,
-                      })
-                    }
-                  >
-                    Mailpit <ExternalLink />
-                  </Button>
-                )}
-                {site.projectType === "laravel" && (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={() => open("open_url", { url: `https://${site.domain}/telescope` })}
-                    >
-                      Telescope <ExternalLink />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        open("open_editor", {
-                          path: `${site.directory}/app/storage/logs/laravel.log`,
-                        })
-                      }
-                    >
-                      <Code2 />
-                      {text.laravelLog}
-                    </Button>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+            <DeveloperToolsCard
+              site={site}
+              environment={environment}
+              active={active}
+              open={open}
+              language={language}
+            />
           )}
           {!isNative && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{text.quickCommands}</CardTitle>
-                <CardDescription>{text.quickCommandsDescription}</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3">
-                <div className="flex flex-wrap gap-2">
-                  {projectQuickCommands(site.projectType).map((command) => (
-                    <Button
-                      key={command}
-                      variant="outline"
-                      disabled={busy || !active}
-                      onClick={() => void runQuickCommand(command)}
-                    >
-                      <Play />
-                      {command}
-                    </Button>
-                  ))}
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Input
-                    className="font-mono"
-                    value={customCommand}
-                    onChange={(event) => setCustomCommand(event.target.value)}
-                    placeholder={site.projectType === "node" ? "npm run build" : "php -v"}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && customCommand.trim())
-                        void runQuickCommand(customCommand)
-                    }}
-                  />
-                  <Button
-                    disabled={busy || !active || !customCommand.trim()}
-                    onClick={() => void runQuickCommand(customCommand)}
-                  >
-                    <TerminalSquare />
-                    {text.run}
-                  </Button>
-                </div>
-                {!active && (
-                  <p className="text-xs text-muted-foreground">
-                    {text.startEnvironmentToRunCommands}
-                  </p>
-                )}
-                {quickOutput && (
-                  <Textarea readOnly className="min-h-40 font-mono text-xs" value={quickOutput} />
-                )}
-              </CardContent>
-            </Card>
+            <QuickCommandsCard
+              projectType={site.projectType}
+              customCommand={customCommand}
+              setCustomCommand={setCustomCommand}
+              output={quickOutput}
+              busy={busy}
+              active={active}
+              onRun={(command) => void runQuickCommand(command)}
+              language={language}
+            />
           )}
           {site.projectType === "wordpress" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>WP-CLI</CardTitle>
-                <CardDescription>{text.wpCliDescription}</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3">
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Input
-                    className="font-mono"
-                    value={wpCliCommand}
-                    onChange={(event) => setWpCliCommand(event.target.value)}
-                    placeholder="plugin list"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && wpCliCommand.trim()) void runWpCli(wpCliCommand)
-                    }}
-                  />
-                  <Button
-                    disabled={wpCliBusy || !active || !wpCliCommand.trim()}
-                    onClick={() => void runWpCli(wpCliCommand)}
-                  >
-                    <TerminalSquare className={wpCliBusy ? "animate-pulse" : ""} />
-                    {text.run}
-                  </Button>
-                </div>
-                {!active && (
-                  <p className="text-xs text-muted-foreground">{text.wpCliStartRequired}</p>
-                )}
-                {wpCliOutput && (
-                  <Textarea readOnly className="min-h-40 font-mono text-xs" value={wpCliOutput} />
-                )}
-              </CardContent>
-            </Card>
+            <WpCliCard
+              environment={environment}
+              siteName={site.name}
+              active={active}
+              language={language}
+            />
           )}
-          <Card>
-            <CardHeader>
-              <CardTitle>Git</CardTitle>
-              <CardDescription>
-                {gitStatus?.repository
-                  ? `${gitStatus.branch} · ${gitStatus.dirty ? text.changedFiles(gitStatus.changedFiles) : text.workingTreeClean}${gitStatus.behind > 0 ? ` · ${text.commitsBehind(gitStatus.behind)}` : ""}${gitStatus.ahead > 0 ? ` · ${text.commitsAhead(gitStatus.ahead)}` : ""}`
-                  : text.gitNotInitializedDescription}
-              </CardDescription>
-            </CardHeader>
-            {gitStatus && !gitStatus.repository && (
-              <CardContent>
-                <Button disabled={busy} onClick={() => void initializeGit()}>
-                  <GitBranch />
-                  {text.initializeGit}
-                </Button>
-              </CardContent>
-            )}
-            {gitStatus?.repository && (
-              <CardContent className="grid gap-3">
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" disabled={busy} onClick={() => void gitAction("fetch")}>
-                    <RefreshCw />
-                    {text.fetch}
-                  </Button>
-                  <Button variant="outline" disabled={busy} onClick={() => void gitAction("pull")}>
-                    <RefreshCw />
-                    {text.pull}
-                  </Button>
-                  <Button variant="outline" disabled={busy} onClick={() => void gitAction("push")}>
-                    <ExternalLink />
-                    {text.push}
-                  </Button>
-                  {gitDetails?.remoteUrl && (
-                    <Button
-                      variant="outline"
-                      disabled={busy}
-                      title={gitDetails.remoteUrl}
-                      onClick={() =>
-                        void invoke("open_site_git_remote", { siteId: currentSite.id }).catch(
-                          (error) => {
-                            setMessage(errorMessage(error))
-                            setMessageOk(false)
-                          },
-                        )
-                      }
-                    >
-                      <ExternalLink />
-                      {text.openRepository}
-                    </Button>
-                  )}
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Input
-                    value={commitMessage}
-                    onChange={(event) => setCommitMessage(event.target.value)}
-                    placeholder={text.commitMessagePlaceholder}
-                  />
-                  <Button
-                    disabled={busy || !gitStatus.dirty || !commitMessage.trim()}
-                    onClick={() => void gitAction("commit")}
-                  >
-                    <Save />
-                    {text.commitAllChanges}
-                  </Button>
-                </div>
-              </CardContent>
-            )}
-          </Card>
-          {gitStatus?.repository && (
-            <div className="grid gap-4 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <GitBranch />
-                    {text.branches}
-                  </CardTitle>
-                  <CardDescription>{text.branchesDescription}</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3">
-                  <Select
-                    value={gitStatus.branch}
-                    onValueChange={(value) => {
-                      if (value && value !== gitStatus.branch) void checkoutBranch(String(value))
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={text.selectBranch} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {gitDetails?.branches.map((branch) => (
-                        <SelectItem key={branch} value={branch}>
-                          {branch}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="flex gap-2">
-                    <Input
-                      value={newBranch}
-                      onChange={(event) => setNewBranch(event.target.value)}
-                      placeholder="feature/new-branch"
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") void checkoutBranch(newBranch, true)
-                      }}
-                    />
-                    <Button
-                      disabled={busy || !newBranch.trim()}
-                      onClick={() => void checkoutBranch(newBranch, true)}
-                    >
-                      <Plus />
-                      {text.create}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <History />
-                    {text.recentCommits}
-                  </CardTitle>
-                  <CardDescription>{text.recentCommitsDescription}</CardDescription>
-                </CardHeader>
-                <CardContent className="grid max-h-72 gap-1 overflow-auto">
-                  {gitDetails?.commits.length ? (
-                    gitDetails.commits.map((commit) => (
-                      <div
-                        key={commit.hash}
-                        className="grid grid-cols-[auto_1fr] gap-x-3 border-b py-2 text-sm last:border-0"
-                      >
-                        <code className="text-xs text-muted-foreground">{commit.hash}</code>
-                        <span className="truncate font-medium">{commit.subject}</span>
-                        <span />
-                        <span className="text-xs text-muted-foreground">
-                          {commit.author} · {commit.relativeDate}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{text.noCommitsYet}</p>
-                  )}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>{text.changedFilesTitle}</CardTitle>
-                  <CardDescription>{text.changedFilesDescription}</CardDescription>
-                </CardHeader>
-                <CardContent className="grid max-h-72 gap-1 overflow-auto">
-                  {gitDetails?.changes.length ? (
-                    gitDetails.changes.map((change) => (
-                      <div
-                        key={`${change.status}-${change.path}`}
-                        className="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 border-b py-2 text-sm last:border-0"
-                      >
-                        <Badge variant="outline" className="justify-center font-mono">
-                          {change.status || "M"}
-                        </Badge>
-                        <span className="truncate font-mono text-xs">{change.path}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      {text.workingTreeCleanParagraph}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
+          <SiteGitPanel
+            status={git.status}
+            details={git.details}
+            newBranch={git.newBranch}
+            setNewBranch={git.setNewBranch}
+            commitMessage={git.commitMessage}
+            setCommitMessage={git.setCommitMessage}
+            gitAction={git.gitAction}
+            initializeGit={git.initializeGit}
+            checkoutBranch={git.checkoutBranch}
+            busy={busy}
+            onOpenRemote={() =>
+              void invoke("open_site_git_remote", { siteId: currentSite.id }).catch((error) => {
+                setMessage(errorMessage(error))
+                setMessageOk(false)
+              })
+            }
+            language={language}
+          />
         </TabsContent>
       </Tabs>
       <Dialog open={phpInfo !== null} onOpenChange={(open) => !open && setPhpInfo(null)}>
@@ -1115,177 +591,58 @@ export function SiteDetailsPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{text.projectSettings}</DialogTitle>
-            <DialogDescription>{text.projectSettingsDescription}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label>{text.name}</Label>
-              <Input value={editName} onChange={(event) => setEditName(event.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label>{text.localDomain}</Label>
-              <Input
-                value={editDomain}
-                onChange={(event) => setEditDomain(event.target.value.toLowerCase())}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>{text.group}</Label>
-              <Input
-                value={editGroup}
-                maxLength={48}
-                onChange={(event) => setEditGroup(event.target.value)}
-                placeholder={text.groupPlaceholder}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>{text.tags}</Label>
-              <Input
-                value={editTags}
-                onChange={(event) => setEditTags(event.target.value)}
-                placeholder={text.tagsPlaceholder}
-              />
-              <p className="text-xs text-muted-foreground">{text.tagsHint}</p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" disabled={busy} onClick={() => setEditOpen(false)}>
-              {text.cancel}
-            </Button>
-            <Button
-              disabled={busy || !editName || !editDomain}
-              onClick={() =>
-                void updateProject({
-                  name: editName,
-                  domain: editDomain,
-                  group: editGroup,
-                  tags: editTags.split(","),
-                })
-              }
-            >
-              {busy ? text.saving : text.save}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={duplicateOpen} onOpenChange={setDuplicateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{text.duplicateProject}</DialogTitle>
-            <DialogDescription>{text.duplicateProjectDescription}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label>{text.newName}</Label>
-              <Input
-                value={duplicateName}
-                onChange={(event) => {
-                  setDuplicateName(event.target.value)
-                  setDuplicateDomain(
-                    `${event.target.value.toLowerCase().replace(/_/g, "-")}.localhost`,
-                  )
-                }}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>{text.newDomain}</Label>
-              <Input
-                value={duplicateDomain}
-                onChange={(event) => setDuplicateDomain(event.target.value.toLowerCase())}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" disabled={busy} onClick={() => setDuplicateOpen(false)}>
-              {text.cancel}
-            </Button>
-            <Button
-              disabled={busy || !duplicateName || !duplicateDomain}
-              onClick={() => void duplicateProject()}
-            >
-              {busy ? text.duplicating : text.duplicate}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{text.deleteSiteTitle}</AlertDialogTitle>
-            <AlertDialogDescription>{text.deleteSiteDescription(site.name)}</AlertDialogDescription>
-            {gitStatus?.dirty && (
-              <Alert variant="destructive">
-                <AlertDescription>{text.gitDirtyWarning(gitStatus.changedFiles)}</AlertDescription>
-              </Alert>
-            )}
-            <label className="flex items-center gap-3 rounded-lg border p-3 text-sm">
-              <Checkbox
-                checked={deleteFiles}
-                onCheckedChange={(value) => setDeleteFiles(Boolean(value))}
-              />
-              <span>{text.deleteFilesLabel}</span>
-            </label>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>{text.cancel}</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={busy}
-              onClick={(event) => {
-                event.preventDefault()
-                void remove()
-              }}
-            >
-              {text.delete}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog
-        open={Boolean(pendingCheckout)}
-        onOpenChange={(open) => !open && setPendingCheckout(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{text.uncommittedChangesTitle}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingCheckout && text.uncommittedChangesDescription(pendingCheckout.branch)}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>{text.cancel}</AlertDialogCancel>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                pendingCheckout &&
-                void checkoutBranch(pendingCheckout.branch, pendingCheckout.create, {
-                  stash: true,
-                })
-              }
-            >
-              {text.stashAndSwitch}
-            </Button>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={busy}
-              onClick={(event) => {
-                event.preventDefault()
-                if (pendingCheckout)
-                  void checkoutBranch(pendingCheckout.branch, pendingCheckout.create, {
-                    force: true,
-                  })
-              }}
-            >
-              {text.discardAndSwitch}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <EditProjectDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        name={editName}
+        setName={setEditName}
+        domain={editDomain}
+        setDomain={setEditDomain}
+        group={editGroup}
+        setGroup={setEditGroup}
+        tags={editTags}
+        setTags={setEditTags}
+        busy={busy}
+        onSave={() =>
+          void updateProject({
+            name: editName,
+            domain: editDomain,
+            group: editGroup,
+            tags: editTags.split(","),
+          })
+        }
+        language={language}
+      />
+      <DuplicateProjectDialog
+        open={duplicateOpen}
+        onOpenChange={setDuplicateOpen}
+        name={duplicateName}
+        setName={setDuplicateName}
+        domain={duplicateDomain}
+        setDomain={setDuplicateDomain}
+        busy={busy}
+        onDuplicate={() => void duplicateProject()}
+        language={language}
+      />
+      <DeleteSiteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        siteName={site.name}
+        deleteFiles={deleteFiles}
+        setDeleteFiles={setDeleteFiles}
+        dirty={git.status?.dirty}
+        changedFiles={git.status?.changedFiles ?? 0}
+        busy={busy}
+        onDelete={() => void remove()}
+        language={language}
+      />
+      <CheckoutConflictDialog
+        pendingCheckout={git.pendingCheckout}
+        onOpenChange={(open) => !open && git.setPendingCheckout(null)}
+        checkoutBranch={git.checkoutBranch}
+        busy={busy}
+        language={language}
+      />
     </div>
   )
 }
@@ -1300,56 +657,5 @@ function EmptyPage({ title, description }: { title: string; description: string 
         </CardHeader>
       </Card>
     </div>
-  )
-}
-
-function projectQuickCommands(projectType?: string) {
-  if (projectType === "node" || projectType === "react")
-    return ["npm install", "npm run build", "npm start"]
-  if (projectType === "laravel")
-    return [
-      "composer install",
-      "php artisan migrate",
-      "php artisan cache:clear",
-      "php artisan config:clear",
-      "php artisan queue:work --once",
-    ]
-  if (projectType === "symfony")
-    return [
-      "composer install",
-      "php bin/console cache:clear",
-      "php bin/console doctrine:migrations:migrate --no-interaction",
-    ]
-  if (projectType === "wordpress") return ["php -v", "composer install", "php -m"]
-  return ["php -v", "php -m", "composer install"]
-}
-
-function splitCommandLine(value: string) {
-  const result: string[] = []
-  let current = ""
-  let quote = ""
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index]
-    if (quote) {
-      if (character === quote) quote = ""
-      else if (character === "\\" && index + 1 < value.length) current += value[++index]
-      else current += character
-    } else if (character === '"' || character === "'") quote = character
-    else if (/\s/.test(character)) {
-      if (current) {
-        result.push(current)
-        current = ""
-      }
-    } else current += character
-  }
-  if (quote) throw new Error("Command contains an unclosed quote")
-  if (current) result.push(current)
-  if (!result.length) throw new Error("Enter a command")
-  return result
-}
-
-function isDirtyCheckoutConflict(error: string) {
-  return /would be overwritten by checkout|please commit your changes or stash them|please move or remove them before you switch branches/i.test(
-    error,
   )
 }
