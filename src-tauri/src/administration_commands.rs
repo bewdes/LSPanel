@@ -82,9 +82,10 @@ pub fn save_environment(
 pub fn delete_environment(
     app: tauri::AppHandle,
     id: String,
+    delete_files: bool,
 ) -> Result<Vec<crate::containers::Environment>, String> {
     let operation = crate::operations::create(&app, Some(&id), "delete-environment")?;
-    let result = crate::containers::delete(&app, &id);
+    let result = crate::containers::delete(&app, &id, delete_files);
     match &result {
         Ok(_) => {
             crate::operations::complete(&app, &operation.id)?;

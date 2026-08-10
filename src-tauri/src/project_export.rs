@@ -265,7 +265,10 @@ pub fn import(
         let error = crate::security::environment_error(app, environment_id, error);
         if environment_saved {
             let _ = crate::containers::operate(app, environment_id, "destroy");
-            let _ = crate::containers::delete(app, environment_id);
+            // `false`: baseline.rollback() right below handles the project
+            // directory already, same reasoning as the `sites::delete(..., false)`
+            // call above.
+            let _ = crate::containers::delete(app, environment_id, false);
         }
         let _ = crate::sites::delete(app, &site_id, false);
         let _ = baseline.rollback();
