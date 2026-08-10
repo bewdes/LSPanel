@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pinning or archiving a project from its own details page no longer navigates you back to the sites list — only editing its settings or duplicating it does that now.
 - Duplicating or importing a project now shows real progress (stage and percentage) instead of a static "Duplicating…"/"Importing…" label for what can be a multi-minute operation.
 - Removing an extra service (Redis, MinIO, etc.) from a running environment and saving no longer leaves its container running with no way to stop it — saving now reconciles the running stack with the updated configuration.
+- The Terminal tab rejected Cron, Elasticsearch, MinIO, and RabbitMQ with "Unsupported terminal service" even though they're selectable in its service list — the same class of dead button already fixed elsewhere for these services, but missed for the Terminal feature specifically.
 
 ## [0.5.1-beta] - 2026-08-10
 
