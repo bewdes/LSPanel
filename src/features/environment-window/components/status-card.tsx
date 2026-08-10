@@ -42,6 +42,8 @@ export function EnvironmentStatusCard({
   onRefresh: () => Promise<void>
 }) {
   const text = pickLanguage(language).environmentWindow
+  const isPartiallyRunning =
+    inspection?.status === "running" && inspection.runningServices < inspection.services.length
   return (
     <>
       {(id || progress) && (
@@ -57,9 +59,17 @@ export function EnvironmentStatusCard({
             </div>
             <Badge
               className="ml-auto"
-              variant={inspection?.status === "running" ? "default" : "secondary"}
+              variant={
+                inspection?.status === "running"
+                  ? isPartiallyRunning
+                    ? "destructive"
+                    : "default"
+                  : "secondary"
+              }
             >
-              {inspection?.status ?? text.checking}
+              {isPartiallyRunning
+                ? text.partiallyRunning(inspection.runningServices, inspection.services.length)
+                : (inspection?.status ?? text.checking)}
             </Badge>
           </CardHeader>
           <CardContent className="grid gap-4">
