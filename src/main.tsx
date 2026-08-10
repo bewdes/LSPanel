@@ -58,7 +58,9 @@ const WelcomeScreen = React.lazy(() =>
   import("@/welcome-screen").then((module) => ({ default: module.WelcomeScreen })),
 )
 const EnvironmentWindow = React.lazy(() =>
-  import("@/environment-window").then((module) => ({ default: module.EnvironmentWindow })),
+  import("@/features/environment-window/environment-window").then((module) => ({
+    default: module.EnvironmentWindow,
+  })),
 )
 const ProjectWizard = React.lazy(() =>
   import("@/components/project-wizard").then((module) => ({ default: module.ProjectWizard })),
