@@ -48,7 +48,11 @@ pub fn save(app: &tauri::AppHandle, environment: Environment) -> Result<Vec<Envi
     list(app)
 }
 
-pub fn delete(app: &tauri::AppHandle, id: &str) -> Result<Vec<Environment>, String> {
+pub fn delete(
+    app: &tauri::AppHandle,
+    id: &str,
+    delete_files: bool,
+) -> Result<Vec<Environment>, String> {
     if !safe_resource_id(id) {
         return Err("Invalid environment identifier".into());
     }
@@ -77,6 +81,9 @@ pub fn delete(app: &tauri::AppHandle, id: &str) -> Result<Vec<Environment>, Stri
         }
         if let Err(error) = crate::environment_files::remove(app, &site.id) {
             cleanup_errors.push(format!("env file for {}: {error}", site.id));
+        }
+        if !delete_files {
+            continue;
         }
         let directory = PathBuf::from(&site.directory);
         if directory.exists() {

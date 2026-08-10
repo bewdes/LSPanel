@@ -15,9 +15,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Progress } from "@/components/ui/progress"
 import { errorMessage } from "@/lib/errors"
 import { pickLanguage } from "@/i18n"
+import type { Site } from "@/types"
 
 export function DeleteEnvironmentDialog({
   id,
@@ -40,10 +42,19 @@ export function DeleteEnvironmentDialog({
 }) {
   const text = pickLanguage(language).environmentWindow
   const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [deleteFiles, setDeleteFiles] = React.useState(true)
+  const [affectedSites, setAffectedSites] = React.useState<Site[]>([])
   const [deleteProgress, setDeleteProgress] = React.useState<{
     value: number
     stage: string
   } | null>(null)
+
+  React.useEffect(() => {
+    if (!deleteOpen || !id) return
+    void invoke<Site[]>("list_sites").then((sites) =>
+      setAffectedSites(sites.filter((site) => site.environmentId === id)),
+    )
+  }, [deleteOpen, id])
 
   async function remove() {
     if (!id) return
@@ -54,7 +65,7 @@ export function DeleteEnvironmentDialog({
       setDeleteProgress({ value: 35, stage: text.stoppingContainers })
       await invoke("operate_environment", { id, action: "destroy" })
       setDeleteProgress({ value: 85, stage: text.removingData })
-      await invoke("delete_environment", { id })
+      await invoke("delete_environment", { id, deleteFiles })
       setDeleteProgress({ value: 95, stage: text.updatingList })
       await emit("environments-changed")
       setDeleteProgress({ value: 100, stage: text.environmentDeleted })
@@ -84,9 +95,20 @@ export function DeleteEnvironmentDialog({
             {deleteProgress ? text.deletingEnvironment : text.deleteEnvironmentTitle(name)}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {deleteProgress ? text.keepOpenHint : text.deleteEnvironmentDescription}
+            {deleteProgress
+              ? text.keepOpenHint
+              : text.deleteEnvironmentDescription(affectedSites.map((site) => site.name))}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {!deleteProgress && affectedSites.length > 0 && (
+          <label className="flex items-center gap-3 rounded-lg border p-3 text-sm">
+            <Checkbox
+              checked={deleteFiles}
+              onCheckedChange={(value) => setDeleteFiles(Boolean(value))}
+            />
+            <span>{text.deleteFilesLabel}</span>
+          </label>
+        )}
         {deleteProgress && (
           <div className="grid gap-2 py-2">
             <div className="flex items-center justify-between gap-4 text-sm">

@@ -451,8 +451,21 @@ const uk: Dictionary = {
     deletingEnvironment: "Видалення середовища…",
     deleteEnvironmentTitle: (name: string) => `Видалити ${name}?`,
     keepOpenHint: "Тримайте LS Panel відкритим, доки всі контейнерні ресурси не буде видалено.",
-    deleteEnvironmentDescription:
-      "Це остаточно видалить контейнери середовища, згенерований стек, том бази даних та пов'язані записи сайтів. Цю дію не можна скасувати.",
+    deleteEnvironmentDescription: (siteNames: string[]) => {
+      if (!siteNames.length)
+        return "Це остаточно видалить контейнери середовища, згенерований стек і том бази даних. Цю дію не можна скасувати."
+      const count = siteNames.length
+      const mod10 = count % 10
+      const mod100 = count % 100
+      const word =
+        mod10 === 1 && mod100 !== 11
+          ? "проєкт"
+          : mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)
+            ? "проєкти"
+            : "проєктів"
+      return `Це остаточно видалить контейнери середовища, згенерований стек і том бази даних, а також ${count} ${word} — ${siteNames.join(", ")}. Цю дію не можна скасувати.`
+    },
+    deleteFilesLabel: "Також видалити файли проєктів з диска",
     cancel: "Скасувати",
     deleting: "Видалення…",
     deleteEnvironment: "Видалити середовище",
