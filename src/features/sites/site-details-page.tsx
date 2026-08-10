@@ -1,5 +1,6 @@
 import * as React from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import {
   ArrowLeft,
@@ -106,6 +107,10 @@ export function SiteDetailsPage({
   const [duplicateOpen, setDuplicateOpen] = React.useState(false)
   const [duplicateName, setDuplicateName] = React.useState("")
   const [duplicateDomain, setDuplicateDomain] = React.useState("")
+  const [duplicateProgress, setDuplicateProgress] = React.useState<{
+    progress: number
+    stage: string
+  } | null>(null)
   const text = pickLanguage(language).siteDetails
   React.useEffect(() => {
     setEditName(site?.name ?? "")
@@ -162,15 +167,18 @@ export function SiteDetailsPage({
       setBusy(false)
     }
   }
-  async function updateProject(values: {
-    name?: string
-    domain?: string
-    pinned?: boolean
-    archived?: boolean
-    group?: string
-    tags?: string[]
-    aliases?: string[]
-  }) {
+  async function updateProject(
+    values: {
+      name?: string
+      domain?: string
+      pinned?: boolean
+      archived?: boolean
+      group?: string
+      tags?: string[]
+      aliases?: string[]
+    },
+    options: { close?: boolean } = { close: true },
+  ) {
     setBusy(true)
     setMessage("")
     try {
@@ -185,7 +193,8 @@ export function SiteDetailsPage({
         aliases: values.aliases ?? currentSite.aliases ?? [],
       })
       setEditOpen(false)
-      await onChanged()
+      if (options.close) await onChanged()
+      else await onOperated()
     } catch (error) {
       setMessage(errorMessage(error))
       setMessageOk(false)
@@ -195,6 +204,14 @@ export function SiteDetailsPage({
   async function duplicateProject() {
     setBusy(true)
     setMessage("")
+    setDuplicateProgress({ progress: 0, stage: "" })
+    const unlisten = await listen<{ kind: string; progress: number; stage: string }>(
+      "operation-progress",
+      ({ payload }) => {
+        if (payload.kind !== "duplicate-project") return
+        setDuplicateProgress({ progress: payload.progress, stage: payload.stage })
+      },
+    )
     try {
       await invoke("duplicate_site", {
         id: currentSite.id,
@@ -207,6 +224,9 @@ export function SiteDetailsPage({
       setMessage(errorMessage(error))
       setMessageOk(false)
       setBusy(false)
+    } finally {
+      unlisten()
+      setDuplicateProgress(null)
     }
   }
   async function exportProject() {
@@ -345,7 +365,7 @@ export function SiteDetailsPage({
           className="ml-auto"
           variant={site.pinned ? "secondary" : "ghost"}
           size="icon-sm"
-          onClick={() => void updateProject({ pinned: !site.pinned })}
+          onClick={() => void updateProject({ pinned: !site.pinned }, { close: false })}
         >
           <Pin />
         </Button>
@@ -376,7 +396,7 @@ export function SiteDetailsPage({
         <Button
           variant="ghost"
           size="icon-sm"
-          onClick={() => void updateProject({ archived: !site.archived })}
+          onClick={() => void updateProject({ archived: !site.archived }, { close: false })}
         >
           <Archive />
         </Button>
@@ -621,6 +641,7 @@ export function SiteDetailsPage({
         domain={duplicateDomain}
         setDomain={setDuplicateDomain}
         busy={busy}
+        progress={duplicateProgress}
         onDuplicate={() => void duplicateProject()}
         language={language}
       />
