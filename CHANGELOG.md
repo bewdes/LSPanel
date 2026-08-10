@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restoring a project snapshot no longer leaves an unbounded pile of automatic pre-restore safety snapshots on disk — each one is now pruned down to the same 20-snapshot retention already applied to every other automatic snapshot.
 - Scheduled database backups now go through the same Operation Center/notification pipeline as manual backups — a failed scheduled backup (e.g. because the environment isn't running) used to fail completely silently, with no entry anywhere and no way to know it didn't happen.
 - The Database page's backup list no longer goes stale after "Quick Backup," "Clear Database," or an SQL/table import — each of these can create a backup on the backend, but the visible list only refreshed after navigating away and back.
+- Reissuing, deleting, or resetting the local HTTPS certificate now takes the same lock that already serializes certificate generation — previously only `ensure()` took it, so one of these actions running while an environment started (or another window refreshed the gateway) could delete `local.crt`/`local.key` out from under an in-progress write.
 
 ## [0.5.1-beta] - 2026-08-10
 
