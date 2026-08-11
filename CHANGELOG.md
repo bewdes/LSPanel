@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Native (containerless) sites now open at their real `https://<name>.localhost` domain through the local HTTPS gateway, the same as containerized sites, instead of always showing a raw `127.0.0.1:<port>` address. When Docker/Podman is available, the native process additionally binds to Docker's host-gateway bridge address (never `0.0.0.0`, so the port stays unreachable from the local network) so the gateway can reach it; when it isn't, the site still falls back to `127.0.0.1:<port>` exactly as before — native mode continues to need no container runtime at all.
 - The project wizard could show a "domain already in use" error on its final step right after successfully creating the project — the newly created site reappearing in the live sites list (refreshed in the background) made the wizard's own domain-conflict check match against itself.
 
+### Security
+
+- The webhook URL's SSRF guard extracted a bracketed IPv6 host (`[fd12:3456:789a::1]`) by splitting on `:`, which truncated it at its first internal colon into a string that failed IP parsing and was then treated as an ordinary public hostname — bypassing the loopback/private/link-local check entirely for almost every IPv6 literal. Also fixed the range check itself, which only covered IPv4-style private/link-local ranges: IPv6 unique-local (`fd00::/8`), link-local (`fe80::/10`), and IPv4-mapped addresses (`::ffff:127.0.0.1`) are now rejected too.
+
 ## [0.5.1-beta] - 2026-08-10
 
 ### Changed
