@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deleting an environment always failed to remove its projects' `.env` files ("Site not found"), leaving them behind on disk — the cleanup step looked the site back up in storage after its record had already been cascade-deleted along with the environment. It now uses the project directory captured before deletion instead of re-querying storage.
 - A missing environment during Start/Stop/Restart/Destroy showed the raw error "Окружение не найдено" (Russian) instead of an English/Ukrainian message.
 - Six more validation and status messages (environment name, port range, image version, missing Docker/Podman, and "complete initial setup first") were hardcoded in Russian instead of the app's supported English/Ukrainian.
+- Starting a native (containerless) site served files (or ran `npm`/`pnpm`) from the project's root folder instead of its `app/` subdirectory, so a freshly created static/Node.js project always 404'd — its `index.html`/`package.json` live in `app/`, not the root.
 
 ### Security
 

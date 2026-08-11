@@ -218,7 +218,13 @@ fn start(app: &tauri::AppHandle, environment: &Environment) -> Result<(), String
         .port
         .parse()
         .map_err(|_| "Invalid port for this environment")?;
-    let directory = PathBuf::from(&site.directory);
+    // The project's actual source lives in `app/`, not the site's root
+    // directory — the same convention used everywhere else (git status, the
+    // file manager, environment_files, sites::create). Serving/running from
+    // the bare root instead left the static server and Node process unable
+    // to find the very files ensure_directories() had just seeded into
+    // `app/`, producing a 404 on every fresh native site.
+    let directory = PathBuf::from(&site.directory).join("app");
     if !directory.is_dir() {
         return Err(format!(
             "Project directory not found: {}",
