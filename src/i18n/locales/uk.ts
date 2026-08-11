@@ -877,9 +877,8 @@ const uk: Dictionary = {
     containerRuntime: "Контейнер",
     nativeRuntime: "Native (без Docker)",
     nativeRuntimeHint:
-      "Запускає застосунок напряму на хості без Docker-контейнера. Доступно лише для Node.js, React та статичних сайтів. У цій версії немає домену чи HTTPS — сайт відкривається за http://127.0.0.1:{port}.",
+      "Запускає застосунок напряму на хості без Docker-контейнера. Доступно лише для Node.js, React та статичних сайтів. Не потребує Docker/Podman для роботи — сайт отримує той самий домен https://<name>.localhost, що й контейнерні сайти, коли Docker/Podman доступний, і працює за 127.0.0.1:{port}, коли ні.",
     nativeRuntimeContainersValue: "Нативний процес (без контейнерів)",
-    nativeRuntimeUrlValue: (port: string) => `http://127.0.0.1:${port}`,
     nativeRuntimeStaticValue: "Статичні файли (вбудований файл-сервер)",
     environmentLabel: "Середовище",
     selectEnvironment: "Виберіть середовище",
