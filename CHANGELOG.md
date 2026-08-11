@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The project wizard could show a "domain already in use" error on its final step right after successfully creating the project — the newly created site reappearing in the live sites list (refreshed in the background) made the wizard's own domain-conflict check match against itself.
 - The Sites list's Git branch badge never showed for any project — it checked for a repository at the project's root directory instead of its `app/` subdirectory, where it actually lives.
 - Three Settings validation errors (unsupported theme, empty sites directory, failed to create sites directory) were hardcoded in Russian instead of the app's supported English/Ukrainian, so they showed up untranslated regardless of the configured language.
+- Native (containerless) environments no longer show a per-service breakdown or a "Reset Runtime Logs" button on the Logs page — neither applied, since native mode runs as a single process with no per-service containers; selecting a service there previously either failed with a raw "No such file or directory" (reset) or silently showed the same unfiltered output as "all" (service selection).
 
 ### Security
 

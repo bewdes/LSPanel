@@ -125,12 +125,19 @@ export function LiveLogs({
   React.useEffect(() => {
     if (autoScroll && viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight
   }, [visible, autoScroll])
-  const services = [
-    "web",
-    ...(environment.webServer === "Nginx" ? ["php"] : []),
-    "database",
-    ...(environment.extraServices ?? []),
-  ]
+  // Native (containerless) environments run as a single process with no
+  // per-service containers to select or reset logs for — leaving this
+  // empty also hides the "Reset Runtime Logs" button below, which is only
+  // shown when a specific (non-"all") service is selected.
+  const services =
+    environment.runtimeMode === "native"
+      ? []
+      : [
+          "web",
+          ...(environment.webServer === "Nginx" ? ["php"] : []),
+          "database",
+          ...(environment.extraServices ?? []),
+        ]
   const exportLogs = async () => {
     try {
       const path = await saveDialog({
