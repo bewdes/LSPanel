@@ -286,7 +286,15 @@ fn env_path(app: &tauri::AppHandle, site_id: &str) -> Result<PathBuf, String> {
     if !directory.starts_with(&root) {
         return Err("The site directory is outside the configured sites directory".into());
     }
-    Ok(directory.join(".env"))
+    // The project's actual source (and its own `.env`, if any) lives in
+    // `app/`, not the site's root directory — the same convention already
+    // used consistently elsewhere (git status, the file manager, project
+    // export/duplicate). A framework like Laravel/Symfony creates and reads
+    // its `.env` there; without this, the editor always showed "file does
+    // not exist" for those projects even though a real, populated `.env`
+    // exists, and features built on this (snapshots, export) silently
+    // missed it entirely.
+    Ok(directory.join("app").join(".env"))
 }
 
 fn reject_symlink(path: &PathBuf) -> Result<(), String> {
