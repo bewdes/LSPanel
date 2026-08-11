@@ -288,6 +288,22 @@ pub fn provision(
     site: &Site,
     environment: &Environment,
 ) -> Result<(), String> {
+    // WordPress/Laravel/Symfony installation shells out to a PHP/database
+    // container (`run_in_php`/`run_in_service`) — reachable only when
+    // attaching one of these project types to an *existing* native
+    // environment (the wizard's own "new environment" flow never offers
+    // this combination), otherwise failing deep inside with a raw compose
+    // error instead of an explained reason.
+    if environment.runtime_mode == "native"
+        && matches!(
+            site.project_type.as_str(),
+            "wordpress" | "laravel" | "symfony"
+        )
+    {
+        return Err(
+            "Native (containerless) environments don't support WordPress, Laravel, or Symfony installation — attach this project to a container environment instead.".into(),
+        );
+    }
     match site.project_type.as_str() {
         "wordpress" => provision_wordpress(app, site, environment),
         "laravel" => provision_laravel(app, site, environment),

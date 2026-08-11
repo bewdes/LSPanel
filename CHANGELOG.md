@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deleting a native (containerless) project's files always failed with "Failed to launch temporary project file permission repair: No such file or directory" — the ownership-repair step it ran before deletion assumed a container stack existed, which native projects never have. Native projects' files are already owned by the host user, so the repair step is now skipped for them entirely.
 - Native (containerless) sites now open at their real `https://<name>.localhost` domain through the local HTTPS gateway, the same as containerized sites, instead of always showing a raw `127.0.0.1:<port>` address. When Docker/Podman is available, the native process additionally binds to Docker's host-gateway bridge address (never `0.0.0.0`, so the port stays unreachable from the local network) so the gateway can reach it; when it isn't, the site still falls back to `127.0.0.1:<port>` exactly as before — native mode continues to need no container runtime at all.
 - The project wizard could show a "domain already in use" error on its final step right after successfully creating the project — the newly created site reappearing in the live sites list (refreshed in the background) made the wizard's own domain-conflict check match against itself.
+- Attaching a WordPress, Laravel, or Symfony project to an existing native (containerless) environment now fails immediately with a clear explanation instead of a raw compose error deep inside the install step — these templates need a container to install into, and native mode only ever offered this combination through the "existing environment" attach flow, not the wizard's own environment-creation step.
+
+### Security
+
+- A failed WordPress/Laravel/Symfony installation on the "attach to existing environment" wizard path could show the environment's generated secrets (database/admin passwords) in plaintext in the error banner — that path never redacted its error the way the "new environment" creation path already does.
 
 ## [0.5.1-beta] - 2026-08-10
 
