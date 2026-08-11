@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Attaching a WordPress, Laravel, or Symfony project to an existing native (containerless) environment now fails immediately with a clear explanation instead of a raw compose error deep inside the install step — these templates need a container to install into, and native mode only ever offered this combination through the "existing environment" attach flow, not the wizard's own environment-creation step.
 - Native (containerless) environments no longer appear on the Database page (they have no database container to manage there), and every database action (query console, backups, import/export, clone/rename) now rejects them with a clear message instead of a raw Docker/compose error. Automatic pre-restore/pre-clear/pre-query safety snapshots also no longer attempt a database export for a running native environment, which previously failed the entire snapshot if the (unused, for native) `database` field happened to be set to a server database.
 - Comparing a project snapshot against the current project almost always flagged a "configuration change" that wasn't real — it included `lastStartedAt`, which updates on every environment start, burying genuine config drift in noise.
+- The database query console silently cut off large results at 1,000,000 characters with no indication — a large `SELECT` looked complete when it wasn't. It now appends a clear marker when this happens.
 
 ### Security
 
