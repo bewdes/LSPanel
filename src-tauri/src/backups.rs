@@ -941,6 +941,19 @@ fn copy_backup_file(source: &std::path::Path, target: &std::path::Path) -> Resul
     })
 }
 fn context(app: &tauri::AppHandle, id: &str) -> Result<(String, PathBuf), String> {
+    let environment = crate::containers::list(app)?
+        .into_iter()
+        .find(|item| item.id == id)
+        .ok_or("Environment not found")?;
+    if environment.runtime_mode == "native" {
+        // Native (containerless) environments have no database container to
+        // query/back up/restore/clone at all — without this check, every
+        // caller here (query console, backups, import/export, clone/rename)
+        // would proceed to `stack_directory`, which has no compose stack
+        // for native environments, and fail with a raw Docker/compose error
+        // instead of an explained reason.
+        return Err("Not available for native (containerless) environments".into());
+    }
     let preferred = crate::settings::load(app)?.map(|settings| settings.runtime);
     let status = crate::containers::detect_runtime(preferred.as_deref());
     let runtime = status
