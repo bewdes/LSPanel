@@ -162,9 +162,9 @@ export function SitesPage({
               [
                 site.id,
                 (
-                  await invoke<GitStatus>("site_git_status", { directory: site.directory }).catch(
-                    () => null,
-                  )
+                  await invoke<GitStatus>("site_git_status", {
+                    directory: `${site.directory}/app`,
+                  }).catch(() => null)
                 )?.branch ?? "",
               ] as const,
           ),
