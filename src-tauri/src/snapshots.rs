@@ -274,11 +274,17 @@ pub fn compare(
         "site",
         &serde_json::to_value(&manifest.site).map_err(|error| error.to_string())?,
         &serde_json::to_value(&current_site).map_err(|error| error.to_string())?,
+        // `lastStartedAt` updates on every environment start — a routine,
+        // frequent action, not a configuration change — so it would
+        // otherwise show up as "changed" on nearly every comparison,
+        // burying real config drift in noise.
+        &["lastStartedAt"],
     );
     configuration_changes.extend(changed_json_fields(
         "environment",
         &serde_json::to_value(&manifest.environment).map_err(|error| error.to_string())?,
         &serde_json::to_value(&current_environment).map_err(|error| error.to_string())?,
+        &[],
     ));
     let snapshot_env = if manifest.has_env {
         parse_env_keys(
@@ -314,7 +320,12 @@ pub fn compare(
     })
 }
 
-fn changed_json_fields(prefix: &str, before: &Value, current: &Value) -> Vec<String> {
+fn changed_json_fields(
+    prefix: &str,
+    before: &Value,
+    current: &Value,
+    exclude: &[&str],
+) -> Vec<String> {
     let before = before.as_object();
     let current = current.as_object();
     let keys = before
@@ -323,6 +334,7 @@ fn changed_json_fields(prefix: &str, before: &Value, current: &Value) -> Vec<Str
         .chain(current.into_iter().flat_map(|value| value.keys()))
         .collect::<BTreeSet<_>>();
     keys.into_iter()
+        .filter(|key| !exclude.contains(&key.as_str()))
         .filter(|key| {
             before.and_then(|value| value.get(*key)) != current.and_then(|value| value.get(*key))
         })
@@ -580,9 +592,27 @@ pub fn delete_all(app: &tauri::AppHandle, site_id: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        obsolete_snapshots, run_with_rollback, safe_filename, safe_resource_id, valid, Snapshot,
+        changed_json_fields, obsolete_snapshots, run_with_rollback, safe_filename,
+        safe_resource_id, valid, Snapshot,
     };
     use std::cell::Cell;
+
+    #[test]
+    fn compare_ignores_excluded_fields_but_still_reports_real_changes() {
+        // Regression test: `lastStartedAt` updates on every environment
+        // start (routine, not a config change), so comparing snapshots
+        // taken across different sessions would otherwise always flag it,
+        // drowning out real drift.
+        let before = serde_json::json!({ "lastStartedAt": 1, "name": "demo" });
+        let current = serde_json::json!({ "lastStartedAt": 2, "name": "demo" });
+        assert!(changed_json_fields("site", &before, &current, &["lastStartedAt"]).is_empty());
+
+        let current_renamed = serde_json::json!({ "lastStartedAt": 2, "name": "renamed" });
+        assert_eq!(
+            changed_json_fields("site", &before, &current_renamed, &["lastStartedAt"]),
+            vec!["site.name".to_owned()]
+        );
+    }
 
     #[test]
     fn snapshot_ids_reject_path_traversal() {
