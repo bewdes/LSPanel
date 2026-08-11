@@ -32,14 +32,19 @@ export function LogsPage({
     () => new Map(environments.map((environment) => [environment.id, environment])),
     [environments],
   )
-  const containers = environments.flatMap((environment) =>
-    [
-      "web",
-      ...(environment.webServer === "Nginx" ? ["php"] : []),
-      "database",
-      ...(environment.extraServices ?? []),
-    ].map((service) => ({ environment, service })),
-  )
+  // Native (containerless) environments run as a single process with no
+  // per-service containers, so they have nothing to list here — they're
+  // still reachable via the "Projects" tab's "all services" entry.
+  const containers = environments
+    .filter((environment) => environment.runtimeMode !== "native")
+    .flatMap((environment) =>
+      [
+        "web",
+        ...(environment.webServer === "Nginx" ? ["php"] : []),
+        "database",
+        ...(environment.extraServices ?? []),
+      ].map((service) => ({ environment, service })),
+    )
 
   return (
     <div>

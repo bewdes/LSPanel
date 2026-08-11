@@ -98,7 +98,7 @@ pub fn save(app: &tauri::AppHandle, settings: AppSettings) -> Result<AppSettings
         return Err("Unsupported language".into());
     }
     if !matches!(settings.theme.as_str(), "dark" | "light" | "system") {
-        return Err("Неподдерживаемая тема".into());
+        return Err("Unsupported theme".into());
     }
     if !matches!(settings.runtime.as_str(), "auto" | "docker" | "podman") {
         return Err("Unsupported container runtime".into());
@@ -121,7 +121,7 @@ pub fn save(app: &tauri::AppHandle, settings: AppSettings) -> Result<AppSettings
         return Err("Default runtime versions cannot be empty".into());
     }
     if settings.sites_directory.trim().is_empty() {
-        return Err("Выберите директорию сайтов".into());
+        return Err("Choose a sites directory".into());
     }
     if !matches!(
         settings.preferred_editor.as_str(),
@@ -174,7 +174,7 @@ pub fn save(app: &tauri::AppHandle, settings: AppSettings) -> Result<AppSettings
         return Err("Stats refresh interval must be between 3 and 300 seconds".into());
     }
     fs::create_dir_all(&settings.sites_directory)
-        .map_err(|e| format!("Не удалось создать директорию сайтов: {e}"))?;
+        .map_err(|e| format!("Failed to create the sites directory: {e}"))?;
     crate::storage::save_settings(
         app,
         &serde_json::to_string(&settings).map_err(|e| e.to_string())?,
