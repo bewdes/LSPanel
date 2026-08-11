@@ -117,7 +117,7 @@ pub fn delete(
         if let Err(error) = crate::snapshots::delete_all(app, &site.id) {
             cleanup_errors.push(format!("snapshots for {}: {error}", site.id));
         }
-        if let Err(error) = crate::environment_files::remove(app, &site.id) {
+        if let Err(error) = crate::environment_files::remove_for_directory(app, &site.directory) {
             cleanup_errors.push(format!("env file for {}: {error}", site.id));
         }
         if !delete_files {
@@ -186,7 +186,7 @@ fn operate_inner(
     let environment = list(app)?
         .into_iter()
         .find(|item| item.id == id)
-        .ok_or("Окружение не найдено")?;
+        .ok_or("Environment not found")?;
     validate(&environment)?;
     if environment.runtime_mode == "native" {
         return crate::native_runtime::operate(app, &environment, action);
@@ -1108,8 +1108,7 @@ pub(crate) fn prepare(
     let elasticsearch_dir = elasticsearch_directory(app, &environment.id)?;
     let minio_dir = minio_directory(app, &environment.id)?;
     let rabbitmq_dir = rabbitmq_directory(app, &environment.id)?;
-    let settings =
-        crate::settings::load(app)?.ok_or("Сначала завершите первоначальную настройку")?;
+    let settings = crate::settings::load(app)?.ok_or("Complete the initial setup first")?;
     let sites_directory = PathBuf::from(settings.sites_directory);
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     fs::create_dir_all(&sites_directory).map_err(|error| error.to_string())?;

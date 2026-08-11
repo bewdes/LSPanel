@@ -92,7 +92,19 @@ pub fn write(app: &tauri::AppHandle, site_id: &str, text: &str) -> Result<Enviro
 }
 
 pub fn remove(app: &tauri::AppHandle, site_id: &str) -> Result<(), String> {
-    let path = env_path(app, site_id)?;
+    remove_at(env_path(app, site_id)?)
+}
+
+// Removes a site's `.env` by its already-known directory rather than looking
+// the site up in storage — used when the site's storage record no longer
+// exists (e.g. mid-way through deleting its parent environment, after
+// `storage::delete_environment` has already cascaded the site row away, but
+// the on-disk `.env` still needs cleaning up).
+pub fn remove_for_directory(app: &tauri::AppHandle, site_directory: &str) -> Result<(), String> {
+    remove_at(env_path_for_directory(app, site_directory)?)
+}
+
+fn remove_at(path: PathBuf) -> Result<(), String> {
     if !path.exists() {
         return Ok(());
     }
@@ -278,10 +290,14 @@ fn env_path(app: &tauri::AppHandle, site_id: &str) -> Result<PathBuf, String> {
         .into_iter()
         .find(|site| site.id == site_id)
         .ok_or("Site not found")?;
+    env_path_for_directory(app, &site.directory)
+}
+
+fn env_path_for_directory(app: &tauri::AppHandle, site_directory: &str) -> Result<PathBuf, String> {
     let settings = crate::settings::load(app)?.ok_or("Settings not found")?;
     let root = fs::canonicalize(&settings.sites_directory)
         .map_err(|error| format!("Invalid sites directory: {error}"))?;
-    let directory = fs::canonicalize(&site.directory)
+    let directory = fs::canonicalize(site_directory)
         .map_err(|error| format!("Invalid site directory: {error}"))?;
     if !directory.starts_with(&root) {
         return Err("The site directory is outside the configured sites directory".into());
