@@ -181,7 +181,14 @@ export function ProjectWizard({
   const isNodeProject = projectType === "node" || projectType === "react"
   const nameValid = /^[A-Za-z0-9_-]+$/.test(name)
   const domainValid = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+localhost$/.test(domain)
-  const conflict = sites.find((site) => site.domain === domain || site.name === name)
+  // Once creation has succeeded, the just-created site can itself show up in
+  // `sites` (refreshed via the "environments-changed" event the backend
+  // emits right after creating it) while the wizard is still mounted on the
+  // review step — without this guard, the wizard's own new site would match
+  // its own domain/name and get flagged as a conflict with itself.
+  const conflict = createdProjectId
+    ? undefined
+    : sites.find((site) => site.domain === domain || site.name === name)
   const environmentNameValid = /^[A-Za-z0-9_-]+$/.test(environmentName)
   const environmentConflict = environments.some((item) => item.name === environmentName)
   const canContinue =
