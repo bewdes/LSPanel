@@ -37,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Sites list's Git branch badge never showed for any project — it checked for a repository at the project's root directory instead of its `app/` subdirectory, where it actually lives.
 - Three Settings validation errors (unsupported theme, empty sites directory, failed to create sites directory) were hardcoded in Russian instead of the app's supported English/Ukrainian, so they showed up untranslated regardless of the configured language.
 
+### Security
+
+- The webhook URL's SSRF guard extracted a bracketed IPv6 host (`[fd12:3456:789a::1]`) by splitting on `:`, which truncated it at its first internal colon into a string that failed IP parsing and was then treated as an ordinary public hostname — bypassing the loopback/private/link-local check entirely for almost every IPv6 literal. Also fixed the range check itself, which only covered IPv4-style private/link-local ranges: IPv6 unique-local (`fd00::/8`), link-local (`fe80::/10`), and IPv4-mapped addresses (`::ffff:127.0.0.1`) are now rejected too.
+
 ## [0.5.1-beta] - 2026-08-10
 
 ### Changed
