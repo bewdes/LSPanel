@@ -337,6 +337,15 @@ pub async fn provision_site_in_environment(
     if !project_templates::supports_existing_environment(&site.project_type) {
         return Err("Node.js projects require a dedicated environment.".into());
     }
+    // Mirrors `create_project_environment`'s own redaction: a provisioning
+    // failure here (e.g. a WordPress wp-cli command embedding
+    // `--admin_password=...`, or a database config error) must not leak the
+    // environment's generated secrets into the error shown to the user.
+    let creation_secrets = containers::list(&app)?
+        .into_iter()
+        .find(|item| item.id == site.environment_id)
+        .map(|environment| security::configured_secrets(&environment))
+        .unwrap_or_default();
     let operation = operations::create(&app, Some(&site.environment_id), "provision-site")?;
     let operation_id = operation.id.clone();
     let worker = app.clone();
@@ -437,6 +446,7 @@ pub async fn provision_site_in_environment(
     })
     .await
     .map_err(|error| error.to_string())?;
+    let result = result.map_err(|error| security::redact(&error, creation_secrets));
 
     match &result {
         Ok(_) => operations::complete(&app, &operation_id)?,

@@ -70,10 +70,15 @@ pub fn create(app: &tauri::AppHandle, site_id: &str, name: &str) -> Result<Snaps
         .find(|environment| environment.id == site.environment_id)
         .ok_or("Environment not found")?;
     let running = crate::containers::environment_status(app, &environment.id)?.status == "running";
-    let server_database = !matches!(
-        environment.database.to_ascii_lowercase().as_str(),
-        "" | "none" | "sqlite"
-    );
+    // Native (containerless) environments have no database container to
+    // back up at all, regardless of what's configured in `database` (which
+    // is meaningless there) — without this, a running native environment
+    // would try and fail a database export on every snapshot.
+    let server_database = environment.runtime_mode != "native"
+        && !matches!(
+            environment.database.to_ascii_lowercase().as_str(),
+            "" | "none" | "sqlite"
+        );
     create_inner(app, site_id, name, running && server_database)
 }
 
@@ -156,10 +161,11 @@ pub fn create_safety_for_environment(
         .find(|environment| environment.id == environment_id)
         .ok_or("Environment not found")?;
     let running = crate::containers::environment_status(app, environment_id)?.status == "running";
-    let server_database = !matches!(
-        environment.database.to_ascii_lowercase().as_str(),
-        "" | "none" | "sqlite"
-    );
+    let server_database = environment.runtime_mode != "native"
+        && !matches!(
+            environment.database.to_ascii_lowercase().as_str(),
+            "" | "none" | "sqlite"
+        );
     let sites = crate::sites::list(app)?
         .into_iter()
         .filter(|site| site.environment_id == environment_id)
