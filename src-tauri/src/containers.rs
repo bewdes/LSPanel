@@ -359,6 +359,15 @@ fn service_context(
         .into_iter()
         .find(|item| item.id == id)
         .ok_or("Environment not found")?;
+    if environment.runtime_mode == "native" {
+        // Native (containerless) environments have no per-service
+        // containers to exec/reconfigure/reset logs for — without this
+        // check, callers reachable outside the UI's own native guards would
+        // otherwise proceed to `stack_directory`, which has no compose
+        // stack for native environments, and fail with a raw "No such file
+        // or directory" instead of an explained reason.
+        return Err("Not available for native (containerless) environments".into());
+    }
     let available = service == "web"
         || service == "database"
         || (service == "php" && environment.web_server == "Nginx")
