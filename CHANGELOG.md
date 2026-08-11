@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reissuing, deleting, or resetting the local HTTPS certificate now takes the same lock that already serializes certificate generation — previously only `ensure()` took it, so one of these actions running while an environment started (or another window refreshed the gateway) could delete `local.crt`/`local.key` out from under an in-progress write.
 - A failed LiveLink start for one site no longer restarts (and briefly disrupts) every other site's already-running tunnel — rolling back a failed attempt now only touches the site that was actually being changed.
 - LiveLink's "Stop" button in the Running Projects table now stops just that project's tunnel instead of every active tunnel at once; the page-level "Stop" button remains as a stop-everything option.
+- The project wizard could show a "domain already in use" error on its final step right after successfully creating the project — the newly created site reappearing in the live sites list (refreshed in the background) made the wizard's own domain-conflict check match against itself.
 
 ## [0.5.1-beta] - 2026-08-10
 
