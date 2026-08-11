@@ -36,9 +36,7 @@ export function ProjectServicesCard({
       <CardContent className="grid divide-y text-sm">
         <div className="flex items-center justify-between py-1.5 first:pt-0">
           <span className="text-muted-foreground">{text.domain}</span>
-          <span className="font-medium">
-            {isNative ? `127.0.0.1:${environment.port}` : site.domain}
-          </span>
+          <span className="font-medium">{site.domain}</span>
         </div>
         {isNative ? (
           (site.projectType === "node" || site.projectType === "react") && (

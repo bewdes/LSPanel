@@ -831,9 +831,8 @@ const en = {
     containerRuntime: "Container",
     nativeRuntime: "Native (no Docker)",
     nativeRuntimeHint:
-      "Runs the app directly on the host with no Docker container. Available only for Node.js, React and static sites. This version has no domain or HTTPS — the site opens at http://127.0.0.1:{port}.",
+      "Runs the app directly on the host with no Docker container. Available only for Node.js, React and static sites. Doesn't need Docker/Podman to run — the site gets the same https://<name>.localhost domain as containerized sites when Docker/Podman is available, and falls back to 127.0.0.1:{port} otherwise.",
     nativeRuntimeContainersValue: "Native process (no containers)",
-    nativeRuntimeUrlValue: (port: string) => `http://127.0.0.1:${port}`,
     nativeRuntimeStaticValue: "Static files (built-in file server)",
     environmentLabel: "Environment",
     selectEnvironment: "Select environment",
