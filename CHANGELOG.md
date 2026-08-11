@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comparing a project snapshot against the current project almost always flagged a "configuration change" that wasn't real — it included `lastStartedAt`, which updates on every environment start, burying genuine config drift in noise.
 - The database query console silently cut off large results at 1,000,000 characters with no indication — a large `SELECT` looked complete when it wasn't. It now appends a clear marker when this happens.
 - Starting or restarting an environment could drop a placeholder `index.html`/`index.php` right into the project's root folder instead of its `app/` subdirectory, next to (not inside) the real project — it checked for and wrote starter files at the wrong location, unlike project creation which already got this right.
+- Deleting an environment always failed to remove its projects' `.env` files ("Site not found"), leaving them behind on disk — the cleanup step looked the site back up in storage after its record had already been cascade-deleted along with the environment. It now uses the project directory captured before deletion instead of re-querying storage.
+- A missing environment during Start/Stop/Restart/Destroy showed the raw error "Окружение не найдено" (Russian) instead of an English/Ukrainian message.
+- Six more validation and status messages (environment name, port range, image version, missing Docker/Podman, and "complete initial setup first") were hardcoded in Russian instead of the app's supported English/Ukrainian.
 
 ### Security
 
