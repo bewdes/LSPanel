@@ -129,9 +129,7 @@ export function SiteDetailsPage({
   const currentSite = site
   const currentEnvironment = environment
   const isNative = currentEnvironment.runtimeMode === "native"
-  const siteUrl = isNative
-    ? `http://127.0.0.1:${currentEnvironment.port}`
-    : `https://${site.domain}`
+  const siteUrl = `https://${site.domain}`
   const active = state === "running"
   const open = (command: string, payload: Record<string, string>) =>
     invoke(command, payload).catch((error) => {
@@ -310,9 +308,7 @@ export function SiteDetailsPage({
         </Button>
         <div className="min-w-0">
           <h2 className="truncate text-2xl font-semibold tracking-tight">{site.name}</h2>
-          <p className="text-sm text-muted-foreground">
-            {isNative ? `127.0.0.1:${currentEnvironment.port}` : site.domain}
-          </p>
+          <p className="text-sm text-muted-foreground">{site.domain}</p>
         </div>
         <Badge className="ml-auto" variant={active ? "default" : "secondary"}>
           {state ?? text.stoppedFallback}

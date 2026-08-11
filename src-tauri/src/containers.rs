@@ -520,6 +520,22 @@ pub fn refresh_site_routes(app: &tauri::AppHandle, environment_id: &str) -> Resu
         .find(|item| item.id == environment_id)
         .ok_or("Environment not found")?;
     if environment.runtime_mode == "native" {
+        // Best-effort: unlike container mode, native environments must keep
+        // working with no Docker/Podman installed at all, so any failure
+        // here (no runtime, daemon not running, gateway container failing
+        // to start) must never fail site creation/update — the site just
+        // stays reachable at 127.0.0.1:<port> only, exactly as before this
+        // routing existed.
+        if let Ok(Some(settings)) = crate::settings::load(app) {
+            let runtime = detect_runtime(Some(&settings.runtime));
+            if let Some(executable) = runtime
+                .runtime
+                .filter(|_| runtime.running && runtime.compose_available)
+            {
+                let _ = ensure_network(&executable);
+                let _ = ensure_gateway(app, &executable);
+            }
+        }
         return Ok(());
     }
     let was_running = environment_status(app, environment_id)

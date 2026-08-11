@@ -110,10 +110,7 @@ export function ReviewStep({
               value={autoInitGit ? text.initializeMainBranch : text.disabled}
             />
           )}
-          <Summary
-            label={text.localUrlLabel}
-            value={isNative ? text.nativeRuntimeUrlValue(nodePort) : `https://${domain}`}
-          />
+          <Summary label={text.localUrlLabel} value={`https://${domain}`} />
           <Summary
             label={text.containersLabel}
             value={

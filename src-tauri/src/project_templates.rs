@@ -613,6 +613,13 @@ fn restore_ownership(
     site: &Site,
     environment: &Environment,
 ) -> Result<(), String> {
+    // Native (containerless) projects are never touched by a container
+    // process, so their files are already owned by the host user — nothing
+    // to repair, and there's no compose stack to run the repair command in
+    // anyway (attempting it fails outright with "no such file or directory").
+    if environment.runtime_mode == "native" {
+        return Ok(());
+    }
     let settings = crate::settings::load(app)?.ok_or("Settings not found")?;
     let metadata = fs::metadata(&settings.sites_directory)
         .map_err(|error| format!("Failed to inspect sites directory ownership: {error}"))?;

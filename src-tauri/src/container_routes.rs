@@ -50,6 +50,21 @@ pub(crate) fn https_proxy_block(hostnames: &str, target: &str) -> String {
     )
 }
 
+/// Same as `https_proxy_block`, but resolves `target` once at nginx
+/// startup/reload instead of per-request via the `resolver 127.0.0.11`
+/// (Docker's embedded DNS) directive. That embedded DNS only knows real
+/// container network aliases — it doesn't see `--add-host`/`extra_hosts`
+/// entries like `host.docker.internal`, so a dynamic `resolver` lookup for
+/// that name fails even though it's present in the container's `/etc/hosts`.
+/// Static resolution is fine here because the gateway container is always
+/// fully recreated (`compose up --force-recreate`) whenever this config is
+/// regenerated, so there's no risk of it serving a stale address.
+pub(crate) fn https_proxy_block_static(hostnames: &str, target: &str) -> String {
+    format!(
+        "server {{ listen 443 ssl; server_name {hostnames}; ssl_certificate /etc/nginx/tls/local.crt; ssl_certificate_key /etc/nginx/tls/local.key; ssl_protocols TLSv1.2 TLSv1.3; location / {{ proxy_set_header Host $host; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_pass http://{target}; }} }}"
+    )
+}
+
 /// A known project whose environment is stopped has no backend to proxy to,
 /// but it's also not the same situation as a mistyped/unknown domain - the
 /// visitor picked a real site, it's just off. `project_name` is validated
@@ -83,8 +98,8 @@ pub(crate) fn live_link_proxy_block(
 #[cfg(test)]
 mod tests {
     use super::{
-        https_proxy_block, live_link_proxy_block, service_hostname, status_is_available,
-        stopped_site_block,
+        https_proxy_block, https_proxy_block_static, live_link_proxy_block, service_hostname,
+        status_is_available, stopped_site_block,
     };
 
     #[test]
@@ -104,6 +119,22 @@ mod tests {
         assert!(block.contains("proxy_set_header Host $host"));
         assert!(block.contains("proxy_set_header X-Forwarded-Proto https"));
         assert!(block.contains("proxy_pass $lspanel_upstream"));
+    }
+
+    #[test]
+    fn static_https_proxy_resolves_the_target_once_instead_of_per_request() {
+        // Regression test: the dynamic block's `resolver 127.0.0.11` is
+        // Docker's embedded DNS, which doesn't know about `extra_hosts`
+        // names like `host.docker.internal` (used to reach native
+        // processes) — using it there causes nginx to fail every request
+        // with "host.docker.internal could not be resolved" even though the
+        // name is present in the container's /etc/hosts. The static variant
+        // must not reference the dynamic resolver/upstream-variable at all.
+        let block = https_proxy_block_static("demo.localhost", "host.docker.internal:4000");
+        assert!(block.contains("server_name demo.localhost"));
+        assert!(block.contains("proxy_pass http://host.docker.internal:4000"));
+        assert!(!block.contains("resolver"));
+        assert!(!block.contains("$lspanel_upstream"));
     }
 
     #[test]
