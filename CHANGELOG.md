@@ -52,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stopping or starting a site from the Ctrl+K quick-actions palette acted on its entire environment instead of just that site — for two sites sharing one environment, stopping one from the palette silently took the other one down too.
 - The quick-actions palette (Ctrl+K) and the in-app project file manager were entirely hardcoded in English, ignoring the app's language setting.
 - The Backups page showed a "Database backups" tab (and tried to fetch backups for it) on native (containerless) projects, which have no database to back up, instead of hiding it the way the project's own details page already does.
+- Following an Elasticsearch, MinIO, RabbitMQ, or cron service's live log tail always failed with "Unsupported log service," even though starting/stopping, exec, log-clearing, and the terminal already worked fine for these services — the live-log allowlist was missing four entries every other per-service check already had.
+- Deleting an environment never removed its database, Redis, Elasticsearch, MinIO, or RabbitMQ data directories — only the generated Compose stack was cleaned up, leaving every deleted environment's engine data (database files, cache snapshots, search indices, object storage, message store) permanently orphaned on disk with no way to reclaim it through the UI.
 
 ### Security
 

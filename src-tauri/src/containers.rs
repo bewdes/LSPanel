@@ -106,6 +106,31 @@ pub fn delete(
             cleanup_errors.push(format!("generated stack: {error}"));
         }
     }
+    // Each service that persists its own state (the database engine, Redis,
+    // Elasticsearch, MinIO, RabbitMQ) gets a host directory bind-mounted into
+    // its container by `prepare()`, separate from the generated compose
+    // stack removed above — without cleaning these up too, every deleted
+    // environment leaves its database files, cache snapshots, search
+    // indices, object storage, and message store permanently orphaned on
+    // disk, with no UI path to reclaim them.
+    let service_directories = [
+        ("database", database_directory(app, id)),
+        ("redis", redis_directory(app, id)),
+        ("elasticsearch", elasticsearch_directory(app, id)),
+        ("minio", minio_directory(app, id)),
+        ("rabbitmq", rabbitmq_directory(app, id)),
+    ];
+    for (label, directory) in service_directories {
+        match directory {
+            Ok(directory) if directory.exists() => {
+                if let Err(error) = fs::remove_dir_all(directory) {
+                    cleanup_errors.push(format!("{label} data: {error}"));
+                }
+            }
+            Ok(_) => {}
+            Err(error) => cleanup_errors.push(format!("{label} data: {error}")),
+        }
+    }
     if let Err(error) = crate::backups::delete_all(app, id) {
         cleanup_errors.push(format!("database backups: {error}"));
     }
