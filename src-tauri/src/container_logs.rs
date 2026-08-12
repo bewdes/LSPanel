@@ -19,6 +19,10 @@ pub fn spawn(
         "mailpit",
         "adminer",
         "phpmyadmin",
+        "cron",
+        "elasticsearch",
+        "minio",
+        "rabbitmq",
     ];
     if service.is_some_and(|value| !SERVICES.contains(&value)) {
         return Err("Unsupported log service".into());
