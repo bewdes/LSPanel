@@ -288,6 +288,22 @@ pub fn provision(
     site: &Site,
     environment: &Environment,
 ) -> Result<(), String> {
+    // WordPress/Laravel/Symfony installation shells out to a PHP/database
+    // container (`run_in_php`/`run_in_service`) — reachable only when
+    // attaching one of these project types to an *existing* native
+    // environment (the wizard's own "new environment" flow never offers
+    // this combination), otherwise failing deep inside with a raw compose
+    // error instead of an explained reason.
+    if environment.runtime_mode == "native"
+        && matches!(
+            site.project_type.as_str(),
+            "wordpress" | "laravel" | "symfony"
+        )
+    {
+        return Err(
+            "Native (containerless) environments don't support WordPress, Laravel, or Symfony installation — attach this project to a container environment instead.".into(),
+        );
+    }
     match site.project_type.as_str() {
         "wordpress" => provision_wordpress(app, site, environment),
         "laravel" => provision_laravel(app, site, environment),
@@ -613,6 +629,13 @@ fn restore_ownership(
     site: &Site,
     environment: &Environment,
 ) -> Result<(), String> {
+    // Native (containerless) projects are never touched by a container
+    // process, so their files are already owned by the host user — nothing
+    // to repair, and there's no compose stack to run the repair command in
+    // anyway (attempting it fails outright with "no such file or directory").
+    if environment.runtime_mode == "native" {
+        return Ok(());
+    }
     let settings = crate::settings::load(app)?.ok_or("Settings not found")?;
     let metadata = fs::metadata(&settings.sites_directory)
         .map_err(|error| format!("Failed to inspect sites directory ownership: {error}"))?;

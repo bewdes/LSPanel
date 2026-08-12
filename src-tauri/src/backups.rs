@@ -327,9 +327,32 @@ pub fn query(app: &tauri::AppHandle, environment_id: &str, sql: &str) -> Result<
             &String::from_utf8_lossy(&output.stderr),
         ));
     }
-    let text = String::from_utf8_lossy(&output.stdout);
-    Ok(text.chars().take(1_000_000).collect())
+    // A silent cutoff here previously looked like a genuinely complete
+    // result — the query console has no other way to tell a truncated
+    // result apart from a small one, and this same output also backs
+    // `list_databases`/`list_tables`/`info` parsing, so a large enough
+    // result set could silently corrupt those too. A trailing marker
+    // communicates the cutoff without changing this function's return type
+    // (and, in practice, never affects those metadata-listing callers,
+    // whose output is nowhere near this size).
+    Ok(truncate_query_output(&String::from_utf8_lossy(
+        &output.stdout,
+    )))
 }
+
+const QUERY_OUTPUT_LIMIT: usize = 1_000_000;
+
+fn truncate_query_output(text: &str) -> String {
+    let mut chars = text.chars();
+    let mut result: String = chars.by_ref().take(QUERY_OUTPUT_LIMIT).collect();
+    if chars.next().is_some() {
+        result.push_str(&format!(
+            "\n\n[LS Panel truncated this output at {QUERY_OUTPUT_LIMIT} characters]"
+        ));
+    }
+    result
+}
+
 pub fn list_tables(app: &tauri::AppHandle, environment_id: &str) -> Result<Vec<String>, String> {
     let environment = environment(app, environment_id)?;
     let sql = if environment.database == "PostgreSQL" {
@@ -941,6 +964,19 @@ fn copy_backup_file(source: &std::path::Path, target: &std::path::Path) -> Resul
     })
 }
 fn context(app: &tauri::AppHandle, id: &str) -> Result<(String, PathBuf), String> {
+    let environment = crate::containers::list(app)?
+        .into_iter()
+        .find(|item| item.id == id)
+        .ok_or("Environment not found")?;
+    if environment.runtime_mode == "native" {
+        // Native (containerless) environments have no database container to
+        // query/back up/restore/clone at all — without this check, every
+        // caller here (query console, backups, import/export, clone/rename)
+        // would proceed to `stack_directory`, which has no compose stack
+        // for native environments, and fail with a raw Docker/compose error
+        // instead of an explained reason.
+        return Err("Not available for native (containerless) environments".into());
+    }
     let preferred = crate::settings::load(app)?.map(|settings| settings.runtime);
     let status = crate::containers::detect_runtime(preferred.as_deref());
     let runtime = status
@@ -1137,9 +1173,28 @@ mod tests {
     use super::{
         copy_backup_file, filter_dump_by_tables, mysql_table_marker, obsolete_backups,
         postgres_table_marker, query_is_read_only, safe_resource_id, split_dump_by_table,
-        valid_backup_id, valid_database_name, valid_table_name, DatabaseBackup,
+        truncate_query_output, valid_backup_id, valid_database_name, valid_table_name,
+        DatabaseBackup, QUERY_OUTPUT_LIMIT,
     };
     use std::fs;
+
+    #[test]
+    fn query_output_under_the_limit_is_returned_unchanged() {
+        let text = "a".repeat(QUERY_OUTPUT_LIMIT);
+        assert_eq!(truncate_query_output(&text), text);
+    }
+
+    #[test]
+    fn query_output_over_the_limit_is_cut_with_a_visible_marker() {
+        // Regression test: truncation used to happen silently, so a large
+        // result set looked genuinely complete instead of cut off.
+        let text = "a".repeat(QUERY_OUTPUT_LIMIT + 1);
+        let result = truncate_query_output(&text);
+        assert!(result.starts_with(&"a".repeat(QUERY_OUTPUT_LIMIT)));
+        assert!(!result.starts_with(&"a".repeat(QUERY_OUTPUT_LIMIT + 1)));
+        assert!(result.contains("truncated"));
+    }
+
     #[test]
     fn backup_ids_reject_traversal() {
         assert!(valid_backup_id("app-123.sql"));

@@ -16,14 +16,14 @@ pub(crate) fn validate_identity_and_platform(environment: &Environment) -> Resul
         );
     }
     if environment.name.trim().is_empty() {
-        return Err("Название окружения обязательно".into());
+        return Err("Environment name is required".into());
     }
     if !environment
         .name
         .chars()
         .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
     {
-        return Err("Название может содержать только латиницу, цифры, - и _".into());
+        return Err("Name may contain only Latin letters, digits, - and _".into());
     }
     if !matches!(environment.web_server.as_str(), "Apache" | "Nginx") {
         return Err("Unsupported web server".into());
@@ -40,9 +40,9 @@ pub(crate) fn validate_identity_and_platform(environment: &Environment) -> Resul
     let port: u16 = environment
         .port
         .parse()
-        .map_err(|_| "Порт должен быть числом от 1 до 65535")?;
+        .map_err(|_| "Port must be a number from 1 to 65535")?;
     if port == 0 {
-        return Err("Порт должен быть числом от 1 до 65535".into());
+        return Err("Port must be a number from 1 to 65535".into());
     }
     for value in [
         &environment.web_version,
@@ -59,7 +59,7 @@ pub(crate) fn validate_identity_and_platform(environment: &Environment) -> Resul
                 character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_')
             })
         {
-            return Err("Недопустимая версия образа".into());
+            return Err("Invalid image version".into());
         }
     }
     if !matches!(

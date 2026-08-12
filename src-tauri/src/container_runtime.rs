@@ -59,7 +59,7 @@ pub fn detect(preferred: Option<&str>) -> RuntimeStatus {
         running: false,
         version: None,
         compose_available: false,
-        message: "Docker или Podman не найден".into(),
+        message: "Docker or Podman not found".into(),
     })
 }
 

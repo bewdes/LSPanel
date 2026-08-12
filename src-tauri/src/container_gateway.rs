@@ -4,8 +4,8 @@ use tauri::Manager;
 
 use crate::container_compose::site_hostnames;
 use crate::container_routes::{
-    https_proxy_block, live_link_proxy_block, local_http_status, service_hostname,
-    status_is_available as route_status_is_available, stopped_site_block,
+    https_proxy_block, https_proxy_block_static, live_link_proxy_block, local_http_status,
+    service_hostname, status_is_available as route_status_is_available, stopped_site_block,
 };
 use crate::container_runtime::command as runtime_command;
 use crate::container_runtime::detect as detect_runtime;
@@ -85,12 +85,30 @@ pub(crate) fn ensure_gateway(app: &tauri::AppHandle, executable: &str) -> Result
                 .iter()
                 .find(|environment| environment.id == site.environment_id)
                 .map(|environment| {
-                    let target = if crate::project_templates::is_node_project(&site.project_type) {
-                        format!("lsp-{}-node:3000", environment.id)
+                    if environment.runtime_mode == "native" {
+                        // Native processes run directly on the host, not on
+                        // the `lspanel` container network, so they can't be
+                        // reached by container DNS name. `host.docker.internal`
+                        // (enabled via this compose file's `extra_hosts`
+                        // below) resolves to the host-gateway bridge address,
+                        // which the native side also binds to — see
+                        // `native_runtime::discover_docker_host_gateway`.
+                        // Needs the *static* proxy block: the dynamic one's
+                        // `resolver 127.0.0.11` is Docker's embedded DNS,
+                        // which doesn't know about `extra_hosts` entries.
+                        https_proxy_block_static(
+                            &site_hostnames(site),
+                            &format!("host.docker.internal:{}", environment.port),
+                        )
                     } else {
-                        format!("lsp-{}:80", environment.id)
-                    };
-                    https_proxy_block(&site_hostnames(site), &target)
+                        let target =
+                            if crate::project_templates::is_node_project(&site.project_type) {
+                                format!("lsp-{}-node:3000", environment.id)
+                            } else {
+                                format!("lsp-{}:80", environment.id)
+                            };
+                        https_proxy_block(&site_hostnames(site), &target)
+                    }
                 })
         })
         .collect::<Vec<_>>();
@@ -192,7 +210,7 @@ pub(crate) fn ensure_gateway(app: &tauri::AppHandle, executable: &str) -> Result
             .iter()
             .map(|link| format!("\"127.0.0.1:{0}:{0}\"", link.local_port)),
     );
-    fs::write(directory.join("compose.yaml"), format!("name: lspanel-gateway\nservices:\n  gateway:\n    image: docker.io/library/nginx:1.28-alpine\n    ports: [{}]\n    volumes: [\"./default.conf:/etc/nginx/conf.d/default.conf:ro\", \"./local.crt:/etc/nginx/tls/local.crt:ro\", \"./local.key:/etc/nginx/tls/local.key:ro\"]\n    networks:\n      lspanel:\n        aliases: [{}]\n    restart: unless-stopped\nnetworks:\n  lspanel:\n    external: true\n", published_ports.join(", "), gateway_aliases)).map_err(|error| error.to_string())?;
+    fs::write(directory.join("compose.yaml"), format!("name: lspanel-gateway\nservices:\n  gateway:\n    image: docker.io/library/nginx:1.28-alpine\n    ports: [{}]\n    volumes: [\"./default.conf:/etc/nginx/conf.d/default.conf:ro\", \"./local.crt:/etc/nginx/tls/local.crt:ro\", \"./local.key:/etc/nginx/tls/local.key:ro\"]\n    extra_hosts:\n      - \"host.docker.internal:host-gateway\"\n    networks:\n      lspanel:\n        aliases: [{}]\n    restart: unless-stopped\nnetworks:\n  lspanel:\n    external: true\n", published_ports.join(", "), gateway_aliases)).map_err(|error| error.to_string())?;
     // Rootless Docker/Podman providers can try to create the replacement
     // container before rootlessport has released 80/443 from the old gateway.
     // Recreate our generated Compose project from a clean state; unrelated

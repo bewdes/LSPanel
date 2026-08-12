@@ -292,6 +292,58 @@ fn write_react_starter(directory: &Path, site: &Site) -> Result<(), String> {
     fs::write(directory.join("src/style.css"), ":root{font-family:Inter,system-ui,sans-serif;color:#f5f5f5;background:#111}body{margin:0;min-height:100vh;display:grid;place-items:center}main{max-width:42rem;padding:3rem}h1{font-size:3rem;margin:.25rem 0}p{color:#aaa}\n").map_err(|error|error.to_string())
 }
 
+// Only ever fills in a starter file for a genuinely blank project. Checking
+// just for known marker files (index.php, package.json, ...) isn't enough:
+// an imported or cloned project can be substantial — its own source tree, a
+// .git history — while still lacking one of those exact names at the root,
+// and silently dropping a placeholder into it would mask the real
+// application instead of serving it. Content always lands under `app/`
+// (or `app/public` for Laravel/Symfony) — never at the bare project root,
+// which is reserved for the `app/` folder itself and any project metadata.
+fn seed_starter_files(
+    app_directory: &Path,
+    site: &Site,
+    environment: &Environment,
+) -> Result<(), String> {
+    let content_root = if matches!(site.project_type.as_str(), "laravel" | "symfony") {
+        app_directory.join("public")
+    } else {
+        app_directory.to_path_buf()
+    };
+    let app_directory_is_empty = app_directory
+        .read_dir()
+        .map(|mut entries| entries.next().is_none())
+        .unwrap_or(true);
+    if !app_directory_is_empty
+        || content_root.join("index.php").exists()
+        || content_root.join("index.html").exists()
+        || app_directory.join("public/index.php").exists()
+        || content_root.join("package.json").exists()
+    {
+        return Ok(());
+    }
+    if site.project_type == "node" {
+        write_node_starter(&content_root, site)
+    } else if site.project_type == "react" {
+        write_react_starter(&content_root, site)
+    } else if site.project_type == "static" {
+        fs::write(content_root.join("index.html"), format!("<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title></head><body><h1>{}</h1><p>LS Panel static site is running.</p></body></html>\n", site.name, site.name)).map_err(|error| error.to_string())
+    } else if matches!(site.project_type.as_str(), "laravel" | "symfony") {
+        fs::create_dir_all(app_directory.join("public")).map_err(|error| error.to_string())?;
+        fs::write(
+            app_directory.join("public/index.php"),
+            "<?php http_response_code(200); echo 'Preparing Laravel…';\n",
+        )
+        .map_err(|error| error.to_string())
+    } else {
+        fs::write(
+            content_root.join("index.php"),
+            default_php_index(site, environment),
+        )
+        .map_err(|error| error.to_string())
+    }
+}
+
 pub fn list(app: &tauri::AppHandle) -> Result<Vec<Site>, String> {
     crate::storage::list_sites(app)?
         .into_iter()
@@ -410,48 +462,7 @@ pub fn create(app: &tauri::AppHandle, mut site: Site) -> Result<Vec<Site>, Strin
         .map_err(|error| format!("Failed to create site directory: {error}"))?;
     let app_directory = directory.join("app");
     fs::create_dir_all(&app_directory).map_err(|error| error.to_string())?;
-    let content_root = if matches!(site.project_type.as_str(), "laravel" | "symfony") {
-        app_directory.join("public")
-    } else {
-        app_directory.clone()
-    };
-    // Only ever fill in a starter file for a genuinely blank project. Checking
-    // just for known marker files (index.php, package.json, ...) isn't
-    // enough: an imported or cloned project can be substantial — its own
-    // source tree, a .git history — while still lacking one of those exact
-    // names at the root, and silently dropping a placeholder into it would
-    // mask the real application instead of serving it.
-    let app_directory_is_empty = app_directory
-        .read_dir()
-        .map(|mut entries| entries.next().is_none())
-        .unwrap_or(true);
-    if app_directory_is_empty
-        && !content_root.join("index.php").exists()
-        && !content_root.join("index.html").exists()
-        && !app_directory.join("public/index.php").exists()
-        && !content_root.join("package.json").exists()
-    {
-        if site.project_type == "node" {
-            write_node_starter(&content_root, &site)?;
-        } else if site.project_type == "react" {
-            write_react_starter(&content_root, &site)?;
-        } else if site.project_type == "static" {
-            fs::write(content_root.join("index.html"), format!("<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title></head><body><h1>{}</h1><p>LS Panel static site is running.</p></body></html>\n", site.name, site.name)).map_err(|error| error.to_string())?;
-        } else if matches!(site.project_type.as_str(), "laravel" | "symfony") {
-            fs::create_dir_all(app_directory.join("public")).map_err(|error| error.to_string())?;
-            fs::write(
-                app_directory.join("public/index.php"),
-                "<?php http_response_code(200); echo 'Preparing Laravel…';\n",
-            )
-            .map_err(|error| error.to_string())?;
-        } else {
-            fs::write(
-                content_root.join("index.php"),
-                default_php_index(&site, &environment),
-            )
-            .map_err(|error| error.to_string())?;
-        }
-    }
+    seed_starter_files(&app_directory, &site, &environment)?;
     site.directory = directory.display().to_string();
     crate::storage::save_site(
         app,
@@ -788,51 +799,14 @@ pub fn ensure_directories(app: &tauri::AppHandle, environment_id: &str) -> Resul
         .filter(|site| site.environment_id == environment_id)
     {
         let directory = PathBuf::from(&site.directory);
-        fs::create_dir_all(&directory).map_err(|error| {
+        let app_directory = directory.join("app");
+        fs::create_dir_all(&app_directory).map_err(|error| {
             format!(
                 "Failed to restore site directory {}: {error}",
-                directory.display()
+                app_directory.display()
             )
         })?;
-        if !directory.join("index.php").exists()
-            && !directory.join("index.html").exists()
-            && !directory.join("public/index.php").exists()
-            && !directory.join("package.json").exists()
-        {
-            if site.project_type == "react" {
-                write_react_starter(&directory, &site)?;
-            } else if site.project_type == "node" {
-                fs::write(directory.join("package.json"), format!("{{\"name\":{},\"private\":true,\"scripts\":{{\"start\":\"node server.js\"}}}}\n",serde_json::to_string(&site.name).map_err(|error|error.to_string())?)).map_err(|error|error.to_string())?;
-                fs::write(directory.join("server.js"),"require('node:http').createServer((q,s)=>s.end('LS Panel Node.js site is running.')).listen(3000,'0.0.0');\n").map_err(|error|error.to_string())?;
-                fs::write(
-                    directory.join("index.html"),
-                    "Node.js service is starting…\n",
-                )
-                .map_err(|error| error.to_string())?;
-            } else if site.project_type == "static" {
-                fs::write(
-                    directory.join("index.html"),
-                    format!(
-                        "<!doctype html><title>{}</title><h1>{}</h1>\n",
-                        site.name, site.name
-                    ),
-                )
-                .map_err(|error| error.to_string())?;
-            } else if site.project_type == "laravel" {
-                fs::create_dir_all(directory.join("public")).map_err(|error| error.to_string())?;
-                fs::write(
-                    directory.join("public/index.php"),
-                    "<?php echo 'Preparing Laravel…';\n",
-                )
-                .map_err(|error| error.to_string())?;
-            } else {
-                fs::write(
-                    directory.join("index.php"),
-                    default_php_index(&site, &environment),
-                )
-                .map_err(|error| error.to_string())?;
-            }
-        }
+        seed_starter_files(&app_directory, &site, &environment)?;
     }
     Ok(())
 }
@@ -840,8 +814,8 @@ pub fn ensure_directories(app: &tauri::AppHandle, environment_id: &str) -> Resul
 #[cfg(test)]
 mod tests {
     use super::{
-        domains_overlap, validate_local_alias, validate_local_domain, validate_project_name,
-        write_react_starter, Site,
+        domains_overlap, seed_starter_files, validate_local_alias, validate_local_domain,
+        validate_project_name, write_react_starter, Environment, Site,
     };
     use std::fs;
 
@@ -919,6 +893,76 @@ mod tests {
         assert!(package.contains("\"react\": \"latest\""));
         assert!(package.contains("vite --host 0.0.0.0 --port 3000"));
         assert!(directory.join("src/main.jsx").is_file());
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn seed_starter_files_writes_into_app_directory_not_the_project_root() {
+        let directory =
+            std::env::temp_dir().join(format!("lspanel-seed-starter-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        let app_directory = directory.join("app");
+        fs::create_dir_all(&app_directory).unwrap();
+        let site = Site {
+            id: "static-test".into(),
+            name: "static-site".into(),
+            domain: "static.localhost".into(),
+            environment_id: "env-test".into(),
+            directory: directory.display().to_string(),
+            project_type: "static".into(),
+            aliases: vec![],
+            tags: vec![],
+            group: String::new(),
+            pinned: false,
+            archived: false,
+            enabled: true,
+            auto_init_git: false,
+            created_at: 0,
+            last_started_at: None,
+        };
+        let environment: Environment = serde_json::from_str(
+            r#"{"id":"env-test","name":"env","webServer":"nginx","webVersion":"1.28","phpVersion":"8.3","database":"mysql","databaseVersion":"8","port":"8080"}"#,
+        )
+        .unwrap();
+        seed_starter_files(&app_directory, &site, &environment).unwrap();
+        assert!(app_directory.join("index.html").is_file());
+        assert!(!directory.join("index.html").exists());
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn seed_starter_files_does_not_overwrite_an_already_populated_app_directory() {
+        let directory = std::env::temp_dir().join(format!(
+            "lspanel-seed-starter-populated-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        let app_directory = directory.join("app");
+        fs::create_dir_all(&app_directory).unwrap();
+        fs::write(app_directory.join("app.js"), "console.log('real project')").unwrap();
+        let site = Site {
+            id: "static-test".into(),
+            name: "static-site".into(),
+            domain: "static.localhost".into(),
+            environment_id: "env-test".into(),
+            directory: directory.display().to_string(),
+            project_type: "static".into(),
+            aliases: vec![],
+            tags: vec![],
+            group: String::new(),
+            pinned: false,
+            archived: false,
+            enabled: true,
+            auto_init_git: false,
+            created_at: 0,
+            last_started_at: None,
+        };
+        let environment: Environment = serde_json::from_str(
+            r#"{"id":"env-test","name":"env","webServer":"nginx","webVersion":"1.28","phpVersion":"8.3","database":"mysql","databaseVersion":"8","port":"8080"}"#,
+        )
+        .unwrap();
+        seed_starter_files(&app_directory, &site, &environment).unwrap();
+        assert!(!app_directory.join("index.html").exists());
         let _ = fs::remove_dir_all(directory);
     }
 }

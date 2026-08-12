@@ -85,6 +85,49 @@ pub fn find_available_port() -> Result<u16, String> {
         .map_err(|error| format!("Failed to allocate a port: {error}"))
 }
 
+/// Finds the host address Docker/Podman's `host.docker.internal` resolves
+/// to, so a native static server can additionally bind to it and become
+/// reachable from the containerized HTTPS gateway for `<name>.localhost`
+/// routing — without binding to `0.0.0.0`, which would also expose the port
+/// to every other device on the local network. This is deliberately
+/// best-effort: `None` (no runtime installed, daemon not running, rootless
+/// Podman without a bridge network, ...) just means the site stays reachable
+/// at 127.0.0.1:<port> only, exactly as before this routing existed.
+///
+/// There's no portable way to ask Docker/Podman for this address directly,
+/// so a throwaway container is used to read its own `/etc/hosts` after
+/// requesting the same `host.docker.internal:host-gateway` mapping the
+/// gateway's own compose file uses — this works identically for both
+/// runtimes and needs no extra image (the gateway already requires
+/// `nginx:1.28-alpine`).
+fn discover_docker_host_gateway(app: &tauri::AppHandle) -> Option<String> {
+    let settings = crate::settings::load(app).ok().flatten()?;
+    let status = crate::containers::detect_runtime(Some(&settings.runtime));
+    let executable = status
+        .runtime
+        .filter(|_| status.running && status.compose_available)?;
+    let output = crate::containers::runtime_command(&executable)
+        .args([
+            "run",
+            "--rm",
+            "--add-host=host.docker.internal:host-gateway",
+            "docker.io/library/nginx:1.28-alpine",
+            "sh",
+            "-c",
+            "grep host.docker.internal /etc/hosts",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .split_whitespace()
+        .next()
+        .map(str::to_owned)
+}
+
 pub fn status(app: &tauri::AppHandle, environment_id: &str) -> String {
     let registry = app.state::<NativeProcesses>();
     let Ok(mut processes) = registry.0.lock() else {
@@ -128,6 +171,11 @@ pub fn operate(
             crate::container_lifecycle::emit_progress(app, &environment.id, 50, "Starting process");
             start(app, environment)?;
             crate::sites::mark_environment_started(app, &environment.id)?;
+            // Best-effort: regenerates the HTTPS gateway's routing so
+            // `<name>.localhost` targets this process's freshly (re)bound
+            // gateway-facing listener. Never fails the operation — native
+            // environments must keep starting fine with no Docker/Podman.
+            let _ = crate::containers::refresh_gateway(app);
             "Native process started".to_string()
         }
         "stop" | "kill" | "destroy" => {
@@ -170,7 +218,13 @@ fn start(app: &tauri::AppHandle, environment: &Environment) -> Result<(), String
         .port
         .parse()
         .map_err(|_| "Invalid port for this environment")?;
-    let directory = PathBuf::from(&site.directory);
+    // The project's actual source lives in `app/`, not the site's root
+    // directory — the same convention used everywhere else (git status, the
+    // file manager, environment_files, sites::create). Serving/running from
+    // the bare root instead left the static server and Node process unable
+    // to find the very files ensure_directories() had just seeded into
+    // `app/`, producing a 404 on every fresh native site.
+    let directory = PathBuf::from(&site.directory).join("app");
     if !directory.is_dir() {
         return Err(format!(
             "Project directory not found: {}",
@@ -185,6 +239,7 @@ fn start(app: &tauri::AppHandle, environment: &Environment) -> Result<(), String
     let log_buffer: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
     let backend = if site.project_type == "static" {
         let shutdown = Arc::new(AtomicBool::new(false));
+        let gateway_host = discover_docker_host_gateway(app);
         spawn_static_server(
             app.clone(),
             environment.id.clone(),
@@ -192,6 +247,7 @@ fn start(app: &tauri::AppHandle, environment: &Environment) -> Result<(), String
             port,
             shutdown.clone(),
             log_buffer.clone(),
+            gateway_host,
         )?;
         Backend::StaticServer(shutdown)
     } else {
@@ -585,6 +641,7 @@ fn spawn_static_server(
     port: u16,
     shutdown: Arc<AtomicBool>,
     log_buffer: Arc<Mutex<VecDeque<String>>>,
+    gateway_host: Option<String>,
 ) -> Result<(), String> {
     let listener = TcpListener::bind(("127.0.0.1", port))
         .map_err(|error| format!("Failed to bind 127.0.0.1:{port}: {error}"))?;
@@ -598,6 +655,22 @@ fn spawn_static_server(
         format!("Serving {} on http://127.0.0.1:{port}", root.display()),
         Some(&log_buffer),
     );
+    spawn_accept_loop(listener, root.clone(), shutdown.clone());
+    // Best-effort second listener so the containerized HTTPS gateway can
+    // reach this process for `<name>.localhost` routing. Bound only to
+    // Docker/Podman's host-gateway address (never `0.0.0.0`), so the port
+    // stays unreachable from other devices on the local network.
+    if let Some(host) = gateway_host {
+        if let Ok(gateway_listener) = TcpListener::bind((host.as_str(), port)) {
+            if gateway_listener.set_nonblocking(true).is_ok() {
+                spawn_accept_loop(gateway_listener, root, shutdown);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn spawn_accept_loop(listener: TcpListener, root: PathBuf, shutdown: Arc<AtomicBool>) {
     thread::spawn(move || {
         while !shutdown.load(Ordering::SeqCst) {
             match listener.accept() {
@@ -612,7 +685,6 @@ fn spawn_static_server(
             }
         }
     });
-    Ok(())
 }
 
 fn handle_static_request(mut stream: std::net::TcpStream, root: &Path) {

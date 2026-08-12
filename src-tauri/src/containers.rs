@@ -117,7 +117,7 @@ pub fn delete(
         if let Err(error) = crate::snapshots::delete_all(app, &site.id) {
             cleanup_errors.push(format!("snapshots for {}: {error}", site.id));
         }
-        if let Err(error) = crate::environment_files::remove(app, &site.id) {
+        if let Err(error) = crate::environment_files::remove_for_directory(app, &site.directory) {
             cleanup_errors.push(format!("env file for {}: {error}", site.id));
         }
         if !delete_files {
@@ -186,7 +186,7 @@ fn operate_inner(
     let environment = list(app)?
         .into_iter()
         .find(|item| item.id == id)
-        .ok_or("Окружение не найдено")?;
+        .ok_or("Environment not found")?;
     validate(&environment)?;
     if environment.runtime_mode == "native" {
         return crate::native_runtime::operate(app, &environment, action);
@@ -359,6 +359,15 @@ fn service_context(
         .into_iter()
         .find(|item| item.id == id)
         .ok_or("Environment not found")?;
+    if environment.runtime_mode == "native" {
+        // Native (containerless) environments have no per-service
+        // containers to exec/reconfigure/reset logs for — without this
+        // check, callers reachable outside the UI's own native guards would
+        // otherwise proceed to `stack_directory`, which has no compose
+        // stack for native environments, and fail with a raw "No such file
+        // or directory" instead of an explained reason.
+        return Err("Not available for native (containerless) environments".into());
+    }
     let available = service == "web"
         || service == "database"
         || (service == "php" && environment.web_server == "Nginx")
@@ -520,6 +529,22 @@ pub fn refresh_site_routes(app: &tauri::AppHandle, environment_id: &str) -> Resu
         .find(|item| item.id == environment_id)
         .ok_or("Environment not found")?;
     if environment.runtime_mode == "native" {
+        // Best-effort: unlike container mode, native environments must keep
+        // working with no Docker/Podman installed at all, so any failure
+        // here (no runtime, daemon not running, gateway container failing
+        // to start) must never fail site creation/update — the site just
+        // stays reachable at 127.0.0.1:<port> only, exactly as before this
+        // routing existed.
+        if let Ok(Some(settings)) = crate::settings::load(app) {
+            let runtime = detect_runtime(Some(&settings.runtime));
+            if let Some(executable) = runtime
+                .runtime
+                .filter(|_| runtime.running && runtime.compose_available)
+            {
+                let _ = ensure_network(&executable);
+                let _ = ensure_gateway(app, &executable);
+            }
+        }
         return Ok(());
     }
     let was_running = environment_status(app, environment_id)
@@ -1083,8 +1108,7 @@ pub(crate) fn prepare(
     let elasticsearch_dir = elasticsearch_directory(app, &environment.id)?;
     let minio_dir = minio_directory(app, &environment.id)?;
     let rabbitmq_dir = rabbitmq_directory(app, &environment.id)?;
-    let settings =
-        crate::settings::load(app)?.ok_or("Сначала завершите первоначальную настройку")?;
+    let settings = crate::settings::load(app)?.ok_or("Complete the initial setup first")?;
     let sites_directory = PathBuf::from(settings.sites_directory);
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     fs::create_dir_all(&sites_directory).map_err(|error| error.to_string())?;

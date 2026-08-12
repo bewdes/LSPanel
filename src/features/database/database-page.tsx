@@ -79,10 +79,16 @@ export function DatabasePage({
   const text = pickLanguage(language).database
   const [selectedId, setSelectedId] = React.useState("")
   const [overview, setOverview] = React.useState<Record<string, Overview>>({})
+  // Native (containerless) environments have no database container to
+  // manage here at all — nothing on this page applies to them.
+  const containerEnvironments = React.useMemo(
+    () => environments.filter((environment) => environment.runtimeMode !== "native"),
+    [environments],
+  )
 
   const refreshOverview = React.useCallback(async () => {
     const entries = await Promise.all(
-      environments.map(async (environment) => {
+      containerEnvironments.map(async (environment) => {
         try {
           const databases = await invoke<DatabaseEntry[]>("list_databases", {
             environmentId: environment.id,
@@ -102,13 +108,13 @@ export function DatabasePage({
       }),
     )
     setOverview(Object.fromEntries(entries))
-  }, [environments])
+  }, [containerEnvironments])
 
   React.useEffect(() => {
     void refreshOverview()
   }, [refreshOverview])
 
-  const selected = environments.find((environment) => environment.id === selectedId)
+  const selected = containerEnvironments.find((environment) => environment.id === selectedId)
   if (selected) {
     return (
       <DatabaseDetails
@@ -149,7 +155,7 @@ export function DatabasePage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {environments.map((environment) => {
+              {containerEnvironments.map((environment) => {
                 const relatedSites = sites.filter((site) => site.environmentId === environment.id)
                 const services = environment.extraServices ?? []
                 const admin = services.includes("phpmyadmin")
@@ -239,7 +245,7 @@ export function DatabasePage({
               })}
             </TableBody>
           </Table>
-          {environments.length === 0 && (
+          {containerEnvironments.length === 0 && (
             <div className="grid place-items-center gap-2 py-16 text-muted-foreground">
               <Database className="size-8" />
               <p className="text-sm">{text.noDatabasesYet}</p>
