@@ -88,7 +88,7 @@ export function FilesPage({
       />
       <div className="px-4 pb-6 lg:px-6">
         {selectedSite ? (
-          <ProjectFileManager key={selectedSite.id} siteId={selectedSite.id} />
+          <ProjectFileManager key={selectedSite.id} siteId={selectedSite.id} language={language} />
         ) : managed ? (
           <ManagedFileBrowser
             key={`${managed.scope}-${managed.resourceId}`}

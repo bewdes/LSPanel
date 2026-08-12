@@ -292,9 +292,7 @@ export function SitesPage({
                   0,
                 )
                 const isNative = environment?.runtimeMode === "native"
-                const siteUrl = isNative
-                  ? `http://127.0.0.1:${environment?.port ?? ""}`
-                  : `https://${site.domain}`
+                const siteUrl = `https://${site.domain}`
                 return (
                   <TableRow
                     key={site.id}
@@ -312,9 +310,7 @@ export function SitesPage({
                             <span className="truncate">{site.name}</span>
                             {isNative && <Badge variant="outline">{text.nativeBadge}</Badge>}
                           </span>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {isNative ? `127.0.0.1:${environment?.port ?? ""}` : site.domain}
-                          </p>
+                          <p className="truncate text-xs text-muted-foreground">{site.domain}</p>
                           <p
                             className="max-w-80 truncate text-xs text-muted-foreground"
                             title={site.directory}

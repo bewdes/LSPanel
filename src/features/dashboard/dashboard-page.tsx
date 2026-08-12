@@ -192,8 +192,6 @@ export function Dashboard({
           </CardHeader>
           <CardContent className="grid gap-2">
             {sites.slice(0, 5).map((site) => {
-              const environment = environments.find((item) => item.id === site.environmentId)
-              const isNative = environment?.runtimeMode === "native"
               return (
                 <button
                   key={site.id}
@@ -206,7 +204,7 @@ export function Dashboard({
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{site.name}</span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {isNative ? `127.0.0.1:${environment?.port ?? ""}` : site.domain}
+                      {site.domain}
                     </span>
                   </span>
                   <Badge
