@@ -191,6 +191,13 @@ pub fn import(
     environment.database_container_name.clear();
     environment.database_password = crate::environment_files::generate_secret(32)?;
     environment.database_root_password = crate::environment_files::generate_secret(32)?;
+    // MinIO/RabbitMQ passwords are required and validated unconditionally
+    // (unlike Redis, which allows an empty password), so they must always be
+    // regenerated here even for environments that don't actually use those
+    // services — otherwise `containers::save` below rejects every single
+    // import with a "password must be at least 8 characters" error.
+    environment.minio_root_password = crate::environment_files::generate_secret(32)?;
+    environment.rabbitmq_password = crate::environment_files::generate_secret(32)?;
     if environment
         .extra_services
         .iter()

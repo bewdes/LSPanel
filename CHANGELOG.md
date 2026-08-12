@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A missing environment during Start/Stop/Restart/Destroy showed the raw error "Окружение не найдено" (Russian) instead of an English/Ukrainian message.
 - Six more validation and status messages (environment name, port range, image version, missing Docker/Podman, and "complete initial setup first") were hardcoded in Russian instead of the app's supported English/Ukrainian.
 - Starting a native (containerless) site served files (or ran `npm`/`pnpm`) from the project's root folder instead of its `app/` subdirectory, so a freshly created static/Node.js project always 404'd — its `index.html`/`package.json` live in `app/`, not the root.
+- Importing an exported project bundle always failed with a "MinIO root password must be at least 8 characters" error, regardless of whether the original environment used MinIO or RabbitMQ at all — export blanks those passwords like every other secret, but import never regenerated them the way it already did for the database password.
 
 ### Security
 
