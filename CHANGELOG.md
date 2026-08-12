@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Settings: an "About" section showing the app version, description, and author contact links (GitHub profile, repository, email).
+- One-click buttons to open MinIO's and RabbitMQ's web admin consoles from a project's Developer Tools card, matching the button Mailpit already had — the reverse-proxy routes for both already existed, just without a way to reach them.
+- A "Fallback command" field for Node.js projects (project wizard and environment editor) — it was already sent to the backend and used when the dev/start commands are both left empty, but had no UI to see or change it.
 
 ### Fixed
 

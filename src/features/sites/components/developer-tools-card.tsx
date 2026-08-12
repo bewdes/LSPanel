@@ -45,6 +45,26 @@ export function DeveloperToolsCard({
             Mailpit <ExternalLink />
           </Button>
         )}
+        {environment.extraServices?.includes("minio") && (
+          <Button
+            variant="outline"
+            onClick={() =>
+              open("open_url", { url: `https://${serviceHostname("minio", environment.name)}` })
+            }
+          >
+            MinIO <ExternalLink />
+          </Button>
+        )}
+        {environment.extraServices?.includes("rabbitmq") && (
+          <Button
+            variant="outline"
+            onClick={() =>
+              open("open_url", { url: `https://${serviceHostname("rabbitmq", environment.name)}` })
+            }
+          >
+            RabbitMQ <ExternalLink />
+          </Button>
+        )}
         {site.projectType === "laravel" && (
           <>
             <Button

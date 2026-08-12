@@ -133,6 +133,12 @@ export function ServicesTab({
               onChange={(e) => update("nodeStartCommand", e.target.value)}
             />
           </Field>
+          <Field label={text.fallbackCommandLabel} description={text.fallbackCommandDescription}>
+            <Input
+              value={draft.nodeCommand}
+              onChange={(e) => update("nodeCommand", e.target.value)}
+            />
+          </Field>
           <CheckRow
             label={text.installDepsAutomatically}
             checked={draft.nodeAutoInstall}

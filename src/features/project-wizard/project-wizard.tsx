@@ -526,6 +526,8 @@ export function ProjectWizard({
                   setNodeBuildCommand={setNodeBuildCommand}
                   nodeStartCommand={nodeStartCommand}
                   setNodeStartCommand={setNodeStartCommand}
+                  nodeCommand={nodeCommand}
+                  setNodeCommand={setNodeCommand}
                   nodePort={nodePort}
                   setNodePort={setNodePort}
                   runtimeMode={runtimeMode}
@@ -556,6 +558,8 @@ export function ProjectWizard({
                   setNodeBuildCommand={setNodeBuildCommand}
                   nodeStartCommand={nodeStartCommand}
                   setNodeStartCommand={setNodeStartCommand}
+                  nodeCommand={nodeCommand}
+                  setNodeCommand={setNodeCommand}
                   nodePort={nodePort}
                   setNodePort={setNodePort}
                   runtimeMode={runtimeMode}
