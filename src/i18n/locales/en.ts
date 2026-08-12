@@ -376,6 +376,9 @@ const en = {
     devCommandLabel: "Dev command",
     buildCommandLabel: "Build command",
     startCommandLabel: "Start command",
+    fallbackCommandLabel: "Fallback command",
+    fallbackCommandDescription:
+      "Used only if both the dev and start commands above are left empty.",
     installDepsAutomatically: "Install dependencies automatically",
     restartNodeAutomatically: "Restart Node.js container automatically",
     enableNodeInspector: "Enable Node Inspector",
@@ -898,6 +901,9 @@ const en = {
     startCommandLabel: "Start command",
     devCommandLabel: "Dev command",
     buildCommandLabel: "Build command",
+    fallbackCommandLabel: "Fallback command",
+    fallbackCommandDescription:
+      "Used only if both the dev and start commands above are left empty.",
     portLabel: "Port",
     modeLabel: "Mode",
     activeRunCommandLabel: "Active run command",

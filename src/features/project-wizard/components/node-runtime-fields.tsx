@@ -19,6 +19,8 @@ export function NodeRuntimeFields({
   setNodeBuildCommand,
   nodeStartCommand,
   setNodeStartCommand,
+  nodeCommand,
+  setNodeCommand,
   nodePort,
   setNodePort,
   runtimeMode,
@@ -47,6 +49,8 @@ export function NodeRuntimeFields({
   setNodeBuildCommand: (value: string) => void
   nodeStartCommand: string
   setNodeStartCommand: (value: string) => void
+  nodeCommand: string
+  setNodeCommand: (value: string) => void
   nodePort: string
   setNodePort: (value: string) => void
   runtimeMode: string
@@ -99,6 +103,9 @@ export function NodeRuntimeFields({
                 value={nodeStartCommand}
                 onChange={(event) => setNodeStartCommand(event.target.value)}
               />
+            </Field>
+            <Field label={text.fallbackCommandLabel} description={text.fallbackCommandDescription}>
+              <Input value={nodeCommand} onChange={(event) => setNodeCommand(event.target.value)} />
             </Field>
             <Field label={text.activeRunCommandLabel}>
               <Choice value={nodeRunMode} values={["dev", "start"]} onChange={setNodeRunMode} />
@@ -155,6 +162,9 @@ export function NodeRuntimeFields({
           value={nodeBuildCommand}
           onChange={(event) => setNodeBuildCommand(event.target.value)}
         />
+      </Field>
+      <Field label={text.fallbackCommandLabel} description={text.fallbackCommandDescription}>
+        <Input value={nodeCommand} onChange={(event) => setNodeCommand(event.target.value)} />
       </Field>
       <Field label={text.portLabel}>
         <Input

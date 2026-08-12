@@ -14,11 +14,20 @@ import {
 } from "@/components/ui/select"
 import { pickLanguage } from "@/i18n"
 
-export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export function Field({
+  label,
+  description,
+  children,
+}: {
+  label: string
+  description?: string
+  children: React.ReactNode
+}) {
   return (
     <div className="grid gap-2">
       <Label>{label}</Label>
       {children}
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
     </div>
   )
 }

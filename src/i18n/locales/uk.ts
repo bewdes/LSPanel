@@ -415,6 +415,9 @@ const uk: Dictionary = {
     devCommandLabel: "Команда розробки",
     buildCommandLabel: "Команда збірки",
     startCommandLabel: "Команда запуску",
+    fallbackCommandLabel: "Резервна команда",
+    fallbackCommandDescription:
+      "Використовується, лише якщо команди розробки й запуску вище лишити порожніми.",
     installDepsAutomatically: "Автоматично встановлювати залежності",
     restartNodeAutomatically: "Автоматично перезапускати контейнер Node.js",
     enableNodeInspector: "Увімкнути Node Inspector",
@@ -944,6 +947,9 @@ const uk: Dictionary = {
     startCommandLabel: "Команда запуску",
     devCommandLabel: "Команда розробки",
     buildCommandLabel: "Команда збірки",
+    fallbackCommandLabel: "Резервна команда",
+    fallbackCommandDescription:
+      "Використовується, лише якщо команди розробки й запуску вище лишити порожніми.",
     portLabel: "Порт",
     modeLabel: "Режим",
     activeRunCommandLabel: "Активна команда запуску",
