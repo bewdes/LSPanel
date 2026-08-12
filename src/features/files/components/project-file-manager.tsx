@@ -32,6 +32,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { pickLanguage } from "@/i18n"
+import { errorMessage } from "@/lib/errors"
 
 type ProjectFileEntry = {
   name: string
@@ -46,7 +48,8 @@ type ProjectFileEntry = {
 
 type ProjectTextFile = { path: string; text: string; size: number }
 
-export function ProjectFileManager({ siteId }: { siteId: string }) {
+export function ProjectFileManager({ siteId, language }: { siteId: string; language: string }) {
+  const copy = pickLanguage(language).files
   const [directory, setDirectory] = React.useState("")
   const [entries, setEntries] = React.useState<ProjectFileEntry[]>([])
   const [selected, setSelected] = React.useState<ProjectFileEntry | null>(null)
@@ -58,6 +61,7 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
   const [renameName, setRenameName] = React.useState("")
   const [busy, setBusy] = React.useState(false)
   const [message, setMessage] = React.useState("")
+  const [messageOk, setMessageOk] = React.useState(false)
   const [deletePath, setDeletePath] = React.useState("")
   const [permissionMode, setPermissionMode] = React.useState("")
   const [usage, setUsage] = React.useState<{
@@ -76,7 +80,8 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
         setResults(null)
         setSelected(null)
       } catch (error) {
-        setMessage(String(error))
+        setMessage(errorMessage(error))
+        setMessageOk(false)
       } finally {
         setBusy(false)
       }
@@ -107,7 +112,8 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
       setOpened(file)
       setText(file.text)
     } catch (error) {
-      setMessage(String(error))
+      setMessage(errorMessage(error))
+      setMessageOk(false)
     } finally {
       setBusy(false)
     }
@@ -123,9 +129,11 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
       else await invoke("write_project_file", { siteId, path, text: "" })
       setNewName("")
       await load(directory)
-      setMessage(`${folder ? "Directory" : "File"} created successfully.`)
+      setMessage(folder ? copy.directoryCreated : copy.fileCreated)
+      setMessageOk(true)
     } catch (error) {
-      setMessage(String(error))
+      setMessage(errorMessage(error))
+      setMessageOk(false)
     } finally {
       setBusy(false)
     }
@@ -142,9 +150,11 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
         text,
       })
       setOpened(file)
-      setMessage("Project file saved successfully.")
+      setMessage(copy.fileSaved)
+      setMessageOk(true)
     } catch (error) {
-      setMessage(String(error))
+      setMessage(errorMessage(error))
+      setMessageOk(false)
     } finally {
       setBusy(false)
     }
@@ -162,9 +172,11 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
       })
       if (opened?.path === selected.path) setOpened({ ...opened, path })
       await load(directory)
-      setMessage("Project item renamed successfully.")
+      setMessage(copy.itemRenamed)
+      setMessageOk(true)
     } catch (error) {
-      setMessage(String(error))
+      setMessage(errorMessage(error))
+      setMessageOk(false)
     } finally {
       setBusy(false)
     }
@@ -178,9 +190,11 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
       if (opened?.path === deletePath) setOpened(null)
       setDeletePath("")
       await load(directory)
-      setMessage("Project item deleted successfully.")
+      setMessage(copy.itemDeleted)
+      setMessageOk(true)
     } catch (error) {
-      setMessage(String(error))
+      setMessage(errorMessage(error))
+      setMessageOk(false)
     } finally {
       setBusy(false)
     }
@@ -195,7 +209,8 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
     try {
       setResults(await invoke<ProjectFileEntry[]>("search_project_files", { siteId, query }))
     } catch (error) {
-      setMessage(String(error))
+      setMessage(errorMessage(error))
+      setMessageOk(false)
     } finally {
       setBusy(false)
     }
@@ -212,7 +227,8 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
         }),
       )
     } catch (error) {
-      setMessage(String(error))
+      setMessage(errorMessage(error))
+      setMessageOk(false)
     } finally {
       setBusy(false)
     }
@@ -228,9 +244,11 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
         mode: permissionMode,
       })
       setSelected({ ...selected, permissions: `0${permissionMode}` })
-      setMessage("Project item permissions updated successfully.")
+      setMessage(copy.permissionsUpdated)
+      setMessageOk(true)
     } catch (error) {
-      setMessage(String(error))
+      setMessage(errorMessage(error))
+      setMessageOk(false)
     } finally {
       setBusy(false)
     }
@@ -264,7 +282,8 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
       })
       await action(absolutePath)
     } catch (error) {
-      setMessage(String(error))
+      setMessage(errorMessage(error))
+      setMessageOk(false)
     }
   }
 
@@ -272,10 +291,10 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
     <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.8fr)_minmax(420px,1.2fr)]">
       <Card className="min-w-0">
         <CardHeader>
-          <CardTitle className="text-base">Project files</CardTitle>
+          <CardTitle className="text-base">{copy.projectFilesTitle}</CardTitle>
           <div className="flex flex-wrap items-center gap-1 text-sm">
             <Button variant="ghost" size="sm" onClick={() => void load("")}>
-              Project
+              {copy.projectRootCrumb}
             </Button>
             {crumbs.map((crumb, index) => (
               <React.Fragment key={`${crumb}-${index}`}>
@@ -294,7 +313,7 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
         <CardContent className="grid gap-3">
           <div className="flex gap-2">
             <Input
-              placeholder="Search names…"
+              placeholder={copy.searchNamesPlaceholder}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && void search()}
@@ -323,12 +342,12 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
           )}
           <div className="flex gap-2">
             <Input
-              placeholder="New file or directory"
+              placeholder={copy.newFileOrDirectoryPlaceholder}
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
             />
             <Button
-              title="Create file"
+              title={copy.createFileTitle}
               variant="outline"
               size="icon"
               disabled={busy || !newName.trim()}
@@ -337,7 +356,7 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
               <FilePlus2 />
             </Button>
             <Button
-              title="Create directory"
+              title={copy.createDirectoryTitle}
               variant="outline"
               size="icon"
               disabled={busy || !newName.trim()}
@@ -361,27 +380,34 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
               </button>
             ))}
             {!displayed.length && (
-              <p className="p-8 text-center text-sm text-muted-foreground">No files found</p>
+              <p className="p-8 text-center text-sm text-muted-foreground">{copy.noFilesFound}</p>
             )}
           </div>
           {selected && (
             <div className="grid gap-2 rounded-lg border p-3">
               <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                <span>Permissions: {selected.permissions ?? "—"}</span>
-                <span>Owner: {selected.owner ?? "—"}</span>
-                <span>Size: {selected.directory ? "Directory" : formatSize(selected.size)}</span>
                 <span>
-                  Modified:{" "}
+                  {copy.permissionsLabel}: {selected.permissions ?? "—"}
+                </span>
+                <span>
+                  {copy.ownerLabel}: {selected.owner ?? "—"}
+                </span>
+                <span>
+                  {copy.sizeLabel}:{" "}
+                  {selected.directory ? copy.directoryValue : formatSize(selected.size)}
+                </span>
+                <span>
+                  {copy.modifiedLabel}:{" "}
                   {selected.modifiedAt
                     ? new Date(selected.modifiedAt * 1000).toLocaleString()
                     : "—"}
                 </span>
                 {usage && (
                   <>
-                    <span>Total size: {formatSize(usage.bytes)}</span>
                     <span>
-                      {usage.files} files · {usage.directories} directories
+                      {copy.totalSizeLabel}: {formatSize(usage.bytes)}
                     </span>
+                    <span>{copy.filesAndDirectoriesCount(usage.files, usage.directories)}</span>
                   </>
                 )}
               </div>
@@ -393,11 +419,11 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
                   onClick={() => void calculateUsage()}
                 >
                   <HardDrive />
-                  {busy ? "Calculating…" : "Calculate size"}
+                  {busy ? copy.calculating : copy.calculateSize}
                 </Button>
                 <Input
                   className="w-24 font-mono"
-                  aria-label="Unix permissions"
+                  aria-label={copy.unixPermissionsAriaLabel}
                   maxLength={3}
                   value={permissionMode}
                   onChange={(event) =>
@@ -410,7 +436,7 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
                   disabled={busy || permissionMode.length !== 3}
                   onClick={() => void applyPermissions()}
                 >
-                  Apply permissions
+                  {copy.applyPermissions}
                 </Button>
               </div>
               <div className="flex gap-2">
@@ -421,7 +447,7 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
                 <Button
                   variant="outline"
                   size="icon"
-                  title="Copy absolute path"
+                  title={copy.copyAbsolutePathTitle}
                   disabled={busy}
                   onClick={() =>
                     void withAbsolutePath(selected, (path) => navigator.clipboard.writeText(path))
@@ -432,7 +458,7 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
                 <Button
                   variant="outline"
                   size="icon"
-                  title="Open with system application"
+                  title={copy.openWithSystemAppTitle}
                   disabled={busy}
                   onClick={() =>
                     void withAbsolutePath(selected, (path) => invoke("open_path", { path }))
@@ -444,7 +470,7 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
                   <Button
                     variant="outline"
                     size="icon"
-                    title="Open in code editor"
+                    title={copy.openInCodeEditorTitle}
                     disabled={busy}
                     onClick={() =>
                       void withAbsolutePath(selected, (path) => invoke("open_editor", { path }))
@@ -469,10 +495,10 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
       <Card className="min-w-0">
         <CardHeader className="flex-row items-center">
           <CardTitle className="min-w-0 flex-1 truncate text-base">
-            {opened?.path ?? "Text editor"}
+            {opened?.path ?? copy.textEditorFallbackTitle}
           </CardTitle>
           <Button disabled={busy || !opened} onClick={() => void save()}>
-            <Save /> Save
+            <Save /> {copy.save}
           </Button>
         </CardHeader>
         <CardContent>
@@ -481,30 +507,27 @@ export function ProjectFileManager({ siteId }: { siteId: string }) {
             disabled={!opened}
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="Select a text file to open it."
+            placeholder={copy.selectFileToOpenPlaceholder}
           />
         </CardContent>
       </Card>
       {message && (
-        <Alert
-          className="xl:col-span-2"
-          variant={message.includes("successfully") ? "default" : "destructive"}
-        >
+        <Alert className="xl:col-span-2" variant={messageOk ? "default" : "destructive"}>
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       )}
       <AlertDialog open={Boolean(deletePath)} onOpenChange={(open) => !open && setDeletePath("")}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete project item?</AlertDialogTitle>
+            <AlertDialogTitle>{copy.deleteItemTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              {deletePath} will be permanently deleted. Directories must be empty.
+              {copy.deleteItemDescription(deletePath)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>{copy.cancel}</AlertDialogCancel>
             <AlertDialogAction disabled={busy} onClick={() => void remove()}>
-              Delete
+              {copy.delete}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

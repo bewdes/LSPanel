@@ -45,6 +45,7 @@ export function BackupsPage({
   const text = pickLanguage(language).backups
   const site = sites.find((item) => item.id === siteId)
   const environment = environments.find((item) => item.id === site?.environmentId)
+  const isNative = environment?.runtimeMode === "native"
 
   React.useEffect(() => {
     if (!sites.some((item) => item.id === siteId)) setSiteId(sites[0]?.id ?? "")
@@ -60,7 +61,11 @@ export function BackupsPage({
       })),
     )
     const backupRequests = environments
-      .filter((item) => !["none", "sqlite", ""].includes(item.database.toLowerCase()))
+      .filter(
+        (item) =>
+          item.runtimeMode !== "native" &&
+          !["none", "sqlite", ""].includes(item.database.toLowerCase()),
+      )
       .map((item) =>
         invoke<DatabaseBackup[]>("list_database_backups", { environmentId: item.id }).then(
           (items) => ({ environmentId: item.id, items }),
@@ -177,7 +182,7 @@ export function BackupsPage({
             <Tabs defaultValue="snapshots">
               <TabsList>
                 <TabsTrigger value="snapshots">{text.projectSnapshotsTab}</TabsTrigger>
-                <TabsTrigger value="database">{text.databaseBackupsTab}</TabsTrigger>
+                {!isNative && <TabsTrigger value="database">{text.databaseBackupsTab}</TabsTrigger>}
               </TabsList>
               <TabsContent value="snapshots" className="pt-4">
                 <ProjectSnapshots
@@ -186,21 +191,23 @@ export function BackupsPage({
                   onChanged={() => void refresh()}
                 />
               </TabsContent>
-              <TabsContent value="database" className="pt-4">
-                {environment ? (
-                  <DatabaseBackups
-                    environment={environment}
-                    language={language}
-                    onChanged={() => void refresh()}
-                  />
-                ) : (
-                  <Card>
-                    <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                      {text.noDatabaseEnvironment}
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
+              {!isNative && (
+                <TabsContent value="database" className="pt-4">
+                  {environment ? (
+                    <DatabaseBackups
+                      environment={environment}
+                      language={language}
+                      onChanged={() => void refresh()}
+                    />
+                  ) : (
+                    <Card>
+                      <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                        {text.noDatabaseEnvironment}
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+              )}
             </Tabs>
           </>
         ) : (

@@ -48,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Six more validation and status messages (environment name, port range, image version, missing Docker/Podman, and "complete initial setup first") were hardcoded in Russian instead of the app's supported English/Ukrainian.
 - Starting a native (containerless) site served files (or ran `npm`/`pnpm`) from the project's root folder instead of its `app/` subdirectory, so a freshly created static/Node.js project always 404'd — its `index.html`/`package.json` live in `app/`, not the root.
 - Importing an exported project bundle always failed with a "MinIO root password must be at least 8 characters" error, regardless of whether the original environment used MinIO or RabbitMQ at all — export blanks those passwords like every other secret, but import never regenerated them the way it already did for the database password.
+- The Dashboard's "Recent sites" card and the Sites list (subtitle, "Open," and "Copy URL") showed a native (containerless) site's `127.0.0.1:<port>` instead of its real `https://<name>.localhost` domain, inconsistent with the site's own details page.
+- Stopping or starting a site from the Ctrl+K quick-actions palette acted on its entire environment instead of just that site — for two sites sharing one environment, stopping one from the palette silently took the other one down too.
+- The quick-actions palette (Ctrl+K) and the in-app project file manager were entirely hardcoded in English, ignoring the app's language setting.
+- The Backups page showed a "Database backups" tab (and tried to fetch backups for it) on native (containerless) projects, which have no database to back up, instead of hiding it the way the project's own details page already does.
 
 ### Security
 

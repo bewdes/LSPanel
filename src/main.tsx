@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client"
 import type { Root } from "react-dom/client"
 import { invoke } from "@tauri-apps/api/core"
 import { errorMessage } from "@/lib/errors"
+import { pickLanguage } from "@/i18n"
 import { listen } from "@tauri-apps/api/event"
 import {
   Code2,
@@ -163,6 +164,7 @@ function App() {
     )
 
   const language = settings.language
+  const paletteText = pickLanguage(language).commandPalette
   const running = Object.values(states).filter((status) => status === "running").length
 
   async function operate(
@@ -385,10 +387,8 @@ function App() {
       >
         <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-2xl">
           <DialogHeader className="border-b p-4">
-            <DialogTitle>Quick actions</DialogTitle>
-            <DialogDescription>
-              Search sites and containers, run common actions. Shortcut: Ctrl+K
-            </DialogDescription>
+            <DialogTitle>{paletteText.title}</DialogTitle>
+            <DialogDescription>{paletteText.description}</DialogDescription>
           </DialogHeader>
           <div className="relative border-b">
             <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -397,7 +397,7 @@ function App() {
               value={paletteSearch}
               onChange={(event) => setPaletteSearch(event.target.value)}
               className="h-12 rounded-none border-0 pl-11 shadow-none focus-visible:ring-0"
-              placeholder="Search sites and containers…"
+              placeholder={paletteText.searchPlaceholder}
             />
           </div>
           <div className="grid max-h-[55vh] gap-1 overflow-y-auto p-2">
@@ -410,7 +410,7 @@ function App() {
               }}
             >
               <Plus />
-              Create project
+              {paletteText.createProject}
             </Button>
             <Button
               variant="ghost"
@@ -422,7 +422,7 @@ function App() {
               }}
             >
               <Server />
-              Open containers
+              {paletteText.openContainers}
             </Button>
             <Separator className="my-1" />
             {(() => {
@@ -445,11 +445,12 @@ function App() {
                 <>
                   {matchedSites.length > 0 && (
                     <p className="px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground">
-                      Sites
+                      {paletteText.sitesGroup}
                     </p>
                   )}
                   {matchedSites.map((site) => {
-                    const state = states[site.environmentId] ?? "stopped"
+                    const siteRunning =
+                      states[site.environmentId] === "running" && site.enabled !== false
                     return (
                       <div
                         key={site.id}
@@ -465,18 +466,16 @@ function App() {
                             <p className="truncate text-xs text-muted-foreground">{site.domain}</p>
                           </div>
                         </Button>
-                        <Badge variant={state === "running" ? "default" : "secondary"}>
-                          {state}
+                        <Badge variant={siteRunning ? "default" : "secondary"}>
+                          {siteRunning ? paletteText.running : paletteText.stopped}
                         </Badge>
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          onClick={() =>
-                            void operate(site.environmentId, state === "running" ? "stop" : "start")
-                          }
-                          title={state === "running" ? "Stop" : "Start"}
+                          onClick={() => void operateSite(site.id, siteRunning ? "stop" : "start")}
+                          title={siteRunning ? paletteText.stop : paletteText.start}
                         >
-                          {state === "running" ? <Square /> : <Play />}
+                          {siteRunning ? <Square /> : <Play />}
                         </Button>
                         <Button
                           variant="ghost"
@@ -484,7 +483,7 @@ function App() {
                           onClick={() =>
                             paletteInvoke("open_url", { url: `https://${site.domain}` })
                           }
-                          title="Open site"
+                          title={paletteText.openSite}
                         >
                           <ExternalLink />
                         </Button>
@@ -492,7 +491,7 @@ function App() {
                           variant="ghost"
                           size="icon-sm"
                           onClick={() => paletteInvoke("open_editor", { path: site.directory })}
-                          title="Open editor"
+                          title={paletteText.openEditor}
                         >
                           <Code2 />
                         </Button>
@@ -500,7 +499,7 @@ function App() {
                           variant="ghost"
                           size="icon-sm"
                           onClick={() => paletteInvoke("open_terminal", { path: site.directory })}
-                          title="Open terminal"
+                          title={paletteText.openTerminal}
                         >
                           <TerminalSquare />
                         </Button>
@@ -509,7 +508,7 @@ function App() {
                   })}
                   {matchedEnvironments.length > 0 && (
                     <p className="px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground">
-                      Containers
+                      {paletteText.containersGroup}
                     </p>
                   )}
                   {matchedEnvironments.map((environment) => {
@@ -532,7 +531,7 @@ function App() {
                           </div>
                         </Button>
                         <Badge variant={state === "running" ? "default" : "secondary"}>
-                          {state}
+                          {state === "running" ? paletteText.running : paletteText.stopped}
                         </Badge>
                         <Button
                           variant="ghost"
@@ -540,7 +539,7 @@ function App() {
                           onClick={() =>
                             void operate(environment.id, state === "running" ? "stop" : "start")
                           }
-                          title={state === "running" ? "Stop" : "Start"}
+                          title={state === "running" ? paletteText.stop : paletteText.start}
                         >
                           {state === "running" ? <Square /> : <Play />}
                         </Button>
@@ -549,7 +548,7 @@ function App() {
                   })}
                   {!matchedSites.length && !matchedEnvironments.length && (
                     <p className="py-8 text-center text-sm text-muted-foreground">
-                      No matching sites or containers.
+                      {paletteText.noMatches}
                     </p>
                   )}
                 </>
