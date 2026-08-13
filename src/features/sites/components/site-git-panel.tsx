@@ -119,6 +119,7 @@ export function SiteGitPanel({
             <CardContent className="grid gap-3">
               <Select
                 value={status.branch}
+                disabled={busy}
                 onValueChange={(value) => {
                   if (value && value !== status.branch) void checkoutBranch(String(value))
                 }}
@@ -137,10 +138,11 @@ export function SiteGitPanel({
               <div className="flex gap-2">
                 <Input
                   value={newBranch}
+                  disabled={busy}
                   onChange={(event) => setNewBranch(event.target.value)}
                   placeholder="feature/new-branch"
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") void checkoutBranch(newBranch, true)
+                    if (event.key === "Enter" && !busy) void checkoutBranch(newBranch, true)
                   }}
                 />
                 <Button
