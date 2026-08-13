@@ -1246,8 +1246,12 @@ pub(crate) fn prepare(
         php_dockerfile(environment, sites_owner.uid(), sites_owner.gid()),
     )
     .map_err(|error| error.to_string())?;
-    fs::write(
-        directory.join("compose.yaml"),
+    // compose.yaml embeds every service's plaintext credentials (database,
+    // MinIO, RabbitMQ, phpMyAdmin), so it's written with the same 0600,
+    // symlink-safe helper used for other secret-bearing files instead of
+    // fs::write's default (world-readable) permissions.
+    crate::security::write_private_file(
+        &directory.join("compose.yaml"),
         compose(
             environment,
             &sites_directory,
@@ -1257,9 +1261,9 @@ pub(crate) fn prepare(
             &elasticsearch_dir,
             &minio_dir,
             &rabbitmq_dir,
-        ),
-    )
-    .map_err(|error| error.to_string())?;
+        )
+        .as_bytes(),
+    )?;
     Ok(directory)
 }
 

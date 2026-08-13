@@ -115,13 +115,15 @@ fn create_inner(
             )?;
             let database = crate::backups::create(app, &environment.id)?;
             temporary_backup_id = Some(database.id.clone());
-            fs::copy(database.path, directory.join("database.sql"))
+            secure_copy(&database.path, directory.join("database.sql"))
                 .map_err(|error| error.to_string())?;
         }
         let env = crate::environment_files::read(app, site_id)?;
         if env.exists {
-            fs::write(directory.join("project.env"), env.text)
-                .map_err(|error| error.to_string())?;
+            crate::security::write_private_file(
+                &directory.join("project.env"),
+                env.text.as_bytes(),
+            )?;
         }
         let manifest = Manifest {
             site,
@@ -131,11 +133,14 @@ fn create_inner(
             has_env: env.exists,
             has_database: include_database,
         };
-        fs::write(
-            directory.join("manifest.json"),
-            serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?,
-        )
-        .map_err(|error| error.to_string())?;
+        // Unlike an export bundle, a snapshot's manifest keeps the full
+        // environment record (including database/service passwords) so it
+        // can be restored byte-for-byte — 0600 is the only thing standing
+        // between that and any other local account reading it.
+        crate::security::write_private_file(
+            &directory.join("manifest.json"),
+            &serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?,
+        )?;
         Ok(())
     })();
     if let Some(backup_id) = &temporary_backup_id {
@@ -534,15 +539,31 @@ pub fn import(
     if !manifest.name.ends_with(" (imported)") {
         manifest.name.push_str(" (imported)");
     }
-    fs::write(
-        target.join("manifest.json"),
-        serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
+    crate::security::write_private_file(
+        &target.join("manifest.json"),
+        &serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?,
+    )?;
     list(app, site_id)?
         .into_iter()
         .find(|snapshot| snapshot.id == id)
         .ok_or("Imported snapshot was not created".into())
+}
+
+// A secret-bearing file's permissions aren't guaranteed once it's copied
+// from an externally-supplied import bundle — fs::copy mirrors whatever mode
+// the source happened to have, which could be world-readable. Force 0600
+// on the destination regardless.
+fn secure_copy(
+    source: impl AsRef<std::path::Path>,
+    target: impl AsRef<std::path::Path>,
+) -> std::io::Result<()> {
+    fs::copy(source, target.as_ref())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(target, fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
 }
 
 fn copy_snapshot_files(source: &std::path::Path, target: &std::path::Path) -> Result<(), String> {
@@ -550,14 +571,14 @@ fn copy_snapshot_files(source: &std::path::Path, target: &std::path::Path) -> Re
         .map_err(|error| format!("Failed to create snapshot directory: {error}"))?;
     let result = (|| {
         let file = "manifest.json";
-        fs::copy(source.join(file), target.join(file))
+        secure_copy(source.join(file), target.join(file))
             .map_err(|error| format!("Failed to copy {file}: {error}"))?;
         if source.join("database.sql").is_file() {
-            fs::copy(source.join("database.sql"), target.join("database.sql"))
+            secure_copy(source.join("database.sql"), target.join("database.sql"))
                 .map_err(|error| format!("Failed to copy database.sql: {error}"))?;
         }
         if source.join("project.env").is_file() {
-            fs::copy(source.join("project.env"), target.join("project.env"))
+            secure_copy(source.join("project.env"), target.join("project.env"))
                 .map_err(|error| format!("Failed to copy project.env: {error}"))?;
         }
         Ok(())
@@ -599,9 +620,31 @@ pub fn delete_all(app: &tauri::AppHandle, site_id: &str) -> Result<(), String> {
 mod tests {
     use super::{
         changed_json_fields, obsolete_snapshots, run_with_rollback, safe_filename,
-        safe_resource_id, valid, Snapshot,
+        safe_resource_id, secure_copy, valid, Snapshot,
     };
     use std::cell::Cell;
+
+    #[test]
+    #[cfg(unix)]
+    fn secure_copy_forces_owner_only_permissions_even_from_a_permissive_source() {
+        // Regression test: fs::copy mirrors the source file's mode, so
+        // copying a project.env/database.sql from an externally-supplied
+        // import bundle could silently inherit world-readable permissions.
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+        let directory =
+            std::env::temp_dir().join(format!("lspanel-secure-copy-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("source.env");
+        let target = directory.join("target.env");
+        fs::write(&source, "SECRET=1").unwrap();
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o644)).unwrap();
+        secure_copy(&source, &target).unwrap();
+        let mode = fs::metadata(&target).unwrap().permissions().mode() & 0o777;
+        let _ = fs::remove_dir_all(&directory);
+        assert_eq!(mode, 0o600);
+    }
 
     #[test]
     fn compare_ignores_excluded_fields_but_still_reports_real_changes() {

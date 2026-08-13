@@ -78,16 +78,11 @@ pub fn write(app: &tauri::AppHandle, site_id: &str, text: &str) -> Result<Enviro
     }
     parse(text)?;
     let path = env_path(app, site_id)?;
-    if path.exists() {
-        reject_symlink(&path)?;
-    }
-    let temporary = path.with_extension(format!("env.tmp-{}", std::process::id()));
-    fs::write(&temporary, text.as_bytes())
-        .map_err(|error| format!("Failed to write temporary .env: {error}"))?;
-    fs::rename(&temporary, &path).map_err(|error| {
-        let _ = fs::remove_file(&temporary);
-        format!("Failed to replace .env: {error}")
-    })?;
+    // .env commonly holds real application secrets (APP_KEY, API tokens,
+    // database credentials) — write_private_file() covers both the atomic
+    // temp-file-then-rename swap this used to do by hand and the 0600
+    // permissions it was missing.
+    crate::security::write_private_file(&path, text.as_bytes())?;
     read(app, site_id)
 }
 
@@ -134,38 +129,11 @@ pub fn export_file(
     site_id: &str,
     destination: &std::path::Path,
 ) -> Result<(), String> {
-    if destination
-        .symlink_metadata()
-        .is_ok_and(|metadata| metadata.file_type().is_symlink())
-    {
-        return Err("Environment export cannot overwrite a symbolic link".into());
-    }
-    let parent = destination
-        .parent()
-        .ok_or("Invalid environment export path")?;
-    if !parent.is_dir() {
-        return Err("Environment export directory does not exist".into());
-    }
     let source = read(app, site_id)?;
     if !source.exists {
         return Err("Project .env does not exist".into());
     }
-    let temporary = parent.join(format!(".lspanel-env-export-{}.tmp", std::process::id()));
-    let _ = fs::remove_file(&temporary);
-    fs::write(&temporary, source.text.as_bytes()).map_err(|error| {
-        let _ = fs::remove_file(&temporary);
-        format!("Failed to write environment export: {error}")
-    })?;
-    if destination.is_file() {
-        fs::remove_file(destination).map_err(|error| {
-            let _ = fs::remove_file(&temporary);
-            format!("Failed to replace environment export: {error}")
-        })?;
-    }
-    fs::rename(&temporary, destination).map_err(|error| {
-        let _ = fs::remove_file(&temporary);
-        format!("Failed to finalize environment export: {error}")
-    })
+    crate::security::write_private_file(destination, source.text.as_bytes())
 }
 
 pub fn list_profiles(app: &tauri::AppHandle, site_id: &str) -> Result<Vec<String>, String> {
@@ -203,7 +171,7 @@ pub fn save_profile(
         return Err("Environment profile is larger than the 1 MiB safety limit".into());
     }
     let path = profile_path(app, site_id, profile)?;
-    atomic_write(&path, text.as_bytes(), "environment profile")
+    crate::security::write_private_file(&path, text.as_bytes())
 }
 
 pub fn activate_profile(
@@ -250,23 +218,6 @@ fn valid_profile_name(profile: &str) -> bool {
                 || character.is_ascii_digit()
                 || matches!(character, '-' | '_')
         })
-}
-
-fn atomic_write(path: &std::path::Path, data: &[u8], label: &str) -> Result<(), String> {
-    if path.exists() {
-        reject_symlink(&path.to_path_buf())?;
-    }
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| format!("Invalid {label} path"))?;
-    let temporary = path.with_file_name(format!("{file_name}.tmp-{}", std::process::id()));
-    fs::write(&temporary, data)
-        .map_err(|error| format!("Failed to write temporary {label}: {error}"))?;
-    fs::rename(&temporary, path).map_err(|error| {
-        let _ = fs::remove_file(&temporary);
-        format!("Failed to replace {label}: {error}")
-    })
 }
 
 pub fn generate_secret(length: usize) -> Result<String, String> {
