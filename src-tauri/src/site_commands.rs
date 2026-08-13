@@ -607,7 +607,7 @@ pub async fn duplicate_site(
                 .iter()
                 .find(|site| site.id == duplicate_site_id)
                 .ok_or("Duplicated project was not found")?;
-            project_templates::configure_duplicate(duplicated_site, &environment)?;
+            project_templates::configure_duplicate(&worker, duplicated_site, &environment)?;
             Ok(created)
         })();
 
