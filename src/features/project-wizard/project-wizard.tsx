@@ -3,12 +3,20 @@ import { invoke } from "@tauri-apps/api/core"
 import { errorMessage } from "@/lib/errors"
 import { listen } from "@tauri-apps/api/event"
 import { open } from "@tauri-apps/plugin-dialog"
-import { ArrowLeft, ArrowRight, Check } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, TerminalSquare } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Progress } from "@/components/ui/progress"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { pickLanguage } from "@/i18n"
 import { WEB_SERVER_VERSIONS } from "@/lib/version-catalog"
 import type { Environment, Runtime, Site } from "@/types"
@@ -122,6 +130,8 @@ export function ProjectWizard({
     stage: text.preparingProject,
   })
   const [creationElapsed, setCreationElapsed] = React.useState(0)
+  const [provisionLines, setProvisionLines] = React.useState<string[]>([])
+  const provisionLogRef = React.useRef<HTMLDivElement>(null)
   const activeCreationEnvironment = React.useRef("")
   const creationStartedAt = React.useRef(0)
   const [error, setError] = React.useState("")
@@ -164,6 +174,21 @@ export function ProjectWizard({
       void unlisten.then((dispose) => dispose())
     }
   }, [text.buildingProject])
+  React.useEffect(() => {
+    const unlisten = listen<{ environmentId: string; line: string }>(
+      "project-provision-output",
+      ({ payload }) => {
+        if (payload.environmentId !== activeCreationEnvironment.current) return
+        setProvisionLines((current) => [...current.slice(-499), payload.line])
+      },
+    )
+    return () => {
+      void unlisten.then((dispose) => dispose())
+    }
+  }, [])
+  React.useEffect(() => {
+    provisionLogRef.current?.scrollTo({ top: provisionLogRef.current.scrollHeight })
+  }, [provisionLines])
   React.useEffect(() => {
     if (!environmentId && availableEnvironments[0]) setEnvironmentId(availableEnvironments[0].id)
   }, [environmentId, availableEnvironments])
@@ -226,6 +251,7 @@ export function ProjectWizard({
     creationStartedAt.current = Date.now()
     setCreationElapsed(0)
     setCreationProgress({ progress: 1, stage: text.preparingProject })
+    setProvisionLines([])
     setError("")
     const timestamp = Date.now()
     const id = `site-${timestamp}`
@@ -747,6 +773,46 @@ export function ProjectWizard({
               </div>
             )}
           </div>
+          {(busy || createdProjectId) && (
+            <Sheet>
+              <SheetTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
+                    title={text.showTerminal}
+                  />
+                }
+              >
+                <TerminalSquare />
+              </SheetTrigger>
+              <SheetContent className="w-full min-w-0 sm:max-w-xl">
+                <SheetHeader>
+                  <SheetTitle>{text.showTerminal}</SheetTitle>
+                  <SheetDescription>{text.showTerminalDescription}</SheetDescription>
+                </SheetHeader>
+                <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
+                  <div
+                    ref={provisionLogRef}
+                    className="h-full min-h-96 overflow-auto rounded-lg bg-black p-3 font-mono text-xs text-zinc-200"
+                    aria-live="polite"
+                  >
+                    {provisionLines.length ? (
+                      provisionLines.map((line, index) => (
+                        <div key={`${index}-${line}`} className="whitespace-pre-wrap break-all">
+                          {line}
+                        </div>
+                      ))
+                    ) : (
+                      <span className="text-zinc-500">{text.waitingForOutput}</span>
+                    )}
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+          )}
           {step < 6 ? (
             <Button className="shrink-0" disabled={!canContinue} onClick={next}>
               {text.continue}

@@ -7,9 +7,43 @@ use std::{
     process::{Command, Stdio},
 };
 
+use serde::Serialize;
+use tauri::Emitter;
+
 use crate::{containers::Environment, sites::Site};
 
 const SYMFONY_INSTALL_COMMAND: &str = "APP_ENV=dev COMPOSER_MEMORY_LIMIT=-1 composer create-project --no-interaction symfony/skeleton . && APP_ENV=dev composer require --no-interaction webapp";
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProvisionOutput {
+    environment_id: String,
+    line: String,
+}
+
+/// Shows the user exactly what LS Panel runs on their behalf while
+/// scaffolding a project — the same `composer create-project`/wp-cli
+/// commands (and, for the .env values it patches afterward, exactly which
+/// keys) a person would run by hand from a terminal. Secrets are redacted
+/// the same way any other environment output already is.
+fn emit_provision_line(
+    app: &tauri::AppHandle,
+    environment_id: &str,
+    line: &str,
+    secrets: &[String],
+) {
+    let clean = crate::security::redact(line, secrets.iter().cloned());
+    if clean.trim().is_empty() {
+        return;
+    }
+    let _ = app.emit(
+        "project-provision-output",
+        ProvisionOutput {
+            environment_id: environment_id.into(),
+            line: clean,
+        },
+    );
+}
 
 pub fn is_node_project(project_type: &str) -> bool {
     matches!(project_type, "node" | "react")
@@ -312,10 +346,14 @@ pub fn provision(
     }
 }
 
-pub fn configure_duplicate(site: &Site, environment: &Environment) -> Result<(), String> {
+pub fn configure_duplicate(
+    app: &tauri::AppHandle,
+    site: &Site,
+    environment: &Environment,
+) -> Result<(), String> {
     match site.project_type.as_str() {
-        "laravel" => configure_laravel_env(site, environment),
-        "symfony" => configure_symfony_env(site, environment),
+        "laravel" => configure_laravel_env(app, site, environment),
+        "symfony" => configure_symfony_env(app, site, environment),
         "wordpress" => {
             let path = Path::new(&site.directory).join("app").join("wp-config.php");
             let mut contents = fs::read_to_string(&path)
@@ -432,7 +470,7 @@ fn provision_laravel(
         96,
         "Configuring Laravel database",
     )?;
-    configure_laravel_env(site, environment)
+    configure_laravel_env(app, site, environment)
 }
 
 fn provision_symfony(
@@ -455,10 +493,14 @@ fn provision_symfony(
         96,
         "Configuring Symfony database",
     )?;
-    configure_symfony_env(site, environment)
+    configure_symfony_env(app, site, environment)
 }
 
-fn configure_laravel_env(site: &Site, environment: &Environment) -> Result<(), String> {
+fn configure_laravel_env(
+    app: &tauri::AppHandle,
+    site: &Site,
+    environment: &Environment,
+) -> Result<(), String> {
     let env_path = Path::new(&site.directory).join("app").join(".env");
     let mut contents = fs::read_to_string(&env_path)
         .map_err(|error| format!("Failed to read Laravel .env: {error}"))?;
@@ -467,7 +509,7 @@ fn configure_laravel_env(site: &Site, environment: &Environment) -> Result<(), S
     } else {
         "mysql"
     };
-    for (key, value) in [
+    let values = [
         ("APP_URL", format!("https://{}", site.domain)),
         ("DB_CONNECTION", driver.into()),
         ("DB_HOST", "database".into()),
@@ -482,13 +524,21 @@ fn configure_laravel_env(site: &Site, environment: &Environment) -> Result<(), S
         ("DB_DATABASE", environment.database_name.clone()),
         ("DB_USERNAME", environment.database_user.clone()),
         ("DB_PASSWORD", environment.database_password.clone()),
-    ] {
-        contents = set_env(contents, key, &value);
+    ];
+    for (key, value) in &values {
+        contents = set_env(contents, key, value);
     }
-    fs::write(env_path, contents).map_err(|error| format!("Failed to update Laravel .env: {error}"))
+    fs::write(&env_path, contents)
+        .map_err(|error| format!("Failed to update Laravel .env: {error}"))?;
+    emit_env_summary(app, environment, &values);
+    Ok(())
 }
 
-fn configure_symfony_env(site: &Site, environment: &Environment) -> Result<(), String> {
+fn configure_symfony_env(
+    app: &tauri::AppHandle,
+    site: &Site,
+    environment: &Environment,
+) -> Result<(), String> {
     let env_path = Path::new(&site.directory).join("app").join(".env");
     let mut contents = fs::read_to_string(&env_path)
         .map_err(|error| format!("Failed to read Symfony .env: {error}"))?;
@@ -503,8 +553,29 @@ fn configure_symfony_env(site: &Site, environment: &Environment) -> Result<(), S
             environment.database_user, environment.database_password, environment.database_name
         )
     };
-    contents = set_env(contents, "DATABASE_URL", &url);
-    fs::write(env_path, contents).map_err(|error| format!("Failed to update Symfony .env: {error}"))
+    let values = [("DATABASE_URL", url)];
+    for (key, value) in &values {
+        contents = set_env(contents, key, value);
+    }
+    fs::write(&env_path, contents)
+        .map_err(|error| format!("Failed to update Symfony .env: {error}"))?;
+    emit_env_summary(app, environment, &values);
+    Ok(())
+}
+
+fn emit_env_summary(app: &tauri::AppHandle, environment: &Environment, values: &[(&str, String)]) {
+    let secrets = crate::security::environment_secrets(app, &environment.id);
+    let summary = values
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    emit_provision_line(
+        app,
+        &environment.id,
+        &format!("# Updated app/.env: {summary}"),
+        &secrets,
+    );
 }
 
 fn run_in_php(
@@ -535,32 +606,46 @@ fn run_in_service(
         .filter(|_| status.running && status.compose_available)
         .ok_or(status.message)?;
     let workdir = format!("/var/www/sites/{}/app", site.name);
-    let output = crate::process::output(
-        crate::containers::runtime_command(&executable)
-            .args([
-                "compose",
-                "exec",
-                "-T",
-                "--workdir",
-                &workdir,
-                service,
-                "sh",
-                "-lc",
-                script,
-            ])
-            .current_dir(crate::containers::stack_directory(app, &environment.id)?)
-            .stdin(Stdio::null()),
+    let secrets = crate::security::environment_secrets(app, &environment.id);
+    emit_provision_line(app, &environment.id, &format!("$ {script}"), &secrets);
+    let mut command = crate::containers::runtime_command(&executable);
+    command
+        .args([
+            "compose",
+            "exec",
+            "-T",
+            "--workdir",
+            &workdir,
+            service,
+            "sh",
+            "-lc",
+            script,
+        ])
+        .current_dir(crate::containers::stack_directory(app, &environment.id)?)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let child = command
+        .spawn()
+        .map_err(|error| format!("Failed to launch project template installer: {error}"))?;
+    let live_app = app.clone();
+    let live_environment_id = environment.id.clone();
+    let live_secrets = secrets.clone();
+    let (status, stdout_text, stderr_text) = crate::process::stream_lines(
+        child,
         crate::process::INSTALL_TIMEOUT,
         "project template installer",
+        move |line| emit_provision_line(&live_app, &live_environment_id, line, &live_secrets),
     )?;
-    if output.status.success() {
+    if status.success() {
         Ok(())
     } else {
-        let detail = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
+        let detail = format!("{stdout_text}{stderr_text}");
         Err(detail.trim().to_owned())
     }
 }

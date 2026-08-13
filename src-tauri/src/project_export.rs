@@ -267,7 +267,7 @@ pub fn import(
             .find(|item| item.id == site_id)
             .cloned()
             .ok_or("Imported project was not found")?;
-        crate::project_templates::configure_duplicate(&imported_site, &environment)?;
+        crate::project_templates::configure_duplicate(app, &imported_site, &environment)?;
         Ok(created)
     })();
 

@@ -986,6 +986,10 @@ const en = {
     buildingProject: "Building project…",
     preparingProject: "Preparing project…",
     projectCreatedSuccessfully: "Project created successfully",
+    showTerminal: "Show terminal",
+    showTerminalDescription:
+      "The exact commands LS Panel runs to set up your project, live, as they happen.",
+    waitingForOutput: "Waiting for output…",
     selected: "Selected",
     inheritedEnvironmentSettings: "Inherited environment settings",
     inheritedEnvironmentDescription:

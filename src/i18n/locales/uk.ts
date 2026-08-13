@@ -1032,6 +1032,10 @@ const uk: Dictionary = {
     buildingProject: "Побудова проєкту…",
     preparingProject: "Підготовка проєкту…",
     projectCreatedSuccessfully: "Проєкт успішно створено",
+    showTerminal: "Показати термінал",
+    showTerminalDescription:
+      "Точні команди, які LS Panel виконує для налаштування вашого проєкту — наживо, у міру виконання.",
+    waitingForOutput: "Очікування виводу…",
     selected: "Вибрано",
     inheritedEnvironmentSettings: "Успадковані налаштування середовища",
     inheritedEnvironmentDescription:
