@@ -117,7 +117,7 @@ pub fn export(
         }
         let env = crate::environment_files::read(app, site_id)?;
         if env.exists {
-            fs::write(bundle.join("project.env"), env.text).map_err(|error| error.to_string())?;
+            crate::security::write_private_file(&bundle.join("project.env"), env.text.as_bytes())?;
         }
         crate::operations::progress_for_environment(app, &environment.id, 90, "Writing manifest")?;
         let mut manifest_environment = environment.clone();
@@ -129,11 +129,14 @@ pub fn export(
             has_database,
             has_env: env.exists,
         };
-        fs::write(
-            bundle.join("manifest.json"),
-            serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?,
+        // manifest.json still carries a real credential even after stripping
+        // (wordpress_admin_password is deliberately kept — the user needs it
+        // to keep logging in after moving the site), so it gets the same
+        // 0600 treatment as the other bundle contents.
+        crate::security::write_private_file(
+            &bundle.join("manifest.json"),
+            &serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?,
         )
-        .map_err(|error| error.to_string())
     })();
     if let Err(error) = result {
         let _ = fs::remove_dir_all(&bundle);

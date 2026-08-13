@@ -120,6 +120,20 @@ pub fn clear_database(app: &tauri::AppHandle, environment_id: &str) -> Result<()
     query(app, environment_id, &sql).map(|_| ())
 }
 
+/// SQL dump files hold a database's raw contents — potentially including
+/// application secrets stored in tables — so they're created 0600 instead of
+/// inheriting the process umask's default (typically world-readable).
+fn create_private_file(path: &std::path::Path) -> Result<fs::File, String> {
+    let file = fs::File::create(path).map_err(|error| error.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(fs::Permissions::from_mode(0o600))
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(file)
+}
+
 pub fn clone_database(
     app: &tauri::AppHandle,
     environment_id: &str,
@@ -144,9 +158,11 @@ pub fn clone_database(
     fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     let temporary = directory.join(format!(".clone-{}.sql", std::process::id()));
     let _ = fs::remove_file(&temporary);
-    let dump_file = fs::File::create(&temporary).map_err(|error| error.to_string())?;
+    let dump_file = create_private_file(&temporary)?;
+    let (credential_name, credential_value) = database_credential(&environment);
     let dump = crate::containers::runtime_command(&runtime)
         .args(dump_args_for(&environment, source))
+        .env(credential_name, credential_value)
         .current_dir(&stack)
         .stdin(Stdio::null())
         .stdout(Stdio::from(dump_file))
@@ -169,6 +185,7 @@ pub fn clone_database(
     let input = fs::File::open(&temporary).map_err(|error| error.to_string())?;
     let restore = crate::containers::runtime_command(&runtime)
         .args(restore_args_for(&environment, target))
+        .env(credential_name, credential_value)
         .current_dir(stack)
         .stdin(Stdio::from(input))
         .stdout(Stdio::null())
@@ -305,8 +322,10 @@ pub fn query(app: &tauri::AppHandle, environment_id: &str, sql: &str) -> Result<
     let environment = environment(app, environment_id)?;
     let (runtime, stack) = context(app, environment_id)?;
     let args = client_args(&environment);
+    let (credential_name, credential_value) = database_credential(&environment);
     let mut child = crate::containers::runtime_command(&runtime)
         .args(args)
+        .env(credential_name, credential_value)
         .current_dir(stack)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -391,6 +410,20 @@ pub fn info(app: &tauri::AppHandle, environment_id: &str) -> Result<DatabaseInfo
         version: environment.database_version,
     })
 }
+/// The client-tool env var name/value pair used to authenticate the
+/// database exec commands below (PGPASSWORD/database_password for
+/// PostgreSQL, MYSQL_PWD/database_root_password otherwise). Callers pass the
+/// bare variable NAME into `-e` (so it never appears as a literal argument —
+/// visible to any local user via `ps`/`/proc/<pid>/cmdline` for as long as
+/// the process runs) and set the actual VALUE on the spawned `Command`'s own
+/// environment instead, which only the process's owner can read.
+fn database_credential(e: &crate::containers::Environment) -> (&'static str, &str) {
+    if e.database == "PostgreSQL" {
+        ("PGPASSWORD", e.database_password.as_str())
+    } else {
+        ("MYSQL_PWD", e.database_root_password.as_str())
+    }
+}
 fn client_args(e: &crate::containers::Environment) -> Vec<String> {
     if e.database == "PostgreSQL" {
         vec![
@@ -398,7 +431,7 @@ fn client_args(e: &crate::containers::Environment) -> Vec<String> {
             "exec".into(),
             "-T".into(),
             "-e".into(),
-            format!("PGPASSWORD={}", e.database_password),
+            "PGPASSWORD".into(),
             "database".into(),
             "psql".into(),
             "-X".into(),
@@ -415,7 +448,7 @@ fn client_args(e: &crate::containers::Environment) -> Vec<String> {
             "exec".into(),
             "-T".into(),
             "-e".into(),
-            format!("MYSQL_PWD={}", e.database_root_password),
+            "MYSQL_PWD".into(),
             "database".into(),
             if e.database == "MariaDB" {
                 "mariadb".into()
@@ -484,11 +517,13 @@ pub fn create(app: &tauri::AppHandle, environment_id: &str) -> Result<DatabaseBa
     let id = format!("{}-{timestamp}.sql", environment.database_name);
     let path = directory.join(&id);
     let temporary = path.with_extension("sql.tmp");
-    let output_file = fs::File::create(&temporary).map_err(|error| error.to_string())?;
+    let output_file = create_private_file(&temporary)?;
     crate::operations::progress_for_environment(app, environment_id, 35, "Exporting database")?;
     let args = dump_args(&environment);
+    let (credential_name, credential_value) = database_credential(&environment);
     let child = crate::containers::runtime_command(&runtime)
         .args(args)
+        .env(credential_name, credential_value)
         .current_dir(stack)
         .stdin(Stdio::null())
         .stdout(Stdio::from(output_file))
@@ -576,8 +611,10 @@ pub fn restore(
     let input = fs::File::open(path).map_err(|error| error.to_string())?;
     let (runtime, stack) = context(app, environment_id)?;
     crate::operations::progress_for_environment(app, environment_id, 35, "Restoring database")?;
+    let (credential_name, credential_value) = database_credential(&environment);
     let child = crate::containers::runtime_command(&runtime)
         .args(restore_args(&environment))
+        .env(credential_name, credential_value)
         .current_dir(stack)
         .stdin(Stdio::from(input))
         .stdout(Stdio::null())
@@ -607,8 +644,10 @@ pub fn restore_file(
     }
     let input = fs::File::open(path).map_err(|error| error.to_string())?;
     let (runtime, stack) = context(app, environment_id)?;
+    let (credential_name, credential_value) = database_credential(&environment);
     let child = crate::containers::runtime_command(&runtime)
         .args(restore_args(&environment))
+        .env(credential_name, credential_value)
         .current_dir(stack)
         .stdin(Stdio::from(input))
         .stdout(Stdio::null())
@@ -705,8 +744,10 @@ pub fn import_sql_file_for_tables(
     }
     let environment = environment(app, environment_id)?;
     let (runtime, stack) = context(app, environment_id)?;
+    let (credential_name, credential_value) = database_credential(&environment);
     let mut child = crate::containers::runtime_command(&runtime)
         .args(restore_args(&environment))
+        .env(credential_name, credential_value)
         .current_dir(stack)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -868,10 +909,12 @@ pub fn export_sql_file_for_tables(
     let (runtime, stack) = context(app, environment_id)?;
     let temporary = parent.join(format!(".lspanel-export-{}.tmp", std::process::id()));
     let _ = fs::remove_file(&temporary);
-    let output_file = fs::File::create(&temporary).map_err(|error| error.to_string())?;
+    let output_file = create_private_file(&temporary)?;
     let args = dump_args_for_tables(&environment, &environment.database_name, &tables);
+    let (credential_name, credential_value) = database_credential(&environment);
     let child = crate::containers::runtime_command(&runtime)
         .args(args)
+        .env(credential_name, credential_value)
         .current_dir(stack)
         .stdin(Stdio::null())
         .stdout(Stdio::from(output_file))
@@ -1012,7 +1055,7 @@ fn dump_args_for(e: &crate::containers::Environment, database: &str) -> Vec<Stri
             "exec".into(),
             "-T".into(),
             "-e".into(),
-            format!("PGPASSWORD={}", e.database_password),
+            "PGPASSWORD".into(),
             "database".into(),
             "pg_dump".into(),
             "-U".into(),
@@ -1028,7 +1071,7 @@ fn dump_args_for(e: &crate::containers::Environment, database: &str) -> Vec<Stri
             "exec".into(),
             "-T".into(),
             "-e".into(),
-            format!("MYSQL_PWD={}", e.database_root_password),
+            "MYSQL_PWD".into(),
             "database".into(),
             if e.database == "MariaDB" {
                 "mariadb-dump".into()
@@ -1072,7 +1115,7 @@ fn restore_args_for(e: &crate::containers::Environment, database: &str) -> Vec<S
             "exec".into(),
             "-T".into(),
             "-e".into(),
-            format!("PGPASSWORD={}", e.database_password),
+            "PGPASSWORD".into(),
             "database".into(),
             "psql".into(),
             "-v".into(),
@@ -1088,7 +1131,7 @@ fn restore_args_for(e: &crate::containers::Environment, database: &str) -> Vec<S
             "exec".into(),
             "-T".into(),
             "-e".into(),
-            format!("MYSQL_PWD={}", e.database_root_password),
+            "MYSQL_PWD".into(),
             "database".into(),
             if e.database == "MariaDB" {
                 "mariadb".into()
@@ -1171,12 +1214,61 @@ fn split_sql_statements(sql: &str) -> Vec<&str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        copy_backup_file, filter_dump_by_tables, mysql_table_marker, obsolete_backups,
-        postgres_table_marker, query_is_read_only, safe_resource_id, split_dump_by_table,
-        truncate_query_output, valid_backup_id, valid_database_name, valid_table_name,
-        DatabaseBackup, QUERY_OUTPUT_LIMIT,
+        client_args, copy_backup_file, create_private_file, dump_args, filter_dump_by_tables,
+        mysql_table_marker, obsolete_backups, postgres_table_marker, query_is_read_only,
+        restore_args, safe_resource_id, split_dump_by_table, truncate_query_output,
+        valid_backup_id, valid_database_name, valid_table_name, DatabaseBackup, QUERY_OUTPUT_LIMIT,
     };
     use std::fs;
+
+    fn test_environment(database: &str) -> crate::containers::Environment {
+        let mut environment: crate::containers::Environment = serde_json::from_str(&format!(
+            r#"{{"id":"demo","name":"demo","webServer":"Nginx","webVersion":"1.28","phpVersion":"8.4","database":"{database}","databaseVersion":"1","port":"8080"}}"#
+        ))
+        .unwrap();
+        environment.database_password = "super-secret-pg".into();
+        environment.database_root_password = "super-secret-mysql".into();
+        environment
+    }
+
+    #[test]
+    fn database_client_commands_never_embed_the_password_as_a_literal_argument() {
+        // Regression test: PGPASSWORD/MYSQL_PWD used to be baked directly
+        // into the argv passed to `docker`/`podman compose exec`, visible in
+        // plaintext to any local user via `ps aux` for the command's whole
+        // runtime. The value must now only ever reach the child process
+        // through the spawned Command's own environment, never argv.
+        for database in ["PostgreSQL", "MySQL", "MariaDB"] {
+            let environment = test_environment(database);
+            for args in [
+                client_args(&environment),
+                dump_args(&environment),
+                restore_args(&environment),
+            ] {
+                assert!(!args.contains(&"super-secret-pg".to_string()));
+                assert!(!args.contains(&"super-secret-mysql".to_string()));
+                assert!(!args.iter().any(|arg| arg.contains("super-secret")));
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn dump_files_are_created_owner_only() {
+        // Regression test: SQL dumps hold raw database contents (including
+        // any application secrets stored in tables) and used to be created
+        // with the process umask's default, typically world-readable.
+        use std::os::unix::fs::PermissionsExt;
+        let path = std::env::temp_dir().join(format!(
+            "lspanel-private-file-test-{}.sql",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+        create_private_file(&path).unwrap();
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        let _ = fs::remove_file(&path);
+        assert_eq!(mode, 0o600);
+    }
 
     #[test]
     fn query_output_under_the_limit_is_returned_unchanged() {
