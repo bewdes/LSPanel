@@ -7,43 +7,9 @@ use std::{
     process::{Command, Stdio},
 };
 
-use serde::Serialize;
-use tauri::Emitter;
-
-use crate::{containers::Environment, sites::Site};
+use crate::{containers::Environment, operations::emit_provision_line, sites::Site};
 
 const SYMFONY_INSTALL_COMMAND: &str = "APP_ENV=dev COMPOSER_MEMORY_LIMIT=-1 composer create-project --no-interaction symfony/skeleton . && APP_ENV=dev composer require --no-interaction webapp";
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ProvisionOutput {
-    environment_id: String,
-    line: String,
-}
-
-/// Shows the user exactly what LS Panel runs on their behalf while
-/// scaffolding a project — the same `composer create-project`/wp-cli
-/// commands (and, for the .env values it patches afterward, exactly which
-/// keys) a person would run by hand from a terminal. Secrets are redacted
-/// the same way any other environment output already is.
-fn emit_provision_line(
-    app: &tauri::AppHandle,
-    environment_id: &str,
-    line: &str,
-    secrets: &[String],
-) {
-    let clean = crate::security::redact(line, secrets.iter().cloned());
-    if clean.trim().is_empty() {
-        return;
-    }
-    let _ = app.emit(
-        "project-provision-output",
-        ProvisionOutput {
-            environment_id: environment_id.into(),
-            line: clean,
-        },
-    );
-}
 
 pub fn is_node_project(project_type: &str) -> bool {
     matches!(project_type, "node" | "react")
