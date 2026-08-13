@@ -66,12 +66,30 @@ fn check(app: &tauri::AppHandle) {
                 }
                 let since = *idle_since.entry(environment.id.clone()).or_insert(now);
                 if now - since >= idle_threshold_secs {
+                    // Something else (a user action, or auto-heal) is
+                    // already actively operating on this environment — don't
+                    // race it. Leave idle_since alone so this retries on the
+                    // next tick once whatever's running now is done.
+                    let Ok(operation) =
+                        crate::operations::create(app, Some(&environment.id), "stop")
+                    else {
+                        continue;
+                    };
                     idle_since.remove(&environment.id);
                     // Mirrors operate_environment's own "stop" handling: without
                     // this, auto-heal still sees an enabled site on a stack that
                     // just stopped and reports it as a crash a few minutes later.
                     let _ = crate::sites::set_environment_enabled(app, &environment.id, false);
-                    if crate::containers::operate(app, &environment.id, "stop").is_ok() {
+                    let outcome = crate::containers::operate(app, &environment.id, "stop");
+                    match &outcome {
+                        Ok(_) => {
+                            let _ = crate::operations::complete(app, &operation.id);
+                        }
+                        Err(error) => {
+                            let _ = crate::operations::fail(app, &operation.id, error);
+                        }
+                    }
+                    if outcome.is_ok() {
                         notify(app, &settings, &environment.name);
                     }
                 }

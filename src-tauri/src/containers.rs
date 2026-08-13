@@ -1,9 +1,11 @@
 use serde::Serialize;
 use std::{
+    collections::HashMap,
     fs,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     process::Stdio,
+    sync::{Arc, LazyLock, Mutex},
 };
 use tauri::Manager;
 
@@ -40,15 +42,22 @@ pub fn list(app: &tauri::AppHandle) -> Result<Vec<Environment>, String> {
 
 pub fn save(app: &tauri::AppHandle, environment: Environment) -> Result<Vec<Environment>, String> {
     validate(&environment)?;
-    let was_running = environment.runtime_mode != "native"
-        && environment_status(app, &environment.id)
-            .map(|state| state.status == "running")
-            .unwrap_or(false);
     if environment.runtime_mode != "native" {
         prepare(app, &environment)?;
     }
     let data = serde_json::to_string(&environment).map_err(|error| error.to_string())?;
     crate::storage::save_environment(app, &environment.id, &data)?;
+    // Checked here, right before actually reconciling, rather than once at
+    // the top of this function: prepare() and the storage write above can
+    // take long enough (file I/O, settings load) that a concurrent stop
+    // could complete in that window. Reading `was_running` up front and
+    // acting on that stale snapshot here would silently start the stack
+    // right back up immediately after a user (or the idle monitor) just
+    // stopped it, with no indication why.
+    let was_running = environment.runtime_mode != "native"
+        && environment_status(app, &environment.id)
+            .map(|state| state.status == "running")
+            .unwrap_or(false);
     if was_running {
         reconcile_running_stack(app, &environment);
     }
@@ -64,6 +73,13 @@ pub fn save(app: &tauri::AppHandle, environment: Environment) -> Result<Vec<Envi
 /// never fail the save, since the environment record and compose.yaml are
 /// already correctly persisted by this point.
 fn reconcile_running_stack(app: &tauri::AppHandle, environment: &Environment) {
+    // Something else (a user-triggered start/stop/restart, or a monitor) is
+    // already actively operating on this environment — running `compose up`
+    // on top of that would race it for no benefit, since whatever's already
+    // running will already leave the stack in a sensible state on its own.
+    if crate::operations::is_active(app, &environment.id) {
+        return;
+    }
     let Ok(directory) = stack_directory(app, &environment.id) else {
         return;
     };
@@ -1123,10 +1139,35 @@ pub(crate) fn rabbitmq_directory(app: &tauri::AppHandle, id: &str) -> Result<Pat
         .join(id))
 }
 
+/// One lock per environment id, held for the duration of `prepare()`'s file
+/// writes below. `prepare()` is reachable from several independent,
+/// otherwise-unsynchronized call sites (saving an environment, every
+/// start/stop/restart action, refreshing a site's routes, and even the
+/// read-looking "topology" view, which needs a freshly (re)generated
+/// compose.yaml to report accurate output) — without this, two concurrent
+/// calls for the same environment can interleave their writes across
+/// compose.yaml/Dockerfile.php/the PHP-FPM and cron config files, leaving
+/// the generated stack directory in a torn state that matches neither
+/// caller's version and feeding a live `docker compose` invocation.
+static PREPARE_LOCKS: LazyLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn prepare_lock(environment_id: &str) -> Arc<Mutex<()>> {
+    let mut locks = PREPARE_LOCKS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    locks
+        .entry(environment_id.to_owned())
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone()
+}
+
 pub(crate) fn prepare(
     app: &tauri::AppHandle,
     environment: &Environment,
 ) -> Result<PathBuf, String> {
+    let lock = prepare_lock(&environment.id);
+    let _guard = lock.lock().unwrap_or_else(|error| error.into_inner());
     let directory = stack_directory(app, &environment.id)?;
     let database_dir = database_directory(app, &environment.id)?;
     let redis_dir = redis_directory(app, &environment.id)?;
@@ -1274,6 +1315,21 @@ mod tests {
         https_proxy_block, status_is_available as route_status_is_available,
     };
     use std::collections::BTreeMap;
+
+    #[test]
+    fn prepare_lock_returns_the_same_mutex_for_the_same_environment_but_not_for_others() {
+        // Regression test: prepare() is reachable from several independent,
+        // otherwise-unsynchronized call sites for the same environment
+        // (save, every start/stop/restart action, site route refresh, and
+        // the topology view) — two concurrent calls must serialize through
+        // the *same* lock instance, not two different ones that provide no
+        // real exclusion.
+        let first = prepare_lock("env-a");
+        let second = prepare_lock("env-a");
+        assert!(Arc::ptr_eq(&first, &second));
+        let other = prepare_lock("env-b");
+        assert!(!Arc::ptr_eq(&first, &other));
+    }
 
     #[test]
     fn supports_php_85_and_rejects_unknown_php_images() {
