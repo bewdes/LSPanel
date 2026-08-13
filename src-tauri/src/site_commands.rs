@@ -156,7 +156,12 @@ pub async fn create_project_environment(
                 "Cloning and inspecting Git repository",
             )?;
             let repository = site.directory.clone();
-            site.project_type = project_templates::clone_project(&repository, &app_directory)?;
+            site.project_type = project_templates::clone_project(
+                &worker,
+                &environment.id,
+                &repository,
+                &app_directory,
+            )?;
         } else if matches!(
             site.project_type.as_str(),
             "wordpress" | "laravel" | "symfony" | "node" | "react"
@@ -379,7 +384,12 @@ pub async fn provision_site_in_environment(
                 "Cloning and inspecting Git repository",
             )?;
             let repository = site.directory.clone();
-            site.project_type = project_templates::clone_project(&repository, &app_directory)?;
+            site.project_type = project_templates::clone_project(
+                &worker,
+                &environment_id,
+                &repository,
+                &app_directory,
+            )?;
         } else if matches!(
             site.project_type.as_str(),
             "wordpress" | "laravel" | "symfony" | "react"
