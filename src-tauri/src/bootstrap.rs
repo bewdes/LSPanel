@@ -47,7 +47,6 @@ pub fn run() {
             desktop_commands::open_terminal,
             desktop_commands::open_editor,
             administration_commands::export_environment_logs,
-            desktop_commands::open_containers_window,
             administration_commands::container_runtime_status,
             administration_commands::container_runtimes_status,
             administration_commands::dependency_install_plan,

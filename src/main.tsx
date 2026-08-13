@@ -75,6 +75,7 @@ function App() {
   const [environments, setEnvironments] = React.useState<Environment[]>([])
   const [sites, setSites] = React.useState<Site[]>([])
   const [states, setStates] = React.useState<Record<string, string>>({})
+  const [pendingOperations, setPendingOperations] = React.useState<Record<string, boolean>>({})
   const [runtime, setRuntime] = React.useState<Runtime | null>(null)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [createProjectType, setCreateProjectType] = React.useState<string | undefined>(undefined)
@@ -167,11 +168,20 @@ function App() {
   const paletteText = pickLanguage(language).commandPalette
   const running = Object.values(states).filter((status) => status === "running").length
 
+  // Shared by the command palette, Sites list, and Containers list (via the
+  // onOperate prop) — guarding here once, keyed by whichever id is passed,
+  // stops a fast double-click (or the same environment/site reachable from
+  // more than one of those views) from firing the same operation twice
+  // concurrently. This matters most for the destructive/expensive actions
+  // (rebuild-no-cache, kill), where a duplicate concurrent run isn't just a
+  // harmless no-op.
   async function operate(
     id: string,
     action:
       "start" | "stop" | "restart" | "pause" | "unpause" | "kill" | "rebuild" | "rebuild-no-cache",
   ) {
+    if (pendingOperations[id]) return
+    setPendingOperations((previous) => ({ ...previous, [id]: true }))
     try {
       setError("")
       await invoke("operate_environment", { id, action })
@@ -179,10 +189,18 @@ function App() {
     } catch (value) {
       await refresh()
       setError(errorMessage(value))
+    } finally {
+      setPendingOperations((previous) => {
+        const next = { ...previous }
+        delete next[id]
+        return next
+      })
     }
   }
 
   async function operateSite(id: string, action: "start" | "stop") {
+    if (pendingOperations[id]) return
+    setPendingOperations((previous) => ({ ...previous, [id]: true }))
     try {
       setError("")
       await invoke("operate_site", { id, action })
@@ -190,6 +208,12 @@ function App() {
     } catch (value) {
       await refresh()
       setError(errorMessage(value))
+    } finally {
+      setPendingOperations((previous) => {
+        const next = { ...previous }
+        delete next[id]
+        return next
+      })
     }
   }
 
@@ -290,6 +314,7 @@ function App() {
                     sites={sites}
                     environments={environments}
                     states={states}
+                    pendingOperations={pendingOperations}
                     statsRefreshIntervalSeconds={settings?.statsRefreshIntervalSeconds ?? 10}
                     onCreate={() => setCreateOpen(true)}
                     onSelect={setSelectedSite}
@@ -328,6 +353,7 @@ function App() {
                     language={language}
                     environments={environments}
                     states={states}
+                    pendingOperations={pendingOperations}
                     onOperate={operate}
                     onRefresh={refresh}
                     onEdit={(environment) => setEnvironmentPage(environment.id)}
@@ -472,6 +498,7 @@ function App() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          disabled={Boolean(pendingOperations[site.id])}
                           onClick={() => void operateSite(site.id, siteRunning ? "stop" : "start")}
                           title={siteRunning ? paletteText.stop : paletteText.start}
                         >
@@ -536,6 +563,7 @@ function App() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          disabled={Boolean(pendingOperations[environment.id])}
                           onClick={() =>
                             void operate(environment.id, state === "running" ? "stop" : "start")
                           }

@@ -72,6 +72,7 @@ export function SitesPage({
   sites,
   environments,
   states,
+  pendingOperations,
   statsRefreshIntervalSeconds,
   onCreate,
   onSelect,
@@ -82,6 +83,7 @@ export function SitesPage({
   sites: Site[]
   environments: Environment[]
   states: Record<string, string>
+  pendingOperations: Record<string, boolean>
   statsRefreshIntervalSeconds: number
   onCreate: () => void
   onSelect: (id: string) => void
@@ -382,7 +384,7 @@ export function SitesPage({
                         variant="ghost"
                         size="icon-sm"
                         title={siteRunning ? text.stop : text.start}
-
+                        disabled={Boolean(pendingOperations[site.id])}
                         onClick={(event) => {
                           event.stopPropagation()
                           onOperate(site.id, siteRunning ? "stop" : "start")

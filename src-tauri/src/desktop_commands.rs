@@ -2,7 +2,6 @@ use std::{
     path::Path,
     process::{Command, Stdio},
 };
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub(crate) fn spawn_program(program: &str, args: &[&str]) -> Result<(), String> {
     Command::new(program)
@@ -149,31 +148,6 @@ pub fn open_editor(app: tauri::AppHandle, path: String) -> Result<(), String> {
     let settings = crate::settings::load(&app)?.unwrap_or_default();
     let program = editor_program(&settings)?;
     spawn_program(&program, &[&path])
-}
-
-#[tauri::command]
-pub fn open_containers_window(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("containers") {
-        window.set_focus().map_err(|error| error.to_string())?;
-        return Ok(());
-    }
-
-    WebviewWindowBuilder::new(
-        &app,
-        "containers",
-        WebviewUrl::App("index.html?view=containers".into()),
-    )
-    .title("LS Panel — Containers")
-    .decorations(false)
-    .transparent(false)
-    .inner_size(1120.0, 760.0)
-    .min_inner_size(900.0, 620.0)
-    .resizable(true)
-    .center()
-    .build()
-    .map_err(|error| error.to_string())?;
-
-    Ok(())
 }
 
 #[cfg(test)]

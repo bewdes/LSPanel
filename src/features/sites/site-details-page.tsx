@@ -193,6 +193,13 @@ export function SiteDetailsPage({
       setEditOpen(false)
       if (options.close) await onChanged()
       else await onOperated()
+      // Only the close:false path (used by the Pin/Archive toggles below,
+      // which deliberately stay on this page instead of navigating away)
+      // needs this: the close:true path's onChanged() already leaves this
+      // page, so busy never mattered there before. Without it, busy stuck
+      // true forever after the first successful toggle, permanently
+      // disabling every other busy-gated button on this page.
+      setBusy(false)
     } catch (error) {
       setMessage(errorMessage(error))
       setMessageOk(false)
@@ -361,6 +368,7 @@ export function SiteDetailsPage({
           className="ml-auto"
           variant={site.pinned ? "secondary" : "ghost"}
           size="icon-sm"
+          disabled={busy}
           onClick={() => void updateProject({ pinned: !site.pinned }, { close: false })}
         >
           <Pin />
@@ -392,6 +400,7 @@ export function SiteDetailsPage({
         <Button
           variant="ghost"
           size="icon-sm"
+          disabled={busy}
           onClick={() => void updateProject({ archived: !site.archived }, { close: false })}
         >
           <Archive />

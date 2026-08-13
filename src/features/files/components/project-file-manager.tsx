@@ -60,6 +60,7 @@ export function ProjectFileManager({ siteId, language }: { siteId: string; langu
   const [newName, setNewName] = React.useState("")
   const [renameName, setRenameName] = React.useState("")
   const [busy, setBusy] = React.useState(false)
+  const openRequestId = React.useRef(0)
   const [message, setMessage] = React.useState("")
   const [messageOk, setMessageOk] = React.useState(false)
   const [deletePath, setDeletePath] = React.useState("")
@@ -102,6 +103,12 @@ export function ProjectFileManager({ siteId, language }: { siteId: string; langu
       await load(entry.path)
       return
     }
+    // Clicking a second file before the first one's read_project_file
+    // response arrives could otherwise let responses land out of order,
+    // leaving the editor showing (and Save writing to) a different file
+    // than the one last clicked. Only the most recently issued request's
+    // response is applied.
+    const requestId = ++openRequestId.current
     setBusy(true)
     setMessage("")
     try {
@@ -109,13 +116,15 @@ export function ProjectFileManager({ siteId, language }: { siteId: string; langu
         siteId,
         path: entry.path,
       })
+      if (openRequestId.current !== requestId) return
       setOpened(file)
       setText(file.text)
     } catch (error) {
+      if (openRequestId.current !== requestId) return
       setMessage(errorMessage(error))
       setMessageOk(false)
     } finally {
-      setBusy(false)
+      if (openRequestId.current === requestId) setBusy(false)
     }
   }
 

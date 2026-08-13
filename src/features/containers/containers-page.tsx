@@ -48,6 +48,7 @@ export function ContainersPage({
   language,
   environments,
   states,
+  pendingOperations,
   onOperate,
   onRefresh,
   onEdit,
@@ -56,6 +57,7 @@ export function ContainersPage({
   language: string
   environments: Environment[]
   states: Record<string, string>
+  pendingOperations: Record<string, boolean>
   onOperate: (
     id: string,
     action:
@@ -103,6 +105,7 @@ export function ContainersPage({
         {environments.map((environment) => {
           const active = states[environment.id] === "running"
           const isNative = environment.runtimeMode === "native"
+          const pending = Boolean(pendingOperations[environment.id])
           return (
             <Card className="h-full" key={environment.id}>
               <CardHeader>
@@ -124,14 +127,14 @@ export function ContainersPage({
                       {!isNative && (
                         <>
                           <DropdownMenuItem
-                            disabled={!active}
+                            disabled={!active || pending}
                             onClick={() => onOperate(environment.id, "pause")}
                           >
                             <Pause />
                             {text.pause}
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            disabled={active}
+                            disabled={active || pending}
                             onClick={() => onOperate(environment.id, "unpause")}
                           >
                             <Play />
@@ -140,18 +143,22 @@ export function ContainersPage({
                         </>
                       )}
                       <DropdownMenuItem
-                        disabled={!active}
+                        disabled={!active || pending}
                         onClick={() => onOperate(environment.id, "restart")}
                       >
                         <RefreshCw />
                         {text.restart}
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onOperate(environment.id, "rebuild")}>
+                      <DropdownMenuItem
+                        disabled={pending}
+                        onClick={() => onOperate(environment.id, "rebuild")}
+                      >
                         <RefreshCw />
                         {text.rebuild}
                       </DropdownMenuItem>
                       {!isNative && (
                         <DropdownMenuItem
+                          disabled={pending}
                           onClick={() => onOperate(environment.id, "rebuild-no-cache")}
                         >
                           <RefreshCw />
@@ -160,7 +167,7 @@ export function ContainersPage({
                       )}
                       <DropdownMenuItem
                         variant="destructive"
-                        disabled={!active}
+                        disabled={!active || pending}
                         onClick={() => onOperate(environment.id, "kill")}
                       >
                         <Square />
@@ -224,6 +231,7 @@ export function ContainersPage({
                 <Button
                   size="sm"
                   variant={active ? "destructive" : "default"}
+                  disabled={pending}
                   onClick={() => onOperate(environment.id, active ? "stop" : "start")}
                 >
                   {active ? <Square /> : <Play />}
