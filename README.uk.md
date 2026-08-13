@@ -43,26 +43,26 @@
 
 ## Технологічний стек
 
-| Шар                 | Технологія                                                                               |
-| ------------------- | ---------------------------------------------------------------------------------------- |
-| Десктопна оболонка  | [Tauri 2](https://tauri.app/)                                                            |
-| Бекенд              | Rust (`src-tauri/`), SQLite через `rusqlite`                                             |
-| Фронтенд            | React 19, TypeScript, Vite 6                                                             |
-| Стилі / UI          | Tailwind CSS 4, компоненти у стилі shadcn (`src/components/ui`), примітиви Radix/Base UI |
-| Дані та таблиці     | `@tanstack/react-table`, `recharts` для графіків                                         |
-| Термінал            | `xterm.js` + `portable-pty` (Rust)                                                       |
-| Контейнерні runtime | Docker / Podman (+ Compose)                                                              |
+| Шар                 | Технологія                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| Десктопна оболонка  | [Tauri 2](https://tauri.app/)                                                      |
+| Бекенд              | Rust (`src-tauri/`), SQLite через `rusqlite`                                       |
+| Фронтенд            | React 19, TypeScript 6, Vite 8                                                     |
+| Стилі / UI          | Tailwind CSS 4, компоненти у стилі shadcn (`src/components/ui`), примітиви Base UI |
+| Дані та таблиці     | `@tanstack/react-table`, `recharts` для графіків                                   |
+| Термінал            | `xterm.js` + `portable-pty` (Rust)                                                 |
+| Контейнерні runtime | Docker / Podman (+ Compose)                                                        |
 
 ## Структура проєкту
 
 ```
 lspanel/
 ├── src/                     # Фронтенд на React
-│   ├── app/                 # Оболонка застосунку / дашборд
-│   ├── components/ui/       # Спільні UI-примітиви
+│   ├── main.tsx             # Оболонка, навігація та стан верхнього рівня
+│   ├── components/          # Спільні компоненти застосунку та UI-примітиви
 │   ├── features/            # Функціональні модулі (сайти, контейнери, бази даних, файли, логи,
 │   │                         #   пошта, резервні копії, сертифікати, знімки, налаштування, livelink, ...)
-│   ├── i18n/                # Англійські/українські словники текстів для кожної фічі
+│   ├── i18n/                # Англійський/український словники локалізації
 │   ├── hooks/, lib/         # Спільні хуки та утиліти
 ├── src-tauri/                # Бекенд на Rust/Tauri
 │   └── src/                  # Tauri-команди: контейнери, сайти, бази даних, резервні копії,
@@ -130,7 +130,7 @@ npm run test:containers # інтеграційні тести контейнер
 
 Також доступні окремі команди: `npm run format`, `npm run format:check`, `npm run lint`, `npm run test:frontend`.
 
-CI (`.github/workflows/ci.yml`) виконує ці ж перевірки при кожному push/PR, а також збирає Linux-бандли `.deb`/`.rpm`/`.AppImage`.
+CI (`.github/workflows/ci.yml`) виконує frontend- і Rust-перевірки при кожному push/PR, а також збирає Linux-бандли `.deb`/`.rpm`/`.AppImage`. Smoke-тест із живим Docker запускається лише явно й не входить до звичайного CI workflow.
 
 ## Внесок у проєкт
 

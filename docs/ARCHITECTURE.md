@@ -16,9 +16,9 @@ LS Panel is a [Tauri 2](https://tauri.app/) desktop application: a React/TypeScr
 
 ## Frontend (`src/`)
 
-- **`app/`** — application shell and dashboard composition.
+- **`main.tsx`** — application shell, navigation, top-level state, and lazy composition of the larger feature views.
 - **`features/*`** — one folder per domain area (sites, containers, database, backups, snapshots, certificates, mail, environment-files, files, logs, livelink, settings). Each feature owns its page component(s) and any feature-local components.
-- **`components/ui/`** — shared, shadcn-style UI primitives built on Tailwind CSS 4 and Radix/Base UI.
+- **`components/`** — shared application components; `components/ui/` contains shadcn-style primitives built on Tailwind CSS 4 and Base UI.
 - **`i18n/`** — one file per locale under `locales/` (`en.ts`, `uk.ts`), each exporting the full translation dictionary for that language. `i18n/index.ts` exposes `pickLanguage(language: string)` to select the active language by locale code (e.g. `settings.language`), falling back to English; there is no runtime translation loading, dictionaries are statically imported.
 - **`hooks/`, `lib/`** — shared React hooks and utilities (formatting, error normalization, version catalog for project templates, etc.).
 
@@ -29,7 +29,7 @@ The backend has no single "server" abstraction — it's a flat set of modules re
 - a **data/logic module** (e.g. `sites.rs`, `containers.rs`, `snapshots.rs`) with plain functions and (de)serializable structs, and
 - a **`*_commands.rs`** module that wraps that logic in `#[tauri::command]`-annotated functions the frontend can `invoke()`.
 
-`bootstrap.rs` is the composition root: it builds the `tauri::Builder`, registers shared in-memory state, runs startup setup, and lists every command in a single `tauri::generate_handler![...]` call (~130 commands as of this writing).
+`bootstrap.rs` is the composition root: it builds the `tauri::Builder`, registers shared in-memory state, runs startup setup, and lists all 138 registered commands in a single `tauri::generate_handler![...]` call.
 
 ### Shared application state
 
@@ -42,7 +42,7 @@ Registered via `.manage(...)` in `bootstrap.rs` and injected into commands as `t
 
 ### Persistence
 
-All durable state lives in one SQLite database at the OS app-data directory (`<app_data_dir>/lspanel.sqlite3`), opened through `rusqlite` with WAL journaling. `storage.rs` owns the connection and a `PRAGMA user_version`-based migration system (`migrate_schema_v1`, `migrate_schema_v2`, ...) that re-runs every idempotent `CREATE TABLE IF NOT EXISTS` on every launch rather than gating on version equality, so a partially-applied build can't leave a table permanently missing; tables include `settings`, `environments`, `sites`, `operations`, and `notifications`, generally storing structured data as JSON columns for flexibility. There is no external database server — this SQLite file is LS Panel's own metadata store, separate from any per-project database engines (Postgres/MySQL/etc.) that a _managed project_ uses, which are handled by `database.rs`/`database_commands.rs` instead.
+All durable state lives in one SQLite database at the OS app-data directory (`<app_data_dir>/lspanel.sqlite3`), opened through `rusqlite` with WAL journaling. `storage.rs` owns the connection and a `PRAGMA user_version`-based migration system (`migrate_schema_v1`, `migrate_schema_v2`, ...) that re-runs every idempotent `CREATE TABLE IF NOT EXISTS` on every launch rather than gating on version equality, so a partially-applied build can't leave a table permanently missing; tables include `settings`, `environments`, `sites`, `operations`, and `notifications`, generally storing structured data as JSON columns for flexibility. There is no external database server — this SQLite file is LS Panel's own metadata store, separate from any per-project database engines (Postgres/MySQL/etc.) that a _managed project_ uses, which are handled by `backups.rs` and `database_commands.rs` instead.
 
 ### Environments and runtimes
 
@@ -86,7 +86,7 @@ Separately: dependency versions in `Cargo.toml`/`package.json` are pinned to maj
 
 ## Build & tooling
 
-- **Frontend**: Vite 6 + TypeScript + React 19, Tailwind CSS 4. `npm run build` type-checks then builds; `npm run dev` runs the Vite dev server standalone.
+- **Frontend**: Vite 8 + TypeScript 6 + React 19, Tailwind CSS 4. `npm run build` type-checks then builds; `npm run dev` runs the Vite dev server standalone.
 - **Backend**: standard Cargo workspace at `src-tauri/`, built via `tauri-build`; `npm run tauri dev` / `npm run tauri build` drive the full desktop app through the Tauri CLI (the `tauri` npm script wraps the CLI in `scripts/tauri-clean-env.sh` and forwards the subcommand you pass — it requires an explicit `dev`/`build` argument).
 - **CI** (`.github/workflows/ci.yml`) runs frontend checks (Prettier, ESLint, frontend tests, `tsc`, Vite build), Rust checks (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`), and then builds Linux `.deb`/`.rpm`/`.AppImage` bundles.
 
