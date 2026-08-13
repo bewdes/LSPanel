@@ -43,26 +43,26 @@ The UI is fully bilingual (English / Ukrainian) via a lightweight built-in i18n 
 
 ## Tech stack
 
-| Layer              | Technology                                                                              |
-| ------------------ | --------------------------------------------------------------------------------------- |
-| Desktop shell      | [Tauri 2](https://tauri.app/)                                                           |
-| Backend            | Rust (`src-tauri/`), SQLite via `rusqlite`                                              |
-| Frontend           | React 19, TypeScript, Vite 6                                                            |
-| Styling / UI       | Tailwind CSS 4, shadcn-style components (`src/components/ui`), Radix/Base UI primitives |
-| Data & tables      | `@tanstack/react-table`, `recharts` for charts                                          |
-| Terminal           | `xterm.js` + `portable-pty` (Rust)                                                      |
-| Container runtimes | Docker / Podman (+ Compose)                                                             |
+| Layer              | Technology                                                                        |
+| ------------------ | --------------------------------------------------------------------------------- |
+| Desktop shell      | [Tauri 2](https://tauri.app/)                                                     |
+| Backend            | Rust (`src-tauri/`), SQLite via `rusqlite`                                        |
+| Frontend           | React 19, TypeScript 6, Vite 8                                                    |
+| Styling / UI       | Tailwind CSS 4, shadcn-style components (`src/components/ui`), Base UI primitives |
+| Data & tables      | `@tanstack/react-table`, `recharts` for charts                                    |
+| Terminal           | `xterm.js` + `portable-pty` (Rust)                                                |
+| Container runtimes | Docker / Podman (+ Compose)                                                       |
 
 ## Project structure
 
 ```
 lspanel/
 ├── src/                     # React frontend
-│   ├── app/                 # App shell / dashboard
-│   ├── components/ui/       # Shared UI primitives
+│   ├── main.tsx             # App shell, navigation, and top-level state
+│   ├── components/          # Shared app components and UI primitives
 │   ├── features/            # Feature modules (sites, containers, database, files, logs,
 │   │                         #   mail, backups, certificates, snapshots, settings, livelink, ...)
-│   ├── i18n/                # English/Ukrainian text dictionaries per feature
+│   ├── i18n/                # English/Ukrainian locale dictionaries
 │   ├── hooks/, lib/         # Shared hooks and utilities
 ├── src-tauri/                # Rust/Tauri backend
 │   └── src/                  # Tauri commands: containers, sites, databases, backups,
@@ -130,7 +130,7 @@ npm run test:containers # container/compose integration tests (scripts/test-cont
 
 Individual commands are also available: `npm run format`, `npm run format:check`, `npm run lint`, `npm run test:frontend`.
 
-CI (`.github/workflows/ci.yml`) runs these same checks on every push/PR and additionally builds Linux `.deb`/`.rpm`/`.AppImage` bundles.
+CI (`.github/workflows/ci.yml`) runs the frontend and Rust checks on every push/PR and additionally builds Linux `.deb`/`.rpm`/`.AppImage` bundles. The live Docker smoke test is opt-in and is not part of the regular CI workflow.
 
 ## Contributing
 
