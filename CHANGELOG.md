@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Settings: an "About" section showing the app version, description, and author contact links (GitHub profile, repository, email).
 - One-click buttons to open MinIO's and RabbitMQ's web admin consoles from a project's Developer Tools card, matching the button Mailpit already had — the reverse-proxy routes for both already existed, just without a way to reach them.
 - A "Fallback command" field for Node.js projects (project wizard and environment editor) — it was already sent to the backend and used when the dev/start commands are both left empty, but had no UI to see or change it.
-- A terminal button next to the project wizard's progress bar during creation, showing — live, as they run — the exact `composer create-project`/wp-cli commands and their real output for WordPress, Laravel, and Symfony projects, plus a summary of which `.env` keys get set to connect to the provisioned database. Same idea as the dependency-installer's live command log, applied to project creation.
+- A terminal button next to the project wizard's progress bar during creation, showing — live, as they run — the exact `composer create-project`/wp-cli commands and their real output for WordPress, Laravel, and Symfony projects, plus a summary of which `.env` keys get set to connect to the provisioned database. Same idea as the dependency-installer's live command log, applied to project creation. Also covers cloning a Git repository (previously silent for up to an hour with no feedback at all) and, for native (containerless) Node.js/React projects, the `npm`/`pnpm install` and dev/start command.
 
 ### Fixed
 

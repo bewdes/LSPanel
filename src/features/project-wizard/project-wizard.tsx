@@ -187,6 +187,24 @@ export function ProjectWizard({
     }
   }, [])
   React.useEffect(() => {
+    // Native (containerless) Node.js/React projects have no
+    // composer/wp-cli-style provisioning step — their equivalent (an
+    // `npm`/`pnpm install`, and the dev/build/start command) already
+    // streams live through this same event the Logs page uses, so folding
+    // it into this same terminal panel covers them too instead of leaving
+    // them with nothing to show here.
+    const unlisten = listen<{ environmentId: string; source: string; line: string }>(
+      "environment-log-line",
+      ({ payload }) => {
+        if (payload.environmentId !== activeCreationEnvironment.current) return
+        setProvisionLines((current) => [...current.slice(-499), payload.line])
+      },
+    )
+    return () => {
+      void unlisten.then((dispose) => dispose())
+    }
+  }, [])
+  React.useEffect(() => {
     provisionLogRef.current?.scrollTo({ top: provisionLogRef.current.scrollHeight })
   }, [provisionLines])
   React.useEffect(() => {

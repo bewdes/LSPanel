@@ -181,7 +181,12 @@ pub fn import_project(source: &Path, destination: &Path) -> Result<String, Strin
     Ok(detect_project_type(destination))
 }
 
-pub fn clone_project(repository: &str, destination: &Path) -> Result<String, String> {
+pub fn clone_project(
+    app: &tauri::AppHandle,
+    environment_id: &str,
+    repository: &str,
+    destination: &Path,
+) -> Result<String, String> {
     let repository = repository.trim();
     let valid = repository.starts_with("https://")
         || repository.starts_with("ssh://")
@@ -208,28 +213,50 @@ pub fn clone_project(repository: &str, destination: &Path) -> Result<String, Str
         return Err("The destination project directory is not empty".into());
     }
     let existed = destination.exists();
-    let output = crate::process::output(
-        Command::new("git")
-            .args(["clone", "--", repository])
-            .arg(destination)
-            .stdin(Stdio::null()),
+    let secrets = crate::security::environment_secrets(app, environment_id);
+    emit_provision_line(
+        app,
+        environment_id,
+        &format!("$ git clone -- {repository} {}", destination.display()),
+        &secrets,
+    );
+    let mut command = Command::new("git");
+    command
+        .args(["clone", "--progress", "--", repository])
+        .arg(destination)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let child = command
+        .spawn()
+        .map_err(|error| format!("Failed to launch Git clone: {error}"))?;
+    let live_app = app.clone();
+    let live_environment_id = environment_id.to_owned();
+    let live_secrets = secrets.clone();
+    let (status, _stdout_text, stderr_text) = crate::process::stream_lines(
+        child,
         crate::process::GIT_CLONE_TIMEOUT,
         "Git clone",
+        move |line| emit_provision_line(&live_app, &live_environment_id, line, &live_secrets),
     )
     .inspect_err(|_| {
         if !existed {
             let _ = fs::remove_dir_all(destination);
         }
     })?;
-    if !output.status.success() {
+    if !status.success() {
         if !existed {
             let _ = fs::remove_dir_all(destination);
         }
-        let detail = String::from_utf8_lossy(&output.stderr);
-        return Err(if detail.trim().is_empty() {
+        return Err(if stderr_text.trim().is_empty() {
             "Git clone failed".into()
         } else {
-            detail.trim().into()
+            stderr_text.trim().to_owned()
         });
     }
     Ok(detect_project_type(destination))
