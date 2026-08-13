@@ -17,6 +17,38 @@ pub struct Operation {
     pub finished_at: Option<i64>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProvisionOutput {
+    environment_id: String,
+    line: String,
+}
+
+/// Shows the user exactly what LS Panel runs on their behalf — the same
+/// `composer create-project`/wp-cli/`git clone`/`docker compose` commands
+/// (and, for the ones that patch `.env`, exactly which keys) a person would
+/// run by hand — via a live per-line event a UI can subscribe to for a given
+/// environment, e.g. the project wizard's terminal panel. Secrets are
+/// redacted the same way any other environment output already is.
+pub fn emit_provision_line(
+    app: &tauri::AppHandle,
+    environment_id: &str,
+    line: &str,
+    secrets: &[String],
+) {
+    let clean = crate::security::redact(line, secrets.iter().cloned());
+    if clean.trim().is_empty() {
+        return;
+    }
+    let _ = app.emit(
+        "project-provision-output",
+        ProvisionOutput {
+            environment_id: environment_id.into(),
+            line: clean,
+        },
+    );
+}
+
 fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

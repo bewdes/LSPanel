@@ -42,6 +42,7 @@ pub(crate) fn pull_images(
         .spawn()
         .map_err(|error| error.to_string())?;
     let secrets = crate::security::environment_secrets(app, id);
+    crate::operations::emit_provision_line(app, id, "$ compose pull", &secrets);
     let mut messages = Vec::new();
     let status = crate::process::stream_stderr(
         child,
@@ -56,6 +57,7 @@ pub(crate) fn pull_images(
             if clean.is_empty() {
                 return;
             }
+            crate::operations::emit_provision_line(app, id, &clean, &secrets);
             if messages.len() >= 30 {
                 messages.remove(0);
             }
@@ -100,6 +102,7 @@ pub(crate) fn run_compose(
         .spawn()
         .map_err(|error| error.to_string())?;
     let secrets = crate::security::environment_secrets(app, id);
+    crate::operations::emit_provision_line(app, id, &format!("$ {}", args.join(" ")), &secrets);
     let mut messages = Vec::new();
     let mut live_progress = 75u8;
     let mut last_stage = String::new();
@@ -116,6 +119,7 @@ pub(crate) fn run_compose(
             if clean.is_empty() {
                 return;
             }
+            crate::operations::emit_provision_line(app, id, &clean, &secrets);
             if let Some(stage) = progress_stage(&clean) {
                 if stage != last_stage {
                     live_progress = live_progress.saturating_add(1).min(84);
