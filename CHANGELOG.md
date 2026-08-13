@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0-beta] - 2026-08-13
+
 ### Added
 
 - Settings: an "About" section showing the app version, description, and author contact links (GitHub profile, repository, email).
@@ -232,7 +234,8 @@ Initial public beta.
 - Bilingual UI and documentation (English / Ukrainian).
 - Apache-2.0 license.
 
-[Unreleased]: https://github.com/bewdes/LSPanel/compare/v0.5.1-beta...HEAD
+[Unreleased]: https://github.com/bewdes/LSPanel/compare/v0.6.0-beta...HEAD
+[0.6.0-beta]: https://github.com/bewdes/LSPanel/releases/tag/v0.6.0-beta
 [0.5.1-beta]: https://github.com/bewdes/LSPanel/releases/tag/v0.5.1-beta
 [0.5.0-beta]: https://github.com/bewdes/LSPanel/releases/tag/v0.5.0-beta
 [0.4.0-beta]: https://github.com/bewdes/LSPanel/releases/tag/v0.4.0-beta
