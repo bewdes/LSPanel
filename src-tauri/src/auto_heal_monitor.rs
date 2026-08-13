@@ -71,7 +71,25 @@ fn check(app: &tauri::AppHandle) {
             continue;
         }
         if let Some(action) = heal_action(&problem_services, &environment.restart_policy) {
-            let _ = crate::containers::operate(app, &environment.id, action);
+            // Something else (a user action, or another monitor tick that's
+            // still running) is already actively operating on this
+            // environment — the "unhealthy" read that got us here is very
+            // likely just that operation's own transient state, not a
+            // genuine crash. Don't race it, and don't alarm the user about
+            // something that isn't actually broken.
+            let Ok(operation) = crate::operations::create(app, Some(&environment.id), action)
+            else {
+                continue;
+            };
+            let outcome = crate::containers::operate(app, &environment.id, action);
+            match &outcome {
+                Ok(_) => {
+                    let _ = crate::operations::complete(app, &operation.id);
+                }
+                Err(error) => {
+                    let _ = crate::operations::fail(app, &operation.id, error);
+                }
+            }
         }
         let names = problem_services
             .iter()

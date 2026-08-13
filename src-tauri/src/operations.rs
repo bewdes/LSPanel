@@ -37,6 +37,19 @@ fn active_operation_kind(
         .map_err(|error| error.to_string())
 }
 
+/// Whether some other operation is already actively running against this
+/// environment — used by background monitors and best-effort reconciliation
+/// steps to avoid racing a user action (or each other) instead of serializing
+/// through `create()`, which they can't do without also owning that
+/// operation's lifecycle (`complete`/`fail`).
+pub fn is_active(app: &tauri::AppHandle, environment_id: &str) -> bool {
+    crate::storage::connection(app)
+        .ok()
+        .and_then(|connection| active_operation_kind(&connection, environment_id).ok())
+        .flatten()
+        .is_some()
+}
+
 pub fn create(
     app: &tauri::AppHandle,
     environment_id: Option<&str>,
