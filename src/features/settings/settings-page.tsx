@@ -142,9 +142,15 @@ export function SettingsPage({
                 <Field label={text.languageLabel}>
                   <Select
                     value={draft.language}
-                    onValueChange={(value) =>
-                      value && setDraft({ ...draft, language: String(value) })
-                    }
+                    onValueChange={(value) => {
+                      if (!value) return
+                      setDraft((current) => ({ ...current, language: String(value) }))
+                      // Language and theme are pure presentation, so preview
+                      // them app-wide immediately instead of waiting for
+                      // Save — unlike every other setting here, which can
+                      // have a real side effect once persisted.
+                      onChange({ ...settings, language: String(value) })
+                    }}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue />
@@ -161,7 +167,12 @@ export function SettingsPage({
                 <Field label={text.themeLabel}>
                   <Select
                     value={draft.theme}
-                    onValueChange={(value) => value && setDraft({ ...draft, theme: String(value) })}
+                    onValueChange={(value) => {
+                      if (!value) return
+                      setDraft((current) => ({ ...current, theme: String(value) }))
+                      onChange({ ...settings, theme: String(value) })
+                      applyTheme(String(value))
+                    }}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue />
