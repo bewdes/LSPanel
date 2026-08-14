@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The project wizard's "Additional services" step never offered Elasticsearch, MinIO, or RabbitMQ — only Redis, Mailpit, Adminer, and phpMyAdmin — even though every other part of the app (environment editor, validation, Compose generation, gateway routes, logs, terminal) has fully supported all three for several releases. Adding them required creating the project first, then editing the environment afterward.
 - The environment editor's Redis eviction policy dropdown only offered 5 of the 8 policies the backend actually accepts, missing `allkeys-random`, `volatile-lfu`, and `volatile-random`.
 - LiveLink's tunnel-process lock could panic (crashing every subsequent LiveLink action for the rest of the session) instead of recovering, if it was ever poisoned by a panic elsewhere — every other lock in the app already recovers from poisoning, this one was missed.
+- The Mail page showed a raw `service "web" is not running` container-runtime error (once per stopped mailbox, so often duplicated) instead of a clear explanation when its environment wasn't running.
 
 ## [0.6.0-beta] - 2026-08-13
 
