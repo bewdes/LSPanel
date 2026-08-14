@@ -4,7 +4,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { pickLanguage } from "@/i18n"
-import { transliterateCyrillic } from "@/lib/slug"
 import type { Site } from "@/types"
 
 import { Field, Hint } from "../../form-fields"
@@ -44,13 +43,16 @@ export function BasicsStep({
             autoFocus
             value={name}
             onChange={(event) => {
-              const value = transliterateCyrillic(event.target.value)
+              const value = event.target.value
               setName(value)
               setDomain(`${value.toLowerCase().replace(/_/g, "-")}.localhost`)
             }}
             placeholder="my-project"
           />
-          <Hint valid={nameValid || !name} text={text.nameHint} />
+          <Hint
+            valid={nameValid || !name}
+            text={/^[Ѐ-ӿ]/.test(name) ? text.nameCyrillicHint : text.nameHint}
+          />
         </Field>
         <Field label={text.localDomainLabel}>
           <Input

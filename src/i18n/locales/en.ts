@@ -843,6 +843,7 @@ const en = {
     projectBasicsDescription: "Choose a safe local name and a .localhost domain.",
     nameLabel: "Name",
     nameHint: "Letters, digits, hyphens and underscores.",
+    nameCyrillicHint: "Name must be in Latin letters.",
     localDomainLabel: "Local domain",
     domainHint: "Beta 0.1 uses domains ending in .localhost.",
     directoryLabel: "Directory",
