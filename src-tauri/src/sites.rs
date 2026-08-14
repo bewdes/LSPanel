@@ -522,7 +522,7 @@ pub(crate) fn validate_local_domain(domain: &str) -> Result<(), String> {
         return Err("Enter a valid domain without protocol or path".into());
     }
     if !domain.ends_with(".localhost") {
-        return Err("Beta 0.1 supports only domains ending in .localhost".into());
+        return Err("Only domains ending in .localhost are supported".into());
     }
     if domain.len() > 253
         || domain.split('.').any(|label| {
