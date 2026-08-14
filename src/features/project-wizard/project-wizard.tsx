@@ -462,9 +462,18 @@ export function ProjectWizard({
           <div className="grid gap-2">
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{steps[step]}</span>
-              <span>{Math.round(((step + 1) / steps.length) * 100)}%</span>
+              <span>{text.stepOf(step + 1, steps.length)}</span>
             </div>
-            <Progress value={((step + 1) / steps.length) * 100} />
+            <div className="flex gap-1">
+              {steps.map((label, index) => (
+                <div
+                  key={label}
+                  className={`h-1.5 flex-1 rounded-full ${
+                    index <= step ? "bg-primary" : "bg-primary/15"
+                  }`}
+                />
+              ))}
+            </div>
           </div>
           {executionMode !== "native" && runtime && !runtime.composeAvailable && (
             <Alert variant="destructive">
