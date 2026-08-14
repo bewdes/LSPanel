@@ -676,6 +676,8 @@ const en = {
     inboxEmpty: "Inbox is empty.",
     mailpitNotEnabled: "Mailpit is not enabled",
     enableMailpitHint: "Enable Mailpit in an environment to capture local email.",
+    mailboxesStopped: "No mail to show right now",
+    startEnvironmentHint: "Start the environment to view and send mail through Mailpit.",
     selectMessageToPreview: "Select a message to preview it.",
     resend: "Resend",
     delete: "Delete",

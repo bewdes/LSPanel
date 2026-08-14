@@ -152,8 +152,22 @@ fn request(
             ],
         )
     };
-    let output = crate::containers::execute_service_command(app, environment_id, service, command)?;
+    let output = crate::containers::execute_service_command(app, environment_id, service, command)
+        .map_err(friendly_service_error)?;
     parse_response(&output, expect_json)
+}
+
+/// `execute_service_command` surfaces the container runtime's own raw error
+/// (e.g. `service "web" is not running`) when the target service isn't up —
+/// clear enough for the Terminal/exec-command features where the user chose
+/// to run a command against a specific service, but confusing on the Mail
+/// page, which never mentions a "web" service at all.
+fn friendly_service_error(error: String) -> String {
+    if error.contains("is not running") {
+        "Mailpit is unavailable because the environment isn't running. Start the environment to view mail.".into()
+    } else {
+        error
+    }
 }
 
 fn parse_response(output: &str, expect_json: bool) -> Result<Value, String> {
@@ -243,7 +257,7 @@ fn valid_email(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_response, valid_email, validate_id};
+    use super::{friendly_service_error, parse_response, valid_email, validate_id};
 
     #[test]
     fn message_ids_cannot_escape_api_paths() {
@@ -267,6 +281,14 @@ mod tests {
         let error = parse_response("__LSP_MAILPIT_RESPONSE__404:bm90IGZvdW5k", false).unwrap_err();
         assert!(error.contains("HTTP 404"));
         assert!(error.contains("not found"));
+    }
+
+    #[test]
+    fn a_stopped_service_reports_a_clear_reason_instead_of_a_raw_compose_error() {
+        let error = friendly_service_error(r#"service "web" is not running"#.into());
+        assert!(error.contains("environment isn't running"));
+        let other = friendly_service_error("some other failure".into());
+        assert_eq!(other, "some other failure");
     }
 
     #[test]
