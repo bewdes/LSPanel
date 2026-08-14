@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The project wizard's step-navigation indicator is now a segmented bar (one segment per step) instead of a continuous percentage bar — clearer at a glance how many steps remain, since step count varies by project type and runtime mode.
+
 ### Fixed
 
 - The Terminal tab rejected a Cron service session with "Service cron is not enabled" even when Cron was configured — its availability check checked every other addable service but never special-cased Cron the way service start/stop/exec already did.
