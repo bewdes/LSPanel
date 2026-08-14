@@ -48,6 +48,13 @@ pub(crate) fn ensure_database(
     directory: &Path,
     environment: &Environment,
 ) -> Result<(), String> {
+    let secrets = crate::security::environment_secrets(app, id);
+    crate::operations::emit_provision_line(
+        app,
+        id,
+        "$ Waiting for the database service to accept connections…",
+        &secrets,
+    );
     let mut ready = false;
     let mut last_error = String::new();
     // A fresh MySQL/MariaDB data directory can take considerably longer than
@@ -105,6 +112,12 @@ pub(crate) fn ensure_database(
                     (attempt + 1) * 2
                 ),
             );
+            crate::operations::emit_provision_line(
+                app,
+                id,
+                &format!("… still waiting ({}s)", (attempt + 1) * 2),
+                &secrets,
+            );
         }
         thread::sleep(Duration::from_secs(2));
     }
@@ -136,10 +149,12 @@ pub(crate) fn ensure_database(
         } else {
             "No database logs were returned".into()
         };
+        crate::operations::emit_provision_line(app, id, &detail, &secrets);
         return Err(format!(
             "Database service did not become ready within 120 seconds.\n{detail}"
         ));
     }
+    crate::operations::emit_provision_line(app, id, "Database service is ready.", &secrets);
     // The project wizard's "Automatically create database" toggle is stored
     // as an environment variable rather than a dedicated field; honor it
     // here instead of always creating the database regardless of the user's
@@ -192,11 +207,20 @@ pub(crate) fn ensure_database(
             environment.database_user.clone(),
             environment.database_name.clone(),
         ];
+        crate::operations::emit_provision_line(
+            app,
+            id,
+            &format!("$ {}", create_args.join(" ")),
+            &secrets,
+        );
         let output = compose_exec(executable, directory, &create_args)?;
         return if output.status.success() {
+            crate::operations::emit_provision_line(app, id, "Database created.", &secrets);
             Ok(())
         } else {
-            Err(String::from_utf8_lossy(&output.stderr).trim().to_owned())
+            let error = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            crate::operations::emit_provision_line(app, id, &error, &secrets);
+            Err(error)
         };
     }
 
@@ -218,11 +242,15 @@ pub(crate) fn ensure_database(
         "-e".into(),
         sql,
     ];
+    crate::operations::emit_provision_line(app, id, &format!("$ {}", args.join(" ")), &secrets);
     let output = compose_exec(executable, directory, &args)?;
     if output.status.success() {
+        crate::operations::emit_provision_line(app, id, "Database and user created.", &secrets);
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_owned())
+        let error = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        crate::operations::emit_provision_line(app, id, &error, &secrets);
+        Err(error)
     }
 }
 

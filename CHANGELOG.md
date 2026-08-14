@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LiveLink's tunnel-process lock could panic (crashing every subsequent LiveLink action for the rest of the session) instead of recovering, if it was ever poisoned by a panic elsewhere — every other lock in the app already recovers from poisoning, this one was missed.
 - The Mail page showed a raw `service "web" is not running` container-runtime error (once per stopped mailbox, so often duplicated) instead of a calm, localized "no mail to show" placeholder when a mailbox's environment wasn't running — it no longer even attempts to fetch mail for stopped environments.
 - Changing the language or theme in Settings only took effect app-wide (sidebar, every page) after clicking Save — both now preview live as soon as you pick them, while every other setting still waits for Save as before.
+- The project wizard's live terminal went silent for the entire "waiting for the database to accept connections" phase during container-mode creation — often the single longest wait, especially on a fresh MySQL/MariaDB data directory — showing only a static progress-bar label instead of the actual readiness checks and the database/user creation commands.
 
 ## [0.6.0-beta] - 2026-08-13
 
