@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The Terminal tab rejected a Cron service session with "Service cron is not enabled" even when Cron was configured — its availability check checked every other addable service but never special-cased Cron the way service start/stop/exec already did.
 - The default PHP welcome page's service pills never showed Elasticsearch, MinIO, or RabbitMQ, even when one of them was added to the environment, unlike Redis, Node.js, Mailpit, Adminer, and phpMyAdmin.
+- The project wizard's "Additional services" step never offered Elasticsearch, MinIO, or RabbitMQ — only Redis, Mailpit, Adminer, and phpMyAdmin — even though every other part of the app (environment editor, validation, Compose generation, gateway routes, logs, terminal) has fully supported all three for several releases. Adding them required creating the project first, then editing the environment afterward.
 
 ## [0.6.0-beta] - 2026-08-13
 
