@@ -925,6 +925,7 @@ pub fn terminal_context(
     let available = service == "web"
         || service == "database"
         || (service == "php" && environment.web_server == "Nginx")
+        || (service == "cron" && environment.php_cron)
         || environment
             .extra_services
             .iter()

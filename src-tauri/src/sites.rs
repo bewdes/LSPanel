@@ -234,6 +234,9 @@ fn service_label(service: &str) -> Option<&'static str> {
         "mailpit" => Some("Mailpit"),
         "adminer" => Some("Adminer"),
         "phpmyadmin" => Some("phpMyAdmin"),
+        "elasticsearch" => Some("Elasticsearch"),
+        "minio" => Some("MinIO"),
+        "rabbitmq" => Some("RabbitMQ"),
         _ => None,
     }
 }
@@ -814,8 +817,8 @@ pub fn ensure_directories(app: &tauri::AppHandle, environment_id: &str) -> Resul
 #[cfg(test)]
 mod tests {
     use super::{
-        domains_overlap, seed_starter_files, validate_local_alias, validate_local_domain,
-        validate_project_name, write_react_starter, Environment, Site,
+        default_php_index, domains_overlap, seed_starter_files, validate_local_alias,
+        validate_local_domain, validate_project_name, write_react_starter, Environment, Site,
     };
     use std::fs;
 
@@ -854,6 +857,34 @@ mod tests {
         // DNS labels cap out at 63 characters.
         assert!(validate_project_name(&"a".repeat(63)).is_ok());
         assert!(validate_project_name(&"a".repeat(64)).is_err());
+    }
+
+    #[test]
+    fn default_php_index_shows_a_pill_for_every_addable_extra_service() {
+        // Regression test: elasticsearch/minio/rabbitmq were addable extra
+        // services everywhere else in the app but silently dropped off the
+        // default PHP welcome page's service pills.
+        let site: Site = serde_json::from_str(
+            r#"{"id":"demo","name":"demo","domain":"demo.localhost","environmentId":"env-demo","directory":"/tmp/demo"}"#,
+        )
+        .unwrap();
+        let environment: Environment = serde_json::from_str(
+            r#"{"id":"env-demo","name":"env-demo","webServer":"Nginx","webVersion":"1.28","phpVersion":"8.4","database":"MariaDB","databaseVersion":"11.8","port":"8080","extraServices":["redis","node","mailpit","adminer","phpmyadmin","elasticsearch","minio","rabbitmq"]}"#,
+        )
+        .unwrap();
+        let html = default_php_index(&site, &environment);
+        for label in [
+            "Redis",
+            "Node.js",
+            "Mailpit",
+            "Adminer",
+            "phpMyAdmin",
+            "Elasticsearch",
+            "MinIO",
+            "RabbitMQ",
+        ] {
+            assert!(html.contains(label), "missing pill for {label}");
+        }
     }
 
     #[test]
