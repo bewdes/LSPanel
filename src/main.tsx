@@ -382,7 +382,9 @@ function App() {
                 {view === "logs" && (
                   <LogsPage sites={sites} environments={environments} language={language} />
                 )}
-                {view === "mail" && <MailPage environments={environments} language={language} />}
+                {view === "mail" && (
+                  <MailPage environments={environments} states={states} language={language} />
+                )}
                 {view === "backups" && (
                   <BackupsPage sites={sites} environments={environments} language={language} />
                 )}

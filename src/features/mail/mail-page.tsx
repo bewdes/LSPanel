@@ -64,15 +64,21 @@ type MailText = Dictionary["mail"]
 
 export function MailPage({
   environments,
+  states,
   language,
 }: {
   environments: Environment[]
+  states: Record<string, string>
   language: string
 }) {
   const text = pickLanguage(language).mail
   const available = React.useMemo(
     () => environments.filter((environment) => environment.extraServices?.includes("mailpit")),
     [environments],
+  )
+  const runningAvailable = React.useMemo(
+    () => available.filter((environment) => states[environment.id] === "running"),
+    [available, states],
   )
   const [messages, setMessages] = React.useState<MailSummary[]>([])
   const [selected, setSelected] = React.useState<MailDetail | null>(null)
@@ -85,7 +91,10 @@ export function MailPage({
 
   const refresh = React.useCallback(
     async (options?: { silent?: boolean }) => {
-      if (!available.length) return
+      if (!runningAvailable.length) {
+        setMessages([])
+        return
+      }
       const silent = options?.silent ?? false
       if (!silent) {
         setBusy(true)
@@ -94,7 +103,7 @@ export function MailPage({
       }
       try {
         const responses = await Promise.allSettled(
-          available.map(async (environment) => {
+          runningAvailable.map(async (environment) => {
             const response = await invoke<unknown>("list_mailpit_messages", {
               environmentId: environment.id,
             })
@@ -115,7 +124,7 @@ export function MailPage({
         if (!silent) setBusy(false)
       }
     },
-    [available],
+    [runningAvailable],
   )
 
   React.useEffect(() => {
@@ -125,10 +134,10 @@ export function MailPage({
   }, [refresh])
 
   React.useEffect(() => {
-    if (!available.length) return
+    if (!runningAvailable.length) return
     const timer = window.setInterval(() => void refresh({ silent: true }), 10000)
     return () => window.clearInterval(timer)
-  }, [refresh, available.length])
+  }, [refresh, runningAvailable.length])
 
   const mailboxes = React.useMemo(
     () =>
@@ -215,12 +224,12 @@ export function MailPage({
       ),
   )
   const mailboxEnvironment =
-    available.find(
+    runningAvailable.find(
       (item) =>
         item.id ===
         (selected?.environmentId ??
           messages.find((message) => message.recipients.includes(mailbox))?.environmentId),
-    ) ?? available[0]
+    ) ?? runningAvailable[0]
 
   return (
     <div>
@@ -243,7 +252,7 @@ export function MailPage({
             )}
             <Button
               variant="outline"
-              disabled={busy || !available.length}
+              disabled={busy || !runningAvailable.length}
               onClick={() => void refresh()}
             >
               <RefreshCw className={busy ? "animate-spin" : ""} /> {text.refresh}
@@ -252,7 +261,7 @@ export function MailPage({
         }
       />
       <div className="grid gap-4 px-4 pb-6 lg:px-6">
-        {available.length > 0 ? (
+        {runningAvailable.length > 0 ? (
           <>
             <div className="flex flex-wrap gap-2">
               <Select
@@ -347,8 +356,17 @@ export function MailPage({
             <CardContent className="grid min-h-64 place-items-center text-center">
               <div>
                 <Mail className="mx-auto mb-3 size-9 text-muted-foreground" />
-                <p className="font-medium">{text.mailpitNotEnabled}</p>
-                <p className="text-sm text-muted-foreground">{text.enableMailpitHint}</p>
+                {available.length > 0 ? (
+                  <>
+                    <p className="font-medium">{text.mailboxesStopped}</p>
+                    <p className="text-sm text-muted-foreground">{text.startEnvironmentHint}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium">{text.mailpitNotEnabled}</p>
+                    <p className="text-sm text-muted-foreground">{text.enableMailpitHint}</p>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

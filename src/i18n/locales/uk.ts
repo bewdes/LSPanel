@@ -727,6 +727,8 @@ const uk: Dictionary = {
     inboxEmpty: "Вхідні порожні.",
     mailpitNotEnabled: "Mailpit не увімкнено",
     enableMailpitHint: "Увімкніть Mailpit у середовищі, щоб перехоплювати локальну пошту.",
+    mailboxesStopped: "Наразі немає пошти для показу",
+    startEnvironmentHint: "Запустіть середовище, щоб переглядати й надсилати пошту через Mailpit.",
     selectMessageToPreview: "Виберіть лист для перегляду.",
     resend: "Повторно надіслати",
     delete: "Видалити",
