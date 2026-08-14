@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The project wizard's step-navigation indicator is now a segmented bar (one segment per step) instead of a continuous percentage bar — clearer at a glance how many steps remain, since step count varies by project type and runtime mode.
-- The project wizard's Name field shows a specific "Name must be in Latin letters" hint instead of the generic character-rules one when the name starts with a Cyrillic character — the underlying project name has to stay ASCII (it becomes the Docker container name prefix, the `.localhost` domain label, and the project's directory name).
+- The project wizard's Name and Local domain fields show a specific "must be in Latin letters" hint instead of the generic one when the value starts with a Cyrillic character — previously the domain field's hint ("must end in .localhost") was misleading in this case, since a Cyrillic domain does end in `.localhost`, just with a non-Latin label. The underlying constraint is real: the project name becomes the Docker container name prefix, the `.localhost` domain label, and the project's directory name, all of which must be ASCII.
 
 ### Fixed
 

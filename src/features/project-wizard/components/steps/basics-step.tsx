@@ -60,7 +60,10 @@ export function BasicsStep({
             onChange={(event) => setDomain(event.target.value.toLowerCase())}
             placeholder="my-project.localhost"
           />
-          <Hint valid={domainValid || !domain} text={text.domainHint} />
+          <Hint
+            valid={domainValid || !domain}
+            text={/^[Ѐ-ӿ]/.test(domain) ? text.domainCyrillicHint : text.domainHint}
+          />
         </Field>
         <Field label={text.directoryLabel}>
           <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm">

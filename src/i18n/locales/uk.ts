@@ -891,6 +891,7 @@ const uk: Dictionary = {
     nameLabel: "Назва",
     nameHint: "Літери, цифри, дефіси та підкреслення.",
     nameCyrillicHint: "Назва має бути латиницею.",
+    domainCyrillicHint: "Домен має бути латиницею.",
     localDomainLabel: "Локальний домен",
     domainHint: "Домени закінчуються на .localhost.",
     directoryLabel: "Каталог",
