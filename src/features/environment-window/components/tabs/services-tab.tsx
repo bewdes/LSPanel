@@ -296,7 +296,16 @@ export function ServicesTab({
           <Field label={text.evictionPolicyLabel}>
             <Choice
               value={draft.redisEvictionPolicy}
-              values={["noeviction", "allkeys-lru", "allkeys-lfu", "volatile-lru", "volatile-ttl"]}
+              values={[
+                "noeviction",
+                "allkeys-lru",
+                "allkeys-lfu",
+                "allkeys-random",
+                "volatile-lru",
+                "volatile-lfu",
+                "volatile-ttl",
+                "volatile-random",
+              ]}
               onChange={(value) => update("redisEvictionPolicy", value)}
             />
           </Field>
