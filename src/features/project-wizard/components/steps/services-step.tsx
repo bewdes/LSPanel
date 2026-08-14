@@ -23,22 +23,24 @@ export function ServicesStep({
         <CardDescription>{text.additionalServicesDescription}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-2 sm:grid-cols-3">
-        {["redis", "mailpit", "adminer", "phpmyadmin"].map((service) => (
-          <label key={service} className="flex items-center gap-2 rounded-lg border p-3 text-sm">
-            <Checkbox
-              checked={services.includes(service)}
-              disabled={service === "phpmyadmin" && database === "PostgreSQL"}
-              onCheckedChange={() =>
-                setServices((current) =>
-                  current.includes(service)
-                    ? current.filter((item) => item !== service)
-                    : [...current, service],
-                )
-              }
-            />
-            {service}
-          </label>
-        ))}
+        {["redis", "mailpit", "adminer", "phpmyadmin", "elasticsearch", "minio", "rabbitmq"].map(
+          (service) => (
+            <label key={service} className="flex items-center gap-2 rounded-lg border p-3 text-sm">
+              <Checkbox
+                checked={services.includes(service)}
+                disabled={service === "phpmyadmin" && database === "PostgreSQL"}
+                onCheckedChange={() =>
+                  setServices((current) =>
+                    current.includes(service)
+                      ? current.filter((item) => item !== service)
+                      : [...current, service],
+                  )
+                }
+              />
+              {service}
+            </label>
+          ),
+        )}
       </CardContent>
     </Card>
   )
