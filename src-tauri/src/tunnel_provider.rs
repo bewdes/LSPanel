@@ -182,7 +182,7 @@ pub fn set_ngrok_authtoken(token: &str) -> Result<(), String> {
 }
 
 pub fn is_active(state: &TunnelProcesses, site_id: &str) -> bool {
-    let mut processes = state.0.lock().unwrap();
+    let mut processes = state.0.lock().unwrap_or_else(|error| error.into_inner());
     let Some(handle) = processes.get_mut(site_id) else {
         return false;
     };
@@ -204,14 +204,18 @@ pub fn public_url(
     if provider == "ngrok" {
         return ngrok_public_url(local_port);
     }
-    let processes = state.0.lock().unwrap();
-    processes
-        .get(site_id)
-        .and_then(|handle| handle.url.lock().unwrap().clone())
+    let processes = state.0.lock().unwrap_or_else(|error| error.into_inner());
+    processes.get(site_id).and_then(|handle| {
+        handle
+            .url
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone()
+    })
 }
 
 pub fn stop(state: &TunnelProcesses, site_id: &str) {
-    let mut processes = state.0.lock().unwrap();
+    let mut processes = state.0.lock().unwrap_or_else(|error| error.into_inner());
     if let Some(mut handle) = processes.remove(site_id) {
         crate::process::terminate(&mut handle.child);
         let _ = handle.child.wait();
@@ -219,7 +223,7 @@ pub fn stop(state: &TunnelProcesses, site_id: &str) {
 }
 
 pub fn stop_all(state: &TunnelProcesses) {
-    let mut processes = state.0.lock().unwrap();
+    let mut processes = state.0.lock().unwrap_or_else(|error| error.into_inner());
     for (_, mut handle) in processes.drain() {
         crate::process::terminate(&mut handle.child);
         let _ = handle.child.wait();
@@ -270,13 +274,17 @@ fn start_ngrok(
         child,
         url: Arc::new(Mutex::new(None)),
     };
-    state.0.lock().unwrap().insert(site_id.to_owned(), handle);
+    state
+        .0
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .insert(site_id.to_owned(), handle);
     for _ in 0..20 {
         std::thread::sleep(Duration::from_millis(500));
         if let Some(url) = ngrok_public_url(local_port) {
-            let processes = state.0.lock().unwrap();
+            let processes = state.0.lock().unwrap_or_else(|error| error.into_inner());
             if let Some(handle) = processes.get(site_id) {
-                *handle.url.lock().unwrap() = Some(url);
+                *handle.url.lock().unwrap_or_else(|error| error.into_inner()) = Some(url);
             }
             return Ok(());
         }
@@ -397,7 +405,11 @@ fn start_cloudflare(
         child,
         url: Arc::clone(&url),
     };
-    state.0.lock().unwrap().insert(site_id.to_owned(), handle);
+    state
+        .0
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .insert(site_id.to_owned(), handle);
     for _ in 0..10 {
         std::thread::sleep(Duration::from_millis(500));
         if is_active(state, site_id) {
