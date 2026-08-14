@@ -844,7 +844,7 @@ const en = {
     nameLabel: "Name",
     nameHint: "Letters, digits, hyphens and underscores.",
     localDomainLabel: "Local domain",
-    domainHint: "Beta 0.1 uses domains ending in .localhost.",
+    domainHint: "Must end in .localhost.",
     directoryLabel: "Directory",
     domainTaken: "This domain is already used.",
     nameTaken: "A project with this name already exists.",
