@@ -891,7 +891,7 @@ const uk: Dictionary = {
     nameLabel: "Назва",
     nameHint: "Літери, цифри, дефіси та підкреслення.",
     localDomainLabel: "Локальний домен",
-    domainHint: "У Beta 0.1 домени закінчуються на .localhost.",
+    domainHint: "Має закінчуватися на .localhost.",
     directoryLabel: "Каталог",
     domainTaken: "Цей домен уже використовується.",
     nameTaken: "Проєкт із такою назвою вже існує.",
