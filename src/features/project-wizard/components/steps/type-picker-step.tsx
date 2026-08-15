@@ -8,12 +8,15 @@ export function TypePickerStep({
   projectType,
   selectType,
   language,
+  containerRuntimeAvailable,
 }: {
   projectType: string
   selectType: (type: string) => void
   language: string
+  containerRuntimeAvailable: boolean
 }) {
   const text = pickLanguage(language).projectWizard
+  const containerOnly = !containerRuntimeAvailable
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <TypeCard
@@ -23,6 +26,8 @@ export function TypePickerStep({
         description={text.typePhpDescription}
         selectedLabel={text.selected}
         onClick={() => selectType("php")}
+        disabled={containerOnly}
+        disabledHint={text.requiresContainerRuntime}
       />
       <TypeCard
         active={projectType === "static"}
@@ -39,6 +44,8 @@ export function TypePickerStep({
         description={text.typeWordpressDescription}
         selectedLabel={text.selected}
         onClick={() => selectType("wordpress")}
+        disabled={containerOnly}
+        disabledHint={text.requiresContainerRuntime}
       />
       <TypeCard
         active={projectType === "laravel"}
@@ -47,6 +54,8 @@ export function TypePickerStep({
         description={text.typeLaravelDescription}
         selectedLabel={text.selected}
         onClick={() => selectType("laravel")}
+        disabled={containerOnly}
+        disabledHint={text.requiresContainerRuntime}
       />
       <TypeCard
         active={projectType === "symfony"}
@@ -55,6 +64,8 @@ export function TypePickerStep({
         description={text.typeSymfonyDescription}
         selectedLabel={text.selected}
         onClick={() => selectType("symfony")}
+        disabled={containerOnly}
+        disabledHint={text.requiresContainerRuntime}
       />
       <TypeCard
         active={projectType === "node"}

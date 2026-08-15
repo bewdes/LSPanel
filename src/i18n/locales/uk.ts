@@ -867,6 +867,7 @@ const uk: Dictionary = {
       "Docker/Podman не готовий. Форму все ще можна заповнити, але запуск контейнерного проєкту не спрацює, доки він не запрацює — перевірте System Health, або нижче виберіть нативний режим виконання.",
     typePhpTitle: "Empty PHP",
     typePhpDescription: "Мінімальний PHP-проєкт із вибраним контейнерним стеком.",
+    requiresContainerRuntime: "Потрібен Docker або Podman.",
     typeStaticTitle: "Static site",
     typeStaticDescription: "HTML, CSS та JavaScript, які обслуговує веб-сервер середовища.",
     typeWordpressTitle: "WordPress",
