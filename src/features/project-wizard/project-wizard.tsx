@@ -481,7 +481,12 @@ export function ProjectWizard({
             </Alert>
           )}
           {step === 0 && (
-            <TypePickerStep projectType={projectType} selectType={selectType} language={language} />
+            <TypePickerStep
+              projectType={projectType}
+              selectType={selectType}
+              language={language}
+              containerRuntimeAvailable={runtime ? runtime.composeAvailable : true}
+            />
           )}
           {step === 1 && (
             <BasicsStep

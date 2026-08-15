@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The project wizard's step-navigation indicator is now a segmented bar (one segment per step) instead of a continuous percentage bar — clearer at a glance how many steps remain, since step count varies by project type and runtime mode.
+- The project wizard's type picker now disables PHP, WordPress, Laravel, and Symfony (which always need a container stack) with a "Requires Docker or Podman" note when no container runtime is available, instead of letting you pick one and only finding out partway through the wizard. Node.js, React, and Static stay enabled since they can run natively without a container runtime.
 
 ### Added
 

@@ -820,6 +820,7 @@ const en = {
       "Docker/Podman isn't ready. You can still fill out this form, but starting a container-based project will fail until it is — check System Health, or switch to native execution mode below.",
     typePhpTitle: "Empty PHP",
     typePhpDescription: "A minimal PHP project with the selected container stack.",
+    requiresContainerRuntime: "Requires Docker or Podman.",
     typeStaticTitle: "Static site",
     typeStaticDescription: "HTML, CSS and JavaScript served by the environment web server.",
     typeWordpressTitle: "WordPress",

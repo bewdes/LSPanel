@@ -21,6 +21,8 @@ export function TypeCard({
   description,
   selectedLabel,
   onClick,
+  disabled,
+  disabledHint,
 }: {
   active: boolean
   icon: React.ReactNode
@@ -28,19 +30,27 @@ export function TypeCard({
   description: string
   selectedLabel: string
   onClick: () => void
+  disabled?: boolean
+  disabledHint?: string
 }) {
   return (
     <Card
-      className={active ? "border-primary ring-1 ring-primary" : "cursor-pointer"}
-      onClick={onClick}
+      className={
+        disabled
+          ? "cursor-not-allowed opacity-50"
+          : active
+            ? "border-primary ring-1 ring-primary"
+            : "cursor-pointer"
+      }
+      onClick={disabled ? undefined : onClick}
     >
       <CardHeader>
         <div className="mb-2 flex items-center justify-between">
           <span className="grid size-9 place-items-center rounded-lg border">{icon}</span>
-          {active && <Badge>{selectedLabel}</Badge>}
+          {active && !disabled && <Badge>{selectedLabel}</Badge>}
         </div>
         <CardTitle className="text-base">{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+        <CardDescription>{disabled && disabledHint ? disabledHint : description}</CardDescription>
       </CardHeader>
     </Card>
   )
