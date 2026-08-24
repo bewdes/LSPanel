@@ -9,7 +9,7 @@
 > 🇬🇧 English version of this document: [README.md](README.md)
 
 [![CI](https://github.com/bewdes/LSPanel/actions/workflows/ci.yml/badge.svg)](https://github.com/bewdes/LSPanel/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-0.5.1--beta-orange)
+![Version](https://img.shields.io/badge/version-0.6.0--beta-orange)
 ![Rust](https://img.shields.io/badge/backend-Rust-b7410e)
 ![React](https://img.shields.io/badge/frontend-React_19-61dafb)
 ![Tauri](https://img.shields.io/badge/shell-Tauri_2-24c8db)
@@ -18,7 +18,7 @@
 ![Linux](https://img.shields.io/badge/platform-Linux-fcc624)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-> ⚠️ **Статус: v0.5.1-beta.** LS Panel перебуває на ранній стадії активної розробки — можливі суттєві зміни та шорсткі кути.
+> ⚠️ **Статус: v0.6.0-beta.** LS Panel перебуває на ранній стадії активної розробки — можливі суттєві зміни та шорсткі кути.
 
 ## Чому LS Panel?
 
